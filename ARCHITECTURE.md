@@ -235,17 +235,81 @@ loop {                                 frame {
 - Memory is therefore bounded **structurally**, not by a chosen constant. There is no
   unbounded-growth path and no discard path.
 
-**Safety valve (instrumented, not silent).** If the staging buffer exceeds
-`STAGING_HARD_CAP` (default 64 MiB) the reader *stops reading* and increments a counter,
-logging `Backpressure` at most once per second with the current depth. It does not drop.
-Reading resumes once the UI has drained below `STAGING_RESUME` (default 8 MiB). This block
-is bounded in duration by the UI drain and is resolved, not indefinite, and is always
-surfaced as a diagnostic. If this condition occurs in practice, it is a UI stall defect to
-be fixed — not a condition to be tolerated.
+#### 3.0.1 Backpressure is applied *before* the read, never after
+
+The reader must never consume bytes from the pipe that it cannot store. Therefore capacity is
+reserved **before** each `ReadFile`, not checked afterwards:
+
+```
+loop {
+    match buffer.wait_for_capacity(CHUNK) {
+        Cancelled => break,                       // session is tearing down
+        Open      => { let n = ReadFile(pipe); buffer.push(&buf[..n]); }
+    }
+}
+```
+
+`wait_for_capacity` returns immediately while `depth + CHUNK <= hard`, and otherwise waits on a
+condition variable with a bounded poll interval, re-checking cancellation on every wake.
+Because `hard` is never exceeded by more than one chunk, peak depth is bounded by
+`hard + CHUNK`. A post-read rejection path must not exist: it would require discarding bytes
+already removed from the pipe.
+
+#### 3.0.2 Failure policy — three termination paths, no deadlock
+
+The reader may never stop *permanently*. If it did, a child blocked writing to a full pty buffer
+would deadlock the session forever. The policy has exactly three exits, and all of them
+terminate:
+
+| # | Condition | Action | Bytes |
+|---|---|---|---|
+| **1 — Resume** | UI drains below `resume` | Reader wakes and continues reading normally | All preserved |
+| **2 — Cancel** | UI loop exited, window closed, or child handle lost | `cancel()` sets the flag and notifies; `wait_for_capacity` returns `Cancelled`; reader stops reading and exits | All accepted bytes remain in staging and are handed to the parser before teardown |
+| **3 — Teardown** | Window closed with a blocked child | Shutdown sequence in §3.3 runs: close PTY input, grace period, terminate, drain, parse tail | All accepted bytes parsed before the grid is torn down |
+
+Additional rules:
+
+- **Never discard to recover.** There is no code path that drops bytes to unblock either side.
+  If bytes are lost due to a defect, that is a bug to be reported, not a policy to be applied.
+- **Escalation on sustained failure.** If the reader pauses and the session has already been
+  paused more than `N` times (default 64) without the child draining, this indicates the UI
+  cannot keep up structurally. The session is terminated with an explicit diagnostic rather
+  than left to spin. The counter is surfaced, never reset silently.
+- **Diagnostics.** `soft` threshold crossed → warn with current depth, rate-limited to once per
+  second. `hard` threshold reached → warn that backpressure is engaged and the UI is the
+  bottleneck. Counters exposed as `accepted`, `max_depth`, `pauses`, `paused_total`.
+
+**Structural conclusion:** the only durable fix for a stalled UI is to make the UI faster.
+Backpressure is a symptom detector, not a solution. Every pause is a defect report.
+
+#### 3.0.3 Verification status
+
+Implemented as `smith::transport::StreamBuffer` with six passing unit tests:
+
+| Test | Property |
+|---|---|
+| `byte_exact_round_trip` | Invalid UTF-8, split multi-byte sequences, and truncated escape sequences emerge byte-identical |
+| `ordering_preserved_under_pressure` | 512 KiB across 1024-byte chunks, concurrent producer/consumer, output equals input exactly |
+| `depth_stays_bounded_under_pressure` | Peak depth never exceeds `hard + CHUNK`; pauses are counted; accepted count is exact |
+| `cancel_unblocks_a_full_reader` | `cancel()` releases a reader blocked at capacity with `Cancelled` |
+| `accepted_bytes_are_never_discarded` | `accepted` is cumulative across drains and never decreases |
+| `empty_stream_is_clean` | Clean EOF with no bytes produces no spurious data |
+
+These prove the buffer's contract in isolation. They do **not** prove end-to-end ConPTY
+integrity; that requires the Phase 1 spike to run a real child through the real pipe and
+compare.
 
 **Shutdown ordering.** On close, the reader stops reading the pipe, appends whatever
 remains, signals end-of-stream, and exits. The UI parses the tail **before** tearing down, so
 the last line a shell printed before exit is never lost.
+
+**EOF is not a reliable terminator — measured.** The ConPTY output pipe does **not** report EOF
+when the child exits. It stays open until `ClosePseudoConsole` is called, so a read loop that
+waits for EOF hangs forever. This was reproduced empirically: `read_to_end` on a finished
+`cmd /C echo` child never returned within 8 seconds (`DECISIONS.md` §6, CHECK 2). The reader
+must therefore be driven by **explicit lifetime**, not by pipe EOF: the session's close
+sequence is the only thing that ends the read, and the reader must treat "no bytes available"
+as ordinary, not as end-of-stream.
 
 **Verifiability.** The guarantee is testable as a property: a byte-exact round-trip test
 asserts that an arbitrary byte stream (including invalid UTF-8, split multi-byte sequences,
@@ -453,7 +517,7 @@ Status values: **DIRECTION SET** (lead has given a direction; not yet proven).
 | **D2** | Async runtime | **DIRECTION SET — implemented** | Remove Tokio. Standard threads + explicit buffer handoff. | None. Async may return only with a demonstrated requirement. |
 | **D3** | Unicode data | **UNRESOLVED** | Pinned Unicode version behind a pure API. | Compare internal tables against `unicode-width`, `unicode-segmentation`, `unicode-properties` before committing. See `DECISIONS.md` §6. |
 | **D4** | Scrollback reflow | **DIRECTION SET — specified** | Reflow logical lines. | Specified in §3.4. Wide cells, cursor, scroll-region resize, and tab rules are now explicit. |
-| **D5** | ConPTY binding | **UNRESOLVED** | Compare `conpty` 0.7, `conpty-oxide`, direct `windows` API. | Defects found in `conpty` 0.7. See `DECISIONS.md` §6. Recommendation pending lead approval. |
+| **D5** | ConPTY binding | **UNRESOLVED — evidence favours `conpty-oxide`** | Spike evidence: `conpty` 0.7's output read hangs indefinitely; `conpty-oxide` passes round-trip, resize, and kill. Two of six checklist items remain open. See `DECISIONS.md` §6. |
 | **D6** | Font shaping | **UNRESOLVED** | Decide before renderer implementation. | Prototype shaping, fallback, rasterization, and atlas as one pipeline. Must cover combining marks, wide glyphs, emoji, and missing-glyph fallback. |
 | **D7** | Damage model | **DIRECTION SET** | Row-level damage plus full-redraw support; retain cell-level option. | Specified in §3.5. Rationale is a hypothesis pending Phase 3 profiling. |
 
@@ -464,9 +528,9 @@ shell's output. Shells are used only as acceptance targets for the process/trans
 
 | Target | Role | Present on this machine |
 |---|---|---|
-| PowerShell 7 (`pwsh`) | Primary interactive target | **NO — not installed.** See `DECISIONS.md` §7. |
+| Windows PowerShell 5.1 | **Primary** interactive target (per lead ruling) | Yes — 5.1.26100.9444 |
 | `cmd.exe` | Secondary compatibility target | Yes |
-| Windows PowerShell 5.1 | Legacy smoke test | Yes (5.1.26100.9444) |
+| PowerShell 7 (`pwsh`) | Optional later; **not** a Phase 1 blocker | No — not installed |
 
 Phase 1 must additionally verify behaviour for real applications, not only shells: editors,
 pagers, progress displays, and full-screen TUIs exercise substantially more of the engine than

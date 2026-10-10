@@ -67,6 +67,8 @@ A green build is build evidence, not proof of a functioning terminal. Zero tests
 | `ConPTYInterface` pseudo-code | Non-compiling pseudo-code presented as an interface. |
 | **"Coalesce-and-continue: drop stale bytes when the channel fills"** | **Formally rejected by the design lead.** Dropping bytes corrupts VT stream state permanently. Replaced by the ConPTY-flow-control design in `ARCHITECTURE.md` §3.0. |
 | "Row damage is cheaper because glyph rasterization dominates" | Stated as fact; it is a hypothesis. Relabelled as such in §3.5 and made a Phase 3 profiling obligation. |
+| **"`conpty` 0.7's `Drop` never terminates the child — High severity"** | **Refuted by spike.** `pid=16984` was gone 1.2 s after `Drop`. `ClosePseudoConsole` does reap the direct child. Downgraded to Medium and re-scoped to grandchildren, which were not tested. |
+| **"Prefer direct Win32 bindings for D5"** | **Superseded by evidence.** `conpty-oxide` already provides job objects, owned halves, and close-hang regression tests. Recommendation reversed. See §6. |
 
 ---
 
@@ -78,7 +80,7 @@ A green build is build evidence, not proof of a functioning terminal. Zero tests
 | **D2** | Async runtime | **DONE** | Tokio removed. std threads + explicit double-buffered handoff. Evidence in §5. |
 | **D3** | Unicode data | **RESEARCHED — awaiting decision** | Comparison in §6. |
 | **D4** | Scrollback reflow | **SPECIFIED** | `ARCHITECTURE.md` §3.4. |
-| **D5** | ConPTY binding | **RESEARCHED — awaiting decision** | Defects found. Comparison in §6. |
+| **D5** | ConPTY binding | **RESEARCHED — evidence favours `conpty-oxide`, but NOT closed** | Spike evidence in §6. `conpty` 0.7 rejected as default. Two of six checklist items still unresolved. |
 | **D6** | Font shaping | **OPEN** | Not started. Must be prototyped before renderer work. |
 | **D7** | Damage model | **DIRECTION SET** | Row damage + full redraw. `ARCHITECTURE.md` §3.5. |
 
@@ -151,7 +153,7 @@ non-negotiable requirement:
 | # | Finding | Location | Severity |
 |---|---|---|---|
 | a | `build_commandline` joins program and args with bare spaces and **performs no argument quoting**. Any argument containing a space or quote is corrupted. | `process.rs:336-346` | **High** — breaks launching a shell with arguments |
-| b | `Drop` calls `ClosePseudoConsole` but **never terminates the child**, and there is no job object. Orphaned children are possible. | `process.rs:165-180` | **High** — violates "no leaked child processes" |
+| b | `Drop` calls `ClosePseudoConsole` but does **not** call `TerminateProcess`, and there is no job object. | `process.rs:165-180` | **Medium** — see spike result: refuted for the direct child, unresolved for grandchildren |
 | c | Blanket `unsafe impl Send` **and** `Sync` on a type owning raw `HANDLE`s, while `resize` takes `&mut self`. Defeats the compiler's ownership checking. | `process.rs:193-194`, `125` | **Medium** — fights our ownership rule |
 | d | `enableVirtualTerminalSequenceProcessing()` mutates the **host process's** console mode and its error is discarded via `let _ =`. | `process.rs:196-208`, `439` | **Medium** — side effect on the parent, silent failure |
 | e | Depends on `windows` **0.54** while `wgpu` pulls `windows-sys` **0.61/0.62**. Two incompatible `HANDLE`/`HRESULT` type universes coexist; handles cannot cross without casts. | `Cargo.toml`, `Cargo.lock` | **Medium** |
@@ -174,20 +176,102 @@ non-negotiable requirement:
 - Cost: we own every `unsafe` block and must satisfy the `// SAFETY:` rule. Realistic estimate
   300–500 lines including job-object lifecycle and cancellation.
 
-#### Recommendation (D5, for approval)
+### D5 spike — empirical results
 
-**Direct `windows` API**, wrapped in a Smith-owned `PtySession` newtype that enforces single
-ownership, explicit shutdown, and job-object-based child cleanup.
+`examples/conpty_spike.rs` ran on this machine, GNU toolchain, Windows build 26200. Every
+blocking call is wrapped in an 8-second timeout so a hang becomes a recorded result rather than
+a wedged session. Raw output:
 
-Rationale: the requirements that matter most here — explicit handle ownership, no leaked
-children, correct argument quoting, clean cancellation — are exactly where `conpty` 0.7 is
-weakest, and they are non-negotiable under the project doctrine. `conpty-oxide` has a better
-shape but is too young and too thinly maintained to accept as the foundation of process
-lifecycle. The honest counter-argument is that we would be writing and owning Win32 unsafe code
-that a mature crate already encapsulates.
+```
+--- CHECK 1: argument quoting ---
+[HANG] conpty 0.7 quoting did not finish within 8000ms
+[FAIL] conpty 0.7      TIMEOUT after 8000ms (blocking read/close)
+[FAIL] conpty-oxide    PowerShell: "Unexpected token 'a' in expression"
 
-This remains **unresolved** pending a spike that actually spawns a shell under each candidate
-and records exit, resize, and kill behaviour.
+--- CHECK 2: output round-trip ---
+[HANG] conpty 0.7 rt did not finish within 8000ms
+[FAIL] conpty 0.7      TIMEOUT after 8000ms (blocking read/close)
+[PASS] conpty-oxide    SMITH_RT_9F3A
+
+--- CHECK 3: resize (120x40 then 80x25) ---
+[PASS] conpty-oxide    final size 80x25
+[PASS] conpty 0.7      resized and exited
+
+--- CHECK 4: terminate + drop-without-kill ---
+[PASS] conpty-oxide kill    kill took 18.7us, try_wait=None
+[PASS] conpty 0.7 drop      dropped without terminate
+[PASS] conpty 0.7 orphan    pid=16984 still running 1.2s after Drop: false
+```
+
+#### Findings
+
+**The decisive result is the hang.** `read_to_end` on `conpty` 0.7's output pipe **never
+returns**, even after the child has exited, because ConPTY keeps the output pipe handle open
+until `ClosePseudoConsole` and the reader holds a cloned handle. Any read loop that waits for
+EOF will hang the reader thread forever. This is not a hypothetical — it reproduced on the
+first run of the spike, and it is exactly the failure `conpty-oxide` carries an explicit
+regression test for (`tests/close_hang.rs`).
+
+**Static finding (b) is retracted.** I predicted that dropping `conpty::Process` would orphan
+the child. The empirical test refutes this for the direct child: `pid=16984` was gone 1.2 s
+after `Drop`, so `ClosePseudoConsole` does reap the attached client. Two caveats keep this from
+being a clean pass: the test observed only the **direct** child PID, not the process tree; and
+there is still no job object, so a grandchild spawned by that child is unprotected. The
+finding is downgraded from High to Medium and re-scoped to grandchildren only.
+
+**Check 1 is inconclusive and the probe is at fault.** `powershell.exe -Command "$args -join
+'|'" a b 'c"d'` does not work as a quoting probe, because PowerShell's `-Command` merges the
+trailing arguments into the command string itself. Both libraries therefore produced the same
+malformed command line, which tells us nothing about quoting. A correct probe needs a program
+that prints `argv` verbatim — `cmd /C echo` collapses spaces and cannot distinguish boundaries.
+**This check must be rewritten before D5 is approved.** The quoting defect (finding a) remains
+established by source inspection only; it has not been empirically reproduced.
+
+**Check 5 was not implemented.** Host-console-mode mutation requires the `windows` crate, which
+is not a dependency. Finding (d) therefore remains static-analysis only.
+
+#### Revised recommendation for D5
+
+**`conpty-oxide` 0.1.2**, not direct Win32.
+
+The reasoning has changed on evidence. My previous preference for hand-written Win32 bindings
+was based on the assumption that `conpty` 0.7's defects were unfixable-in-place and that a
+correct wrapper would be small. The spike showed the opposite: `conpty-oxide` already implements
+job objects (`core/job.rs`), owned pipe halves (`OwnedReadHalf`/`OwnedWriteHalf`), explicit
+ownership decomposition (`into_parts()` → `SessionParts`), `resize(&self)` rather than
+`&mut self`, structured `ErrorKind`, and dedicated regression tests for exactly the failure
+modes we care about — `close_hang`, `kill_tree`, `soak`, `eof_semantics`, `owned_halves`,
+`managed_drop_order`.
+
+Writing that ourselves would mean 300–500 lines of Win32 `unsafe` to reproduce behaviour a
+maintained crate already provides and tests. The `blocking` feature is the default, so it does
+not reintroduce Tokio (D2 holds).
+
+Risks that remain, and must be weighed by the lead:
+
+- **Maturity.** Published 2026-07-31, three versions, ~1 800 downloads, single maintainer.
+  This is the real objection, and it is about supply risk, not correctness.
+- **Unproven at our scale.** Its `soak.rs` test is not our soak test.
+- **`ConPtyBackend` bundles its own OpenConsole DLL** (`backend/bundle.rs`,
+  `ConPtyBackend::from_dir`). This is useful for portability but is an added surface we have
+  not evaluated. If we want the system OpenConsole, `ConPtyBackend::system()` must be used
+  explicitly, and that choice needs recording.
+
+`conpty` 0.7 is rejected as the default. It stays in the manifest only until this decision is
+approved, after which it should be removed.
+
+#### Spike checklist status
+
+| # | Checklist item | Result |
+|---|---|---|
+| 1 | Command-line quoting | **INCONCLUSIVE — probe invalid, must be rewritten** |
+| 2 | Explicit handle ownership | conpty-oxide: `OwnedReadHalf`/`OwnedWriteHalf`/`SessionParts`. conpty 0.7: blanket `Send`+`Sync`, cloned raw handles. Static + API evidence. |
+| 3 | Termination and cleanup | conpty-oxide: `kill()` in 18.7 µs. conpty 0.7: direct child reaped on Drop; grandchildren untested. |
+| 4 | No host-console-mode change | **NOT IMPLEMENTED** |
+| 5 | Resize and I/O round-trip | conpty-oxide: both pass. conpty 0.7: resize passes, **I/O hangs**. |
+| 6 | Clear errors, MSVC build | Structured `ErrorKind` by inspection. **MSVC build impossible** — see B3. |
+
+Two of six items are unresolved. D5 is **not** ready to close.
 
 ---
 
@@ -197,30 +281,44 @@ and records exit, resize, and kill behaviour.
 |---|---|---|---|
 | **B1** | **No git repository.** Not yet authorized. | Global CI rule requires commit-per-iteration; nothing can be committed. | Explicit authorization to `git init`. |
 | **B2** | ~~No project `AGENTS.md`~~ | — | **RESOLVED** — `AGENTS.md` drafted this session. |
-| **B3** | **MSVC toolchain cannot link.** `link.exe` absent; VS 2022 BuildTools present but without the C++ workload; no Windows SDK. | **D1 is blocked.** Pinning MSVC now would break every build immediately. | Install "Desktop development with C++" workload + Windows SDK, or ratify MinGW as the target. |
-| **B4** | **`pwsh` is not installed.** | The designated **primary** acceptance target does not exist on this machine. | Install PowerShell 7, or re-designate the primary target. |
+| **B3** | **MSVC toolchain cannot link.** `link.exe` absent; VS 2022 BuildTools present but without the C++ workload; no Windows SDK. | **D1 is blocked.** Pinning MSVC now would break every build immediately. | **Requires elevation.** This session is **not** running as Administrator, so the install could not be attempted. See §7.1 for the exact command. |
+| **B4** | ~~`pwsh` not installed~~ | — | **RESOLVED by lead ruling.** PowerShell 5.1 is the primary acceptance target; `cmd.exe` secondary; PowerShell 7 optional later. `pwsh` remains absent from this machine and is **not** a Phase 1 blocker. |
 | **B5** | ConPTY child lifecycle unproven | Phase 1 cannot start | Resolve D5 via spike. |
 
-### B3 detail — why D1 is blocked rather than merely deferred
+| **B5** | ConPTY spike incomplete | D5 cannot close | Rewrite the quoting probe (check 1) and implement the host-console-mode check (check 5). |
+| **B6** | wgpu feature flags not enumerated | Phase 1 GPU validation cannot start | Enumerate wgpu 29's actual Windows backend features before changing the manifest. Do not assume `dx12` + `vulkan` covers every adapter and presentation path on a host with a virtual display adapter. |
 
-D1 was answered "MSVC as the intended toolchain, subject to a clean build." There is no clean
-MSVC build to be had: the toolchain cannot link anything at all.
+### 7.1 B3 detail — MSVC cannot be installed from this session
 
 ```
 > rustc +stable-x86_64-pc-windows-msvc probe.rs -o probe.exe
 error: linker `link.exe` not found
-note: the msvc targets depend on the msvc linker but `link.exe` was not found
-note: please ensure that Visual Studio 2017 or later, or Build Tools for Visual Studio
-      were installed with the Visual C++ option
+
+> IsInRole(Administrator) -> False
+> winget -> present at C:\Users\User\AppData\Local\Microsoft\WindowsApps\winget.exe
+> free space on C: -> 134.4 GB
 ```
 
-The GNU toolchain links successfully today (`link ok`), so the project is currently buildable
-on MinGW only. `rust-toolchain.toml` has **not** been created, because writing it would pin
-every subsequent build to a broken toolchain.
+`rust-toolchain.toml` has **not** been created, per the lead's ruling. The GNU toolchain links
+successfully and remains the working default.
 
-### B4 detail — acceptance target
+Installing the C++ workload requires elevation, which this session cannot obtain. Rather than
+fire an unattended UAC prompt, the install is left as a single command for the operator to run
+from an elevated shell:
 
-Only Windows PowerShell 5.1 is present. `cmd.exe` is available. The primary target `pwsh` is
-absent from Program Files, Program Files (x86), WindowsApps, and PATH. Note that the ruling
-also requires conformance tests to be shell-independent, so this blocks *acceptance testing of
-the transport layer*, not the engine's test suite.
+```powershell
+winget install --id Microsoft.VisualStudio.2022.BuildTools `
+  --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended" `
+  --accept-package-agreements --accept-source-agreements
+```
+
+Validation afterwards, and only then is `rust-toolchain.toml` justified:
+
+```powershell
+rustc +stable-x86_64-pc-windows-msvc probe.rs -o probe_msvc.exe   # must print "link ok"
+```
+
+### 7.2 Process lifecycle evidence
+
+Git initialized and the first commit made (`63198c9`) after reviewing staged contents: 7 files,
+no `target/`, no binaries, no secrets. B1 is resolved.
