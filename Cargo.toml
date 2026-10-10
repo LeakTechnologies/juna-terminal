@@ -1,0 +1,13 @@
+[package]
+name = "smith"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97"
+description = "A native Windows terminal emulator with an original VT engine"
+
+[dependencies]
+winit = "0.30"
+wgpu = "29"
+conpty = "0.7"
+log = "0.4"
+env_logger = "0.11"

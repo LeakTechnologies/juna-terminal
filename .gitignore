@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+*.pdb
+*.ilk
+*.exe
+.env
+.env.*
+*.secret
+*.pem
