@@ -80,7 +80,8 @@ A green build is build evidence, not proof of a functioning terminal. Zero tests
 | **D2** | Async runtime | **DONE** | Tokio removed. std threads + explicit double-buffered handoff. Evidence in §5. |
 | **D3** | Unicode data | **RESEARCHED — awaiting decision** | Comparison in §6. |
 | **D4** | Scrollback reflow | **SPECIFIED** | `ARCHITECTURE.md` §3.4. |
-| **D5** | ConPTY binding | **RESEARCHED — evidence favours `conpty-oxide`, but NOT closed** | Spike evidence in §6. `conpty` 0.7 rejected as default. Two of six checklist items still unresolved. |
+| **D5** | ConPTY binding | **EVIDENCE COMPLETE — `conpty-oxide` recommended, awaiting approval** | 5 of 6 checklist items measured; `conpty` 0.7 fails five. See §6. | Maturity risk only. |
+| **B6** | wgpu features | **RESOLVED** | See §6.1. | — |
 | **D6** | Font shaping | **OPEN** | Not started. Must be prototyped before renderer work. |
 | **D7** | Damage model | **DIRECTION SET** | Row damage + full redraw. `ARCHITECTURE.md` §3.5. |
 
@@ -176,7 +177,60 @@ non-negotiable requirement:
 - Cost: we own every `unsafe` block and must satisfy the `// SAFETY:` rule. Realistic estimate
   300–500 lines including job-object lifecycle and cancellation.
 
-### D5 spike — empirical results
+### 6.1 B6 — wgpu 29 backend features, measured
+
+Read verbatim from the vendored `wgpu-29.0.4/Cargo.toml`. Defaults are:
+
+```
+default = ["std", "parking_lot", "dx12", "metal", "gles", "vulkan", "wgsl", "webgpu"]
+```
+
+Windows-relevant feature names are exactly `dx12`, `vulkan`, `gles`, `wgsl`, plus the
+platform-neutral `std`, `parking_lot`, `counters`, `trace`, `serde`, `custom`, `static-dxc`,
+and target-specific `metal`, `web`, `webgl`, `naga-ir`, `glsl`, `spirv`, `vulkan-portability`,
+`fragile-send-sync-non-atomic-wasm`, `noop`, `strict_asserts`.
+
+Applied configuration:
+
+```toml
+wgpu = { version = "29", default-features = false,
+         features = ["std", "dx12", "vulkan", "gles", "wgsl"] }
+```
+
+**Removed:** `metal` and `wgpu-core-deps-apple` are gone from the resolved graph (confirmed
+absent from `Cargo.lock`). `metal` cannot help a Windows build.
+
+**Deliberately kept `gles`.** The lead's instruction was not to assume DX12+Vulkan resolves
+every adapter and presentation path. Since this host carries a `Parsec Virtual Display Adapter`
+alongside the RTX 3060, the GLES/ANGLE path is retained as a fallback until adapter enumeration
+(B7) proves DX12+Vulkan sufficient. Dropping it later is a one-line change; keeping it costs
+build time only.
+
+**Kept `wgsl`** — required for shader compilation.
+
+**Dependency consequence, measured:** `webgpu` pulls `wasm-bindgen`, `js-sys`, `web-sys`, and
+`wasm-bindgen-futures`; the last of those depends on **Tokio**. Removing wgpu's `webgpu` default
+therefore removed wgpu's Tokio path entirely.
+
+**Correction to §5.** I previously attributed the residual Tokio entry to `wgpu`. After the
+feature change, `cargo tree -i wasm-bindgen-futures --target all` shows the surviving path is:
+
+```
+wasm-bindgen-futures v0.4.79
+└── winit v0.30.13
+```
+
+So the chain is **`winit` → `wasm-bindgen-futures` → Tokio**, not wgpu. This is winit's
+cross-platform support and is outside our control. Critically, `cargo tree -i tokio` **without**
+`--target all` prints "nothing to print": Tokio is in the lock graph but is **not compiled for
+`x86_64-pc-windows-*`**. The GNU build completes without it.
+
+**Honest caveat on metrics.** `Cargo.lock` package count is a poor measure here — target-gated
+dependencies for other platforms persist in the lock regardless of feature selection. The
+meaningful figure is the 224 crates actually resolved for `x86_64-pc-windows-gnu`. No claim of a
+large build-time reduction is made; that was not measured.
+
+### 6.2 D5 spike — empirical results
 
 `examples/conpty_spike.rs` ran on this machine, GNU toolchain, Windows build 26200. Every
 blocking call is wrapped in an 8-second timeout so a hang becomes a recorded result rather than
@@ -230,48 +284,64 @@ established by source inspection only; it has not been empirically reproduced.
 **Check 5 was not implemented.** Host-console-mode mutation requires the `windows` crate, which
 is not a dependency. Finding (d) therefore remains static-analysis only.
 
-#### Revised recommendation for D5
+#### Spike run 2 — B5 closed
 
-**`conpty-oxide` 0.1.2**, not direct Win32.
+`src/bin/argv_probe.rs` is a dedicated probe that prints each received argument as
+`ARG[i]=<byte-length>:<bytes>`. It replaces the invalid PowerShell `-Command` probe. The
+console-mode check calls `AllocConsole`, opens `CONOUT$`, and **clears**
+`ENABLE_VIRTUAL_TERMINAL_PROCESSING` before each spawn, because the initial mode `0x7` already
+contained the VT bit `0x4` and therefore could not detect mutation. Raw output:
 
-The reasoning has changed on evidence. My previous preference for hand-written Win32 bindings
-was based on the assumption that `conpty` 0.7's defects were unfixable-in-place and that a
-correct wrapper would be small. The spike showed the opposite: `conpty-oxide` already implements
-job objects (`core/job.rs`), owned pipe halves (`OwnedReadHalf`/`OwnedWriteHalf`), explicit
-ownership decomposition (`into_parts()` → `SessionParts`), `resize(&self)` rather than
-`&mut self`, structured `ErrorKind`, and dedicated regression tests for exactly the failure
-modes we care about — `close_hang`, `kill_tree`, `soak`, `eof_semantics`, `owned_halves`,
-`managed_drop_order`.
+```
+--- CHECK 1: argument preservation (dedicated argv probe) ---
+[PASS] conpty-oxide quoting
+       COUNT=7 | ARG[0]=5:plain | ARG[1]=9:has space | ARG[2]=9:has"quote
+       ARG[3]=10:has'squote | ARG[4]=9:trailing  | ARG[5]=10:back\slash | ARG[6]=0: | END
+[FAIL] conpty 0.7 quoting      (empty output)
 
-Writing that ourselves would mean 300–500 lines of Win32 `unsafe` to reproduce behaviour a
-maintained crate already provides and tests. The `blocking` feature is the default, so it does
-not reintroduce Tokio (D2 holds).
+--- CHECK 4: host console mode must not gain the VT bit ---
+       cleared VT bit, mode now 0x3
+[PASS] conpty-oxide no VT set   before=0x3 after=0x3
+[FAIL] conpty 0.7 no VT set      before=0x3 after=0x7
 
-Risks that remain, and must be weighed by the lead:
+--- CHECK 5: process-tree teardown (grandchild survival) ---
+[PASS] conpty-oxide grandchild  pid=7228  alive 1.5s after teardown: false
+[FAIL] conpty 0.7 grandchild    pid=56912 alive 1.5s after teardown: true
+```
 
-- **Maturity.** Published 2026-07-31, three versions, ~1 800 downloads, single maintainer.
-  This is the real objection, and it is about supply risk, not correctness.
-- **Unproven at our scale.** Its `soak.rs` test is not our soak test.
-- **`ConPtyBackend` bundles its own OpenConsole DLL** (`backend/bundle.rs`,
-  `ConPtyBackend::from_dir`). This is useful for portability but is an added surface we have
-  not evaluated. If we want the system OpenConsole, `ConPtyBackend::system()` must be used
-  explicitly, and that choice needs recording.
-
-`conpty` 0.7 is rejected as the default. It stays in the manifest only until this decision is
-approved, after which it should be removed.
-
-#### Spike checklist status
-
-| # | Checklist item | Result |
+| Checklist item | conpty 0.7 | conpty-oxide 0.1.2 |
 |---|---|---|
-| 1 | Command-line quoting | **INCONCLUSIVE — probe invalid, must be rewritten** |
-| 2 | Explicit handle ownership | conpty-oxide: `OwnedReadHalf`/`OwnedWriteHalf`/`SessionParts`. conpty 0.7: blanket `Send`+`Sync`, cloned raw handles. Static + API evidence. |
-| 3 | Termination and cleanup | conpty-oxide: `kill()` in 18.7 µs. conpty 0.7: direct child reaped on Drop; grandchildren untested. |
-| 4 | No host-console-mode change | **NOT IMPLEMENTED** |
-| 5 | Resize and I/O round-trip | conpty-oxide: both pass. conpty 0.7: resize passes, **I/O hangs**. |
-| 6 | Clear errors, MSVC build | Structured `ErrorKind` by inspection. **MSVC build impossible** — see B3. |
+| 1 — Command-line quoting | **FAIL** (no output at all) | **PASS** — all 7 args byte-exact, including embedded `"`, `'`, trailing space, backslash, and the empty string |
+| 2 — Explicit handle ownership | Blanket `Send`+`Sync`, cloned raw `HANDLE`s | `OwnedReadHalf`/`OwnedWriteHalf`, `into_parts()` |
+| 3 — Termination and cleanup | **FAIL** — grandchild survives | **PASS** — grandchild reaped (job object) |
+| 4 — No host-console-mode change | **FAIL** — mode mutated `0x3` → `0x7` | **PASS** — mode unchanged |
+| 5 — Resize and I/O round-trip | Resize ok, **I/O hangs** | **PASS** |
+| 6 — Clear errors, MSVC build | `Error` enum, no structured kinds | Structured `ErrorKind`; **MSVC build impossible** — B3 |
 
-Two of six items are unresolved. D5 is **not** ready to close.
+**`conpty` 0.7 is now rejected on five of six measured items.** Finding (d) — host console
+mutation — was previously static-analysis only and is now empirically confirmed.
+Finding (b) is confirmed in its corrected, narrower form: the *direct* child is reaped, but
+the *grandchild leaks*. The earlier retraction was correct.
+
+**Verification of the tested version.** `Cargo.lock` pins `conpty-oxide 0.1.2`, and the vendored
+package at that exact version ships 16 integration test files including `close_hang.rs`,
+`kill_tree.rs`, `soak.rs`, `owned_halves.rs`, `eof_semantics.rs`, and `managed_drop_order.rs`.
+The regression coverage cited above is part of the version under test, not of a different
+release.
+
+#### Recommendation for D5
+
+**`conpty-oxide` 0.1.2.** It passes every measured item; `conpty` 0.7 fails five of six.
+Its `blocking` feature is default, so D2 holds. Smith still owns a thin wrapper so the boundary
+between engine and transport stays explicit.
+
+Outstanding risk, unchanged and unmeasured by this spike: **maturity**. Published 2026-07-31,
+three versions, ~1 800 downloads, single maintainer. `ConPtyBackend` also supports bundling its
+own OpenConsole DLL; we should pin `ConPtyBackend::system()` unless portability is wanted, and
+record that choice.
+
+`conpty` 0.7 should be removed from `[dependencies]` once this is approved. It is currently
+retained only so the spike can keep comparing against it.
 
 ---
 
@@ -283,10 +353,9 @@ Two of six items are unresolved. D5 is **not** ready to close.
 | **B2** | ~~No project `AGENTS.md`~~ | — | **RESOLVED** — `AGENTS.md` drafted this session. |
 | **B3** | **MSVC toolchain cannot link.** `link.exe` absent; VS 2022 BuildTools present but without the C++ workload; no Windows SDK. | **D1 is blocked.** Pinning MSVC now would break every build immediately. | **Requires elevation.** This session is **not** running as Administrator, so the install could not be attempted. See §7.1 for the exact command. |
 | **B4** | ~~`pwsh` not installed~~ | — | **RESOLVED by lead ruling.** PowerShell 5.1 is the primary acceptance target; `cmd.exe` secondary; PowerShell 7 optional later. `pwsh` remains absent from this machine and is **not** a Phase 1 blocker. |
-| **B5** | ConPTY child lifecycle unproven | Phase 1 cannot start | Resolve D5 via spike. |
-
-| **B5** | ConPTY spike incomplete | D5 cannot close | Rewrite the quoting probe (check 1) and implement the host-console-mode check (check 5). |
-| **B6** | wgpu feature flags not enumerated | Phase 1 GPU validation cannot start | Enumerate wgpu 29's actual Windows backend features before changing the manifest. Do not assume `dx12` + `vulkan` covers every adapter and presentation path on a host with a virtual display adapter. |
+| **B5** | ~~ConPTY spike incomplete~~ | — | **RESOLVED.** Check 1 (quoting) and check 5 (host console mode) both run and pass for `conpty-oxide`. Check 6's MSVC leg remains blocked by B3. See §6.2. |
+| **B6** | ~~wgpu feature flags not enumerated~~ | — | **RESOLVED.** Feature names, defaults, and dependency consequences recorded in §6.1; configuration applied and verified building. |
+| **B7** | GPU adapter enumeration not run | Unknown whether DX12/Vulkan/GLES all enumerate with the Parsec virtual adapter present | Run adapter enumeration, then surface creation and presentation. Needs an interactive desktop session; this harness redirects stdout. |
 
 ### 7.1 B3 detail — MSVC cannot be installed from this session
 

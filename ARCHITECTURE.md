@@ -517,9 +517,10 @@ Status values: **DIRECTION SET** (lead has given a direction; not yet proven).
 | **D2** | Async runtime | **DIRECTION SET — implemented** | Remove Tokio. Standard threads + explicit buffer handoff. | None. Async may return only with a demonstrated requirement. |
 | **D3** | Unicode data | **UNRESOLVED** | Pinned Unicode version behind a pure API. | Compare internal tables against `unicode-width`, `unicode-segmentation`, `unicode-properties` before committing. See `DECISIONS.md` §6. |
 | **D4** | Scrollback reflow | **DIRECTION SET — specified** | Reflow logical lines. | Specified in §3.4. Wide cells, cursor, scroll-region resize, and tab rules are now explicit. |
-| **D5** | ConPTY binding | **UNRESOLVED — evidence favours `conpty-oxide`** | Spike evidence: `conpty` 0.7's output read hangs indefinitely; `conpty-oxide` passes round-trip, resize, and kill. Two of six checklist items remain open. See `DECISIONS.md` §6. |
+| **D5** | ConPTY binding | **RECOMMENDED `conpty-oxide` 0.1.2 — awaiting approval** | Measured: `conpty` 0.7 fails 5 of 6 checklist items — no usable quoting, output read hangs, host console mode mutated `0x3`→`0x7`, grandchildren leak. `conpty-oxide` passes every measured item. See `DECISIONS.md` §6.2. |
 | **D6** | Font shaping | **UNRESOLVED** | Decide before renderer implementation. | Prototype shaping, fallback, rasterization, and atlas as one pipeline. Must cover combining marks, wide glyphs, emoji, and missing-glyph fallback. |
 | **D7** | Damage model | **DIRECTION SET** | Row-level damage plus full-redraw support; retain cell-level option. | Specified in §3.5. Rationale is a hypothesis pending Phase 3 profiling. |
+| **D8** | wgpu backends | **DIRECTION SET — pending hardware proof** | `default-features = false`, features `std, dx12, vulkan, gles, wgsl`. | `metal` dropped as unusable on Windows; `gles` retained as a fallback until adapter enumeration proves it unnecessary. See `DECISIONS.md` §6.1. |
 
 ### 5.1 Shell acceptance targets
 
