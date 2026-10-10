@@ -1,5 +1,14 @@
 use std::io::Write;
 
+fn emit_sustained(n: usize) {
+    let mut w = std::io::BufWriter::new(std::io::stdout());
+    for i in 0..n {
+        let _ = writeln!(w, "LINE[{i:06}]=abcdefghijklmnopqrstuvwxyz0123456789");
+    }
+    let _ = w.flush();
+    println!("SUSTAIN_END={n}");
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
@@ -14,6 +23,14 @@ fn main() {
             Err(e) => println!("GRANDCHILD_ERR={e}"),
         }
         return;
+    }
+
+    if let Some(rest) = args.first() {
+        if let Some(n) = rest.strip_prefix("--sustain=") {
+            let n: usize = n.parse().unwrap_or(0);
+            emit_sustained(n);
+            return;
+        }
     }
 
     println!("COUNT={}", args.len());

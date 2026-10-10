@@ -517,10 +517,11 @@ Status values: **DIRECTION SET** (lead has given a direction; not yet proven).
 | **D2** | Async runtime | **DIRECTION SET — implemented** | Remove Tokio. Standard threads + explicit buffer handoff. | None. Async may return only with a demonstrated requirement. |
 | **D3** | Unicode data | **UNRESOLVED** | Pinned Unicode version behind a pure API. | Compare internal tables against `unicode-width`, `unicode-segmentation`, `unicode-properties` before committing. See `DECISIONS.md` §6. |
 | **D4** | Scrollback reflow | **DIRECTION SET — specified** | Reflow logical lines. | Specified in §3.4. Wide cells, cursor, scroll-region resize, and tab rules are now explicit. |
-| **D5** | ConPTY binding | **RECOMMENDED `conpty-oxide` 0.1.2 — awaiting approval** | Measured: `conpty` 0.7 fails 5 of 6 checklist items — no usable quoting, output read hangs, host console mode mutated `0x3`→`0x7`, grandchildren leak. `conpty-oxide` passes every measured item. See `DECISIONS.md` §6.2. |
+| **D5** | ConPTY binding | **APPROVED — `conpty-oxide` 0.1.2** | Measured against six criteria; `conpty` 0.7 failed five and was removed. Smith wraps it in its own transport boundary. Replacement criteria in `DECISIONS.md` §6.3. |
 | **D6** | Font shaping | **UNRESOLVED** | Decide before renderer implementation. | Prototype shaping, fallback, rasterization, and atlas as one pipeline. Must cover combining marks, wide glyphs, emoji, and missing-glyph fallback. |
 | **D7** | Damage model | **DIRECTION SET** | Row-level damage plus full-redraw support; retain cell-level option. | Specified in §3.5. Rationale is a hypothesis pending Phase 3 profiling. |
-| **D8** | wgpu backends | **DIRECTION SET — pending hardware proof** | `default-features = false`, features `std, dx12, vulkan, gles, wgsl`. | `metal` dropped as unusable on Windows; `gles` retained as a fallback until adapter enumeration proves it unnecessary. See `DECISIONS.md` §6.1. |
+| **D8** | wgpu backends | **APPROVED PROVISIONALLY** | `default-features = false`, features `std, dx12, vulkan, gles, wgsl`. Enumeration confirms dx12=3, vulkan=1, gles=1. | `gles` retained. Feature set is **not** to be changed on enumeration evidence alone; presentation paths are untested. See `DECISIONS.md` §6.4. |
+| **D9** | Adapter selection policy | **DIRECTION SET — must be explicit** | Never take the first adapter by default. | Reject `DeviceType::Cpu` (a WARP software rasteriser is exposed and could be selected silently). Prefer `DiscreteGpu`; treat software as last-resort fallback. The DX12 list contains apparent duplicates, so do not assume deduplication. |
 
 ### 5.1 Shell acceptance targets
 

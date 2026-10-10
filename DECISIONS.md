@@ -80,7 +80,7 @@ A green build is build evidence, not proof of a functioning terminal. Zero tests
 | **D2** | Async runtime | **DONE** | Tokio removed. std threads + explicit double-buffered handoff. Evidence in §5. |
 | **D3** | Unicode data | **RESEARCHED — awaiting decision** | Comparison in §6. |
 | **D4** | Scrollback reflow | **SPECIFIED** | `ARCHITECTURE.md` §3.4. |
-| **D5** | ConPTY binding | **EVIDENCE COMPLETE — `conpty-oxide` recommended, awaiting approval** | 5 of 6 checklist items measured; `conpty` 0.7 fails five. See §6. | Maturity risk only. |
+| **D5** | ConPTY binding | **APPROVED — `conpty-oxide` 0.1.2** | `conpty` 0.7 removed from the manifest. Safeguards and replacement criteria in §6.3. |
 | **B6** | wgpu features | **RESOLVED** | See §6.1. | — |
 | **D6** | Font shaping | **OPEN** | Not started. Must be prototyped before renderer work. |
 | **D7** | Damage model | **DIRECTION SET** | Row damage + full redraw. `ARCHITECTURE.md` §3.5. |
@@ -230,7 +230,88 @@ dependencies for other platforms persist in the lock regardless of feature selec
 meaningful figure is the 224 crates actually resolved for `x86_64-pc-windows-gnu`. No claim of a
 large build-time reduction is made; that was not measured.
 
-### 6.2 D5 spike — empirical results
+### 6.3 D5 — approved, with supply-risk safeguards
+
+**Approved by the design lead: `conpty-oxide` 0.1.2. `conpty` 0.7 removed from the manifest.**
+Smith owns a thin wrapper so the engine/transport boundary stays explicit.
+
+The concern is supply and maintenance risk, not correctness. Three safeguards are recorded in
+place of reimplementing several hundred lines of Win32 `unsafe`:
+
+1. **Pin and regress.** Version stays pinned via `Cargo.lock`. Smith's own acceptance tests in
+   `tests/conpty_acceptance.rs` cover the four areas that matter and are independent of
+   upstream's suite:
+
+   | Test | Guards |
+   |---|---|
+   | `quoting_preserves_the_argument_vector_exactly` | argument quoting — the defect that disqualified `conpty` 0.7 |
+   | `process_tree_is_reaped_on_teardown` | process-tree cleanup — grandchildren must not survive |
+   | `shutdown_unblocks_the_reader_within_the_bound` | pseudoconsole shutdown must not rely on pipe EOF |
+   | `sustained_output_arrives_byte_exact` | sustained child output is neither lost nor reordered |
+
+   All four pass as of this commit.
+
+2. **No automatic upgrades.** `conpty-oxide` is reviewed manually before any version change.
+   Upstream release notes must be read and the four regression tests re-run. Automatic bumps
+   are prohibited.
+
+3. **Replacement criteria.** The binding is replaced if any of the following occurs:
+   - an unresolved **critical lifecycle defect** — leaked processes, lost output, hung shutdown;
+   - **abandonment or unmaintenance** that prevents a necessary fix from landing;
+   - a **demonstrated incompatibility** with a supported Windows environment.
+
+   Replacement means either a vetted successor or a Smith-owned Win32 implementation, decided
+   per the Design-First gate. It is not grounds to fall back to `conpty` 0.7.
+
+### 6.4 B7 — GPU adapter enumeration
+
+`src/bin/gpu_probe.rs`. Enumeration only; no device request, no surface. Blocked on an executor,
+so the binary carries a ~20-line `Box::pin` poller rather than taking a dependency for one
+diagnostic. `enumerate_adapters` is async in wgpu 29 and `Backends::ALL` does not exist — it is
+`Backends::all()`.
+
+Environment at time of run: all `WGPU_*` overrides unset, **`stdout_is_terminal = false`**.
+
+Five adapters exposed:
+
+| # | Name | Backend | Device type | Driver | max texture 2D | max buffer |
+|---|---|---|---|---|---|---|
+| 0 | NVIDIA GeForce RTX 3060 | **Vulkan** | DiscreteGpu | NVIDIA 595.79 | 32768 | 1099511627776 |
+| 1 | NVIDIA GeForce RTX 3060 | **Dx12** | DiscreteGpu | 32.0.15.9579 | 16384 | 2147483647 |
+| 2 | NVIDIA GeForce RTX 3060 | **Dx12** | DiscreteGpu | 32.0.15.9579 | 16384 | 2147483647 |
+| 3 | Microsoft Basic Render Driver | **Dx12** | **Cpu** | 10.0.26100.9278 | 16384 | 2147483647 |
+| 4 | NVIDIA GeForce RTX 3060/PCIe/SSE2 | **Gl** | Other | ANGLE 4.6.0 (NVIDIA 595.79) | 32768 | 2147483647 |
+
+Per-backend counts: **dx12 = 3, vulkan = 1, gles = 1.**
+
+#### Findings
+
+**The Parsec Virtual Display Adapter is NOT exposed.** This is recorded as a *negative
+result*, not as evidence the adapter is unavailable. It may be filtered from adapter lists, may
+not present as a wgpu adapter, or may still be selected by the presentation path without being
+enumerable. The virtual-adapter risk is therefore **unchanged and untested**.
+
+**Enumeration works despite redirected stdout.** The premise that redirection might prevent
+enumeration is disproven — `stdout_is_terminal = false` and enumeration still returned five
+adapters. The earlier caution was reasonable but empirically wrong for this API.
+
+**Adapter selection cannot be left to defaults.** Three DX12 entries exist, one of which is a
+**CPU software rasteriser** (WARP). A naive "first DX12 adapter" policy could select the Basic
+Render Driver and silently deliver software rendering. Selection must be explicit: prefer
+`DiscreteGpu`, reject `Cpu`, and treat WARP as a last-resort fallback only.
+
+**Entries [1] and [2] are identical** in name, backend, vendor, and device ID. Whether this is a
+duplicate enumeration or genuinely two DX12 devices is unexplained. Adapter selection must not
+assume the list is deduplicated.
+
+**Keeping `gles` was justified.** It enumerates via ANGLE and provides a working third backend.
+Per the lead's instruction, the feature set is **not** changed on enumeration evidence alone.
+
+#### Status
+
+B7 is **partially closed**. Enumeration is recorded. **Surface creation and presentation remain
+untested** and require an interactive desktop session; this harness has no usable console and
+redirected output. No claim is made about which adapter presentation would select.
 
 `examples/conpty_spike.rs` ran on this machine, GNU toolchain, Windows build 26200. Every
 blocking call is wrapped in an 8-second timeout so a hang becomes a recorded result rather than
@@ -355,7 +436,7 @@ retained only so the spike can keep comparing against it.
 | **B4** | ~~`pwsh` not installed~~ | — | **RESOLVED by lead ruling.** PowerShell 5.1 is the primary acceptance target; `cmd.exe` secondary; PowerShell 7 optional later. `pwsh` remains absent from this machine and is **not** a Phase 1 blocker. |
 | **B5** | ~~ConPTY spike incomplete~~ | — | **RESOLVED.** Check 1 (quoting) and check 5 (host console mode) both run and pass for `conpty-oxide`. Check 6's MSVC leg remains blocked by B3. See §6.2. |
 | **B6** | ~~wgpu feature flags not enumerated~~ | — | **RESOLVED.** Feature names, defaults, and dependency consequences recorded in §6.1; configuration applied and verified building. |
-| **B7** | GPU adapter enumeration not run | Unknown whether DX12/Vulkan/GLES all enumerate with the Parsec virtual adapter present | Run adapter enumeration, then surface creation and presentation. Needs an interactive desktop session; this harness redirects stdout. |
+| **B7** | ~~GPU adapter enumeration~~ | — | **PARTIALLY CLOSED.** Five adapters enumerated (`DECISIONS.md` §6.4). Parsec virtual adapter **not** exposed — recorded as a negative result, not as absence. Surface creation and presentation still untested. |
 
 ### 7.1 B3 detail — MSVC cannot be installed from this session
 

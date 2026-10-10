@@ -113,7 +113,21 @@ changed) and `DECISIONS.md` (if a decision changed) **in the same commit**.
 
 No AI attribution of any kind in code, comments, or commit messages.
 
-## 12. Unresolved
+## 12. Pinned dependencies requiring manual review
 
-Read `DECISIONS.md` before starting work. D1 (toolchain), D5 (ConPTY binding), and D6 (font
-shaping) are open, and B3/B4 block Phase 1 entry.
+`conpty-oxide` is pinned and must be upgraded **manually**. Before any version change:
+
+1. Read the upstream release notes.
+2. Re-run `cargo test --test conpty_acceptance` — quoting, process-tree reaping, shutdown
+   without EOF, and sustained output.
+3. Record the change in `DECISIONS.md`.
+
+Automatic version bumps are prohibited. Replacement criteria are in `DECISIONS.md` §6.3:
+an unresolved critical lifecycle defect, abandonment preventing a necessary fix, or a
+demonstrated incompatibility with a supported Windows environment.
+
+## 13. Unresolved
+
+Read `DECISIONS.md` before starting work. D1 (toolchain) and D6 (font shaping) are open.
+B3 (MSVC elevation) blocks D1. B7 is partially closed — adapter enumeration is done, but
+surface creation and presentation are untested.
