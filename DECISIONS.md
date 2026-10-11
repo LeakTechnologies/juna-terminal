@@ -82,7 +82,7 @@ A green build is build evidence, not proof of a functioning terminal. Zero tests
 | **D4** | Scrollback reflow | **SPECIFIED** | `ARCHITECTURE.md` §3.4. |
 | **D5** | ConPTY binding | **APPROVED — `conpty-oxide` 0.1.2** | `conpty` 0.7 removed from the manifest. Safeguards and replacement criteria in §6.3. |
 | **B6** | wgpu features | **RESOLVED** | See §6.1. | — |
-| **D6** | Font rasterization | **CLOSED — zeno primary, DirectWrite deferred** | `fontdb` + `swash`/`zeno` behind a Smith trait. Fallback, shaping, and atlas are **not** deferred. Shaper choice (harfrust vs rustybuzz) still open. See §6.8–6.10. |
+| **D6** | Font rasterization | **CLOSED — zeno primary, DirectWrite deferred** | `fontdb` + `swash`/`zeno` behind a Smith trait. Shaper choice (harfrust vs rustybuzz) still open. See §6.8–6.11. |
 | **D7** | Damage model | **DIRECTION SET** | Row damage + full redraw. `ARCHITECTURE.md` §3.5. |
 
 ---
@@ -377,68 +377,25 @@ The pure-Rust path is confirmed **viable**, not confirmed **optimal**. The remai
 question is whether unhinted grayscale output is acceptable for Smith's default rendering, which
 is a visual judgement that measurements alone cannot settle.
 
-### 6.10 Gap resolutions approved, with four consequences requiring sign-off
+### 6.10 Gap resolutions — all adopted
 
-The six specification gaps were resolved by the design lead (`ARCHITECTURE.md` §2.8): `Arc<str>`
-cell content, `u32` `Attrs` bitfield, `Arc<[Cell]>` snapshots, a 512x256 grid clamp, validated
-wide-character writes, and a `TerminalEngine` trait taking `&mut self`.
+The six specification gaps were resolved by the design lead (`ARCHITECTURE.md` §2.8), and the four
+consequences raised by the implementation review were subsequently **adopted in full**. This
+section is closed.
 
-Four consequences of those resolutions were **not** part of the resolutions and need approval.
-Each is a correctness or safety issue, not a preference.
+| ID | Subject | Resolution |
+|---|---|---|
+| **D10.1** | Cell content and interning | `CellContent::Char(u32)` inline for single scalars; `Arc<str>` reserved for multi-codepoint clusters, drawn from a **mandatory interner**. Interning is required, not optional — without it the choice allocates per cell and reverses §2.1's invariant. |
+| **D10.2** | Snapshot boundary | `Snapshot` owns a fresh per-frame copy of **damaged rows only**. No `Arc` or view into engine memory. The renderer cannot outlive the frame's data. |
+| **D10.3** | Scrollback budget | Bounded by **bytes** (default 64 MiB), not lines. Line count derived as `budget / (cols * size_of::<Cell>())`, floored at a small minimum. Memory stays flat as windows widen. |
+| **D10.4** | Thread ownership | Engine type is **`!Sync` and `Send`**, enforced by a private non-`Sync` marker. §3's single-owner rule becomes a compiler guarantee, not a convention. |
 
-#### D10.1 — `Arc<str>` per cell contradicts "no heap allocation per cell"
+`ARCHITECTURE.md` §2.8.1–§2.8.4 carry the normative detail. §2.3 was updated so the scrollback
+section no longer contradicts D10.3.
 
-`ARCHITECTURE.md` §2.1 states cells must not allocate per cell. `Arc<str>` is a 16-byte fat
-pointer **plus a heap allocation**, so a naive implementation allocates once per cell written —
-and a row copied into scrollback carries one allocation per non-trivial grapheme.
-
-Two things are required for the resolution to hold:
-1. **Interning.** Unique grapheme clusters are interned per font configuration, so the set of
-   live `Arc<str>` is bounded by distinct clusters rather than by cells written.
-2. **Inline storage for the common case.** Most terminal content is a single scalar character.
-   A `CellContent` enum with an inline `Char(u32)` variant and an `Arc<str>` variant only for
-   true multi-code-point clusters keeps the ASCII/Latin path allocation-free and the cell small.
-
-**Recommendation:** adopt both. Without them the resolution silently reverses an existing design
-invariant.
-
-#### D10.2 — `Arc<[Cell]>` snapshots loosen the renderer boundary
-
-`ARCHITECTURE.md` §3.1 states the renderer "may not store references into engine buffers that
-outlive a frame." A snapshot holding `Arc<[Cell]>` over engine-owned memory stays alive as long
-as the renderer keeps the Arc, which is exactly the reference lifetime the rule forbids.
-
-**Recommendation:** the snapshot should own **only damaged rows**, not the whole grid. Copying
-just the dirty rows into a fresh `Vec<Row>` per frame gives the renderer stable, owned data with
-a strictly bounded lifetime, and the snapshot is dropped at end of frame. This preserves the
-boundary instead of redefining it, and it costs nothing because row-level damage (D7) already
-limits the set.
-
-#### D10.3 — scrollback bounded by lines is not bounded by memory
-
-`ARCHITECTURE.md` §2.3 specifies a 10 000-line scrollback. The new 512-column clamp (gap 4)
-makes a single line up to 512 cells rather than a typical 80–120. At maximum width, 10 000 lines
-is 5.12 M cells, roughly **200 MB or more** at an assumed ~40 B/cell. A user with a 4K monitor
-and a wide window would see memory grow with width, not with content.
-
-**Recommendation:** bound scrollback by **bytes** (a configurable budget, default ~64 MiB) and
-report the effective line count as `budget / (cols * size_of::<Cell>())`, floored at a small
-minimum. Truncation stays oldest-first and observable, per §2.3. Alternatively cap scrollback
-lines at 10 000 **and** re-derive the line cap from current width on resize.
-
-#### D10.4 — `&mut self` does not enforce single-owner
-
-A trait whose methods take `&mut self` prevents aliasing within a thread, but it does not stop
-the type being moved to or shared across threads if it is `Send + Sync`. §3's rule is "exactly
-one thread owns mutable engine state", and that is not currently enforced by types.
-
-**Recommendation:** mark the engine type `!Sync` while leaving it `Send`, e.g. via a
-`PhantomData<*mut ()>` marker or a private `NotSync` field. `Send` allows the engine to be
-constructed on, and moved with, the UI thread; `!Sync` makes it impossible to share references
-across threads. This makes §3 a compiler-enforced invariant rather than a convention.
-
-**Status: all four awaiting design-lead approval.** None blocks recording the six resolutions;
-all four must be settled before `src/vt/` is written.
+**Consequence:** the `src/vt/` specification is complete. No known unresolved contract questions
+remain for the parser, grid, cursor, scrollback, or engine/renderer boundary. Implementation
+still requires explicit design-lead authorization.
 
 ### 6.11 D6 — closed: rasterization backend
 

@@ -130,7 +130,10 @@ Grid {
 Scrollback is **not** part of the VT specification — it is an emulator feature, and this spec
 treats it as an explicit, bounded extension.
 
-- Bounded ring buffer, default 10 000 lines, configurable, `0` allowed.
+- Bounded ring buffer, **bounded by bytes, not by lines** (see §2.8, D10.3). Default budget
+  64 MiB, configurable, `0` allowed. The effective line count is derived as
+  `budget / (cols * size_of::<Cell>())`, floored at a small minimum, so memory stays flat as
+  the window widens instead of growing with column count.
 - Primary screen pushes scrolled-off lines into scrollback; alternate screen does not.
 - Scrollback stores `Vec<Cell>` rows plus wrapped-line continuation flags so reflow can
   reconstruct logical lines.
@@ -184,26 +187,62 @@ yet implemented** — engine coding remains unauthorized.
 
 | # | Gap | Resolution |
 |---|---|---|
-| 1 | Cell content lifetimes | Frame-scoped arenas rejected. Multi-code-point graphemes use **`Arc<str>`**, so scrollback rows (`Vec<Cell>`) outlive any individual frame and clone without lifetime anchoring. |
+| 1 | Cell content lifetimes | Frame-scoped arenas rejected. `CellContent` stores a single scalar **inline** as `Char(u32)`; true multi-code-point graphemes use **`Arc<str>`** drawn from a string interner. See §2.8.1. |
 | 2 | `Attrs` layout | Packed **`u32` bitfield** via `bitflags!`. Bits 0–3 underline style, bits 4–11 font-modifier flags (bold, italic, dim, inverse, blink, invisible, strikethrough, overline). Bits 12–31 reserved. Keeps `Cell` memory-dense. |
-| 3 | Engine→renderer boundary | Immutable value types: `Snapshot` carrying shared cells (`Arc<[Cell]>`) alongside targeted `Damage` enums. See §3.1 and open item **D10.2**. |
-| 4 | Grid dimensions | `cols` and `rows` clamped to **512 × 256** at init and on resize, so malformed escape sequences cannot trigger unbounded allocation. See open item **D10.3**. |
+| 3 | Engine→renderer boundary | Immutable value types. `Snapshot` owns a **fresh copy of the damaged rows only**, never a view into engine memory. See §3.1 and §2.8.2. |
+| 4 | Grid dimensions | `cols` and `rows` clamped to **512 × 256** at init and on resize, so malformed escape sequences cannot trigger unbounded allocation. Scrollback is bounded by **bytes** (§2.3), not by lines. |
 | 5 | Wide-character invariant | Raw mutable slice exposure on the grid is forbidden. Writing a wide character at column *N* automatically places `CellContent::WideCharSpacer` at *N+1*, via safe validated write methods only. |
-| 6 | Single-owner enforcement | The state machine is wrapped in a **`TerminalEngine` trait** taking `&mut self` for all advances. See open item **D10.4**. |
+| 6 | Single-owner enforcement | The state machine is wrapped in a **`TerminalEngine` trait** taking `&mut self`. The type is additionally **`!Sync` while remaining `Send`**, making thread confinement a compiler-enforced invariant. See §2.8.4. |
 
-#### Open consequences not covered by the resolutions
+#### 2.8.1 Cell content representation (D10.1, adopted)
 
-These are recorded as **D10.1–D10.4** in `DECISIONS.md` and require approval before coding:
+```
+enum CellContent {
+    Empty,
+    Char(u32),                    // single scalar, inline, no allocation
+    Cluster(Arc<str>),            // multi-codepoint grapheme, interned
+    WideChar(u32),
+    WideCharSpacer,
+}
+```
 
-- **D10.1** — `Arc<str>` per cell contradicts §2.1's "no heap allocation per cell" unless graphemes
-  are **interned** and single characters are stored inline. Without both, every cell is a heap
-  allocation.
-- **D10.2** — `Arc<[Cell]>` held by the renderer loosens the §3.1 rule that the renderer "may not
-  store references into engine buffers that outlive a frame."
-- **D10.3** — a 10 000-line scrollback at the newly-permitted 512 columns is ~5.12 M cells
-  (roughly 200 MB+ at ~40 B/cell). Scrollback bounded by **lines** is not bounded by **memory**.
-- **D10.4** — a trait taking `&mut self` does not by itself prevent cross-thread sharing; `Sync`
-  must be removed for thread confinement to be enforced statically.
+- `Char(u32)` covers the overwhelming majority of terminal content — ASCII, Latin, CJK — and
+  performs **no heap allocation**, preserving §2.1's "no heap allocation per cell" for the hot path.
+- `Cluster(Arc<str>)` is reserved for true multi-code-point clusters: combining sequences, emoji
+  with ZWJ or variation selectors, and regional indicator pairs.
+- **Interning is mandatory**, not optional. A per-configuration interner bounds the number of
+  live `Arc<str>` by the number of *distinct clusters observed*, not by the number of cells
+  written. Without interning, `Arc<str>` would allocate once per cell and silently reverse the
+  invariant it was chosen to satisfy.
+- Rows copied into scrollback bump refcounts only; no reallocation and no deep clone.
+
+#### 2.8.2 Snapshot ownership (D10.2, adopted)
+
+`Snapshot` owns a per-frame copy of **only the damaged rows**. It never exposes a view or `Arc`
+into engine-owned buffers. Consequences:
+
+- The renderer holds owned, stable data whose lifetime is bounded to a single frame.
+- §3.1's rule — the renderer "may not store references into engine buffers that outlive a frame"
+  — is upheld by construction rather than by convention.
+- Cost is negligible because row-level damage (D7) already limits the set of rows copied.
+
+#### 2.8.3 Scrollback budget (D10.3, adopted)
+
+Scrollback is bounded by bytes. See §2.3. Rationale: a line-count ceiling is a memory ceiling
+only for a fixed width. With the 512-column clamp, a 10 000-line budget reaches ~5.12 M cells —
+roughly 200 MB or more — so users would pay for width they never used.
+
+#### 2.8.4 Thread ownership (D10.4, adopted)
+
+The engine type is **`!Sync` and `Send`**, enforced by a private non-`Sync` marker field
+(`PhantomData<*mut ()>` or equivalent).
+
+- `Send` permits the engine to be constructed on and moved with the UI thread.
+- `!Sync` makes it impossible to share references to engine state across threads at all.
+
+This converts §3's "exactly one thread owns mutable engine state" from a human convention into
+a compiler guarantee. A background thread attempting to touch engine state fails to compile
+rather than corrupting state at runtime.
 
 ---
 
