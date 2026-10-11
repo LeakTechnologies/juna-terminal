@@ -82,7 +82,7 @@ A green build is build evidence, not proof of a functioning terminal. Zero tests
 | **D4** | Scrollback reflow | **SPECIFIED** | `ARCHITECTURE.md` §3.4. |
 | **D5** | ConPTY binding | **APPROVED — `conpty-oxide` 0.1.2** | `conpty` 0.7 removed from the manifest. Safeguards and replacement criteria in §6.3. |
 | **B6** | wgpu features | **RESOLVED** | See §6.1. | — |
-| **D6** | Font shaping | **OPEN** | Not started. Must be prototyped before renderer work. |
+| **D6** | Font rasterization | **CLOSED — zeno primary, DirectWrite deferred** | `fontdb` + `swash`/`zeno` behind a Smith trait. Fallback, shaping, and atlas are **not** deferred. Shaper choice (harfrust vs rustybuzz) still open. See §6.8–6.10. |
 | **D7** | Damage model | **DIRECTION SET** | Row damage + full redraw. `ARCHITECTURE.md` §3.5. |
 
 ---
@@ -377,7 +377,43 @@ The pure-Rust path is confirmed **viable**, not confirmed **optimal**. The remai
 question is whether unhinted grayscale output is acceptable for Smith's default rendering, which
 is a visual judgement that measurements alone cannot settle.
 
-### 6.9 Cascadia Mono is absent from this host
+### 6.10 D6 — closed: rasterization backend
+
+**Resolved.** Primary rasterizer is the pure-Rust stack: **`fontdb`** (system font discovery) +
+**`swash`/`zeno`** (rasterization), behind a Smith-owned trait, with a Smith-owned glyph atlas.
+
+**DirectWrite is deferred**, not rejected. It may be added later as a second backend behind the
+same trait if small-font-size readability proves inadequate in real use. Rationale as given:
+ClearType subpixel AA produces colour fringing on dark backgrounds, which matters for the
+Catppuccin Mocha default; grayscale AA is cleaner there; and the pure-Rust path avoids COM
+`unsafe` code and matches the project's Rust standard. Cost: without hinting, 9–11 pt sizes may
+look softer than grid-fitted DirectWrite.
+
+**Measured basis:** 11.6 ns per cmap lookup, 2.83 µs per glyph rasterization (§6.8).
+
+#### What is NOT deferred — correcting the summary phrasing
+
+The phrase *"deferred fallback/shaping"* would contradict the two findings recorded two sections
+earlier and must not be used. The accurate split is:
+
+| Item | Status |
+|---|---|
+| Rasterization backend (zeno vs DirectWrite) | **Decided — zeno. DirectWrite deferred as an alternative backend.** |
+| Cross-font fallback chain | **NOT deferred. Mandatory correctness requirement.** Consolas has no CJK, emoji, or Indic glyphs; no installed monospace font covers emoji or Indic. |
+| Shaping (ZWJ, combining marks, Indic) | **NOT deferred. Mandatory.** cmap-only lookup provably cannot render a ZWJ sequence. |
+| Glyph atlas and cache | **NOT deferred. Mandatory**, and a precondition for the 2.83 µs figure being irrelevant per frame. |
+
+What is deferred is **DirectWrite as an alternative rasterizer**. Nothing in the fallback,
+shaping, or atlas work is deferred. A terminal shipping without them renders tofu for most
+non-Latin content.
+
+#### Open sub-decision — which shaper
+
+The shaper is not yet chosen. Candidates: `harfrust` (used by cosmic-text 0.16) or `rustybuzz`.
+Both are pure Rust. This should be decided with the renderer implementation, not now, because
+shaping is only exercised by emoji and Indic — cmap lookup covers Latin, CJK, and symbols.
+Staging is viable: ship cmap + fallback first, add shaping for emoji and Indic once the pipeline
+is running. That staging is a **recommended sequencing proposal, not a decision.**
 
 Intended as the default theme font, Cascadia Mono/Code are not installed, so the spike fell back
 to Consolas. Any glyph-coverage and metric figures gathered here are **Consolas figures** and
