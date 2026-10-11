@@ -682,35 +682,68 @@ retained only so the spike can keep comparing against it.
 | **B6** | ~~wgpu feature flags not enumerated~~ | — | **RESOLVED.** Feature names, defaults, and dependency consequences recorded in §6.1; configuration applied and verified building. |
 | **B7** | ~~GPU adapter enumeration~~ | — | **PARTIALLY CLOSED.** Five adapters enumerated (`DECISIONS.md` §6.4). Parsec virtual adapter **not** exposed — recorded as a negative result, not as absence. Surface creation and presentation still untested. |
 
-### 7.1 B3 detail — MSVC cannot be installed from this session
+### 7.1 B3 detail — the fix is a modify, not an install
+
+**Correction.** An earlier revision of this section recorded a `winget install` command. That was
+wrong: it would reinstall or repair, not add a workload to an installation that already exists.
+
+**Verified state of the machine:**
 
 ```
-> rustc +stable-x86_64-pc-windows-msvc probe.rs -o probe.exe
-error: linker `link.exe` not found
+> vswhere -products * -format json
+  instanceId          e9f03673
+  installationPath    C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools
+  installationVersion 17.14.37614.0
+  isComplete          true
+  isLaunchable        true
+  isRebootRequired    false
 
-> IsInRole(Administrator) -> False
-> winget -> present at C:\Users\User\AppData\Local\Microsoft\WindowsApps\winget.exe
-> free space on C: -> 134.4 GB
+> vswhere -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64
+  (empty - component absent)
+
+> Get-ChildItem "...\BuildTools\VC"          -> not found
+> Get-ChildItem "...\Windows Kits\10"        -> not found
 ```
 
-`rust-toolchain.toml` has **not** been created, per the lead's ruling. The GNU toolchain links
-successfully and remains the working default.
+**Visual Studio Build Tools 2022 is already installed, complete, and launchable.** What is missing
+is only the C++ workload and the Windows SDK. This is therefore a fast **modify**, not a fresh
+multi-gigabyte install.
 
-Installing the C++ workload requires elevation, which this session cannot obtain. Rather than
-fire an unattended UAC prompt, the install is left as a single command for the operator to run
-from an elevated shell:
+The session is not elevated, so the modify cannot be run from here. Rather than fire an unattended
+UAC prompt, it is left to the operator.
+
+**GUI route:** open Visual Studio Installer → *Modify* on the Build Tools 2022 instance → tick
+**Desktop development with C++** → *Modify/Install*.
+
+**CLI route, from an elevated PowerShell:**
 
 ```powershell
-winget install --id Microsoft.VisualStudio.2022.BuildTools `
-  --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended" `
-  --accept-package-agreements --accept-source-agreements
+& "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vs_installer.exe" `
+  modify `
+  --installPath "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools" `
+  --add Microsoft.VisualStudio.Workload.VCTools `
+  --includeRecommended --quiet --wait --norestart
 ```
 
-Validation afterwards, and only then is `rust-toolchain.toml` justified:
+To avoid the recommended Windows SDK download, pin a specific one and drop `--includeRecommended`:
 
 ```powershell
-rustc +stable-x86_64-pc-windows-msvc probe.rs -o probe_msvc.exe   # must print "link ok"
+  --add Microsoft.VisualStudio.Workload.VCTools `
+  --add Microsoft.VisualStudio.Component.Windows11SDK.22621 `
+  --quiet --wait --norestart
 ```
+
+#### Validation, and only then is `rust-toolchain.toml` justified
+
+```powershell
+scripts\verify-toolchain.ps1
+```
+
+That script probes MSVC linkage, builds and tests the whole workspace under MSVC, and reports
+pass/fail per step. `rust-toolchain.toml` is created only after it reports success.
+
+The GNU toolchain links successfully today and remains the working default, so the project stays
+buildable throughout.
 
 ### 7.2 Process lifecycle evidence
 
