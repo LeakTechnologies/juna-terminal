@@ -452,6 +452,55 @@ It is O(total cells in scrollback) per resize. If profiling shows this is unacce
 window drags, the mitigation is to reflow lazily on scroll-into-view rather than eagerly — this
 must be measured, not assumed.
 
+### 3.7 Workspace layout engine (BSP)
+
+The layout engine is **pure**: it consumes a container rectangle and a pane tree, and returns
+rectangles. It has no knowledge of sessions, processes, glyphs, cells, or GPU state. It performs
+no I/O and is fully unit-testable without a window, a shell, or an adapter.
+
+Implemented in `src/layout`.
+
+**Determinism.** Split ratios are fixed-point per-mille (`Ratio(u16)`, range 1..=999) and all
+arithmetic is integer in `i64`/`i128`. No floating point is used anywhere in the layout path, so
+identical inputs yield bit-identical output on every platform. This is a hard requirement, not a
+preference: the renderer must be able to cache geometry without re-deriving it.
+
+**Invariants asserted by the test suite, on every tree it constructs:**
+
+1. The number of emitted rects equals the pane count.
+2. **Leaf areas sum exactly to the container area** — no gaps, no double-counting.
+3. Every leaf rect is contained by the container.
+4. No two leaf rects overlap.
+5. `below_minimum` is truthful — it agrees with the rect it describes.
+6. Repeated layout of the same tree is byte-identical.
+
+**Minimum size** is enforced pairwise at each split: when a parent's extent can satisfy two
+minimums, both children are clamped and the ratio yields to the minimum. **Known limitation:** a
+deeply nested tree can still produce a pane below minimum even when the container itself is
+large enough, because a sibling subtree may consume the space first. This is reported through
+`LayoutReport::unsatisfied` rather than hidden. A globally-optimal minimum assignment is a
+separate constraint-satisfaction problem and is **not** attempted.
+
+**Closing a pane** replaces the pane's parent split with the surviving sibling, so the survivor
+inherits the collapsed subtree's rectangle. Closing the root empties the tree. **Focus** follows a
+survivor rather than being lost. The layout engine has no opinion about what happens to the
+*session* behind a pane — that is the session manager's responsibility, and closing one pane must
+never terminate an unrelated session.
+
+**Focus movement** is structural: walking up from the focused leaf, the first ancestor whose
+split axis matches the requested direction supplies the target subtree, whose extreme leaf is
+selected. Movement at an edge returns `None` and leaves focus unchanged.
+
+| API | Purpose |
+|---|---|
+| `Tree::split_focused(axis, ratio)` | Replace the focused leaf with a split; focus the new pane |
+| `Tree::close(pane)` | Remove a leaf and collapse its parent |
+| `Tree::move_focus(dir)` / `pane_in_direction(from, dir)` | Directional focus |
+| `Tree::layout(area, min) -> LayoutReport` | Geometry pass; rects plus unsatisfied minima |
+
+**Not yet specified:** ratio adjustment by dragging, pane minimums derived from cell metrics,
+tab-to-tree mapping, and resize coalescing. These depend on the renderer and session manager.
+
 ### 3.5 Damage model (D7)
 
 Row-level damage is the provisional renderer strategy, with full-redraw always available.
