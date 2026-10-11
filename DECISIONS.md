@@ -263,7 +263,129 @@ place of reimplementing several hundred lines of Win32 `unsafe`:
    Replacement means either a vetted successor or a Smith-owned Win32 implementation, decided
    per the Design-First gate. It is not grounds to fall back to `conpty` 0.7.
 
-### 6.4 B7 — GPU adapter enumeration
+### 6.5 D6 — `crossfont` rejected by doctrine
+
+Proposed as a D6 option and **rejected**. `crossfont` 0.9.0 declares
+`repository = github.com/alacritty/crossfont.git`, is published by `chrisduerr` (an Alacritty
+maintainer), and has ~1.97 M downloads. It is Alacritty's font-loading and rasterization
+component.
+
+`AGENTS.md` §2 forbids adapting "parser, grid, scrollback, or **renderer** code from another
+terminal". `crossfont` is part of Alacritty's renderer. Publishing it as a standalone crate does
+not change its provenance, and the boundary test in §2 cannot be satisfied by repackaging: the
+code belongs to the Alacritty organization and its maintainers.
+
+A narrower reading is available — `crossfont` provides font metrics and rasterization, which §2
+classifies as *infrastructure*, and it does not interpret escape sequences or manage a screen
+buffer. That reading was considered and rejected, because the *renderer* clause is unconditional
+and adopting Alacritty's own rasterization component would put Smith on Alacritty's renderer
+stack — precisely the dependency the original-engine doctrine exists to prevent.
+
+**Settled by doctrine, not preference. Not to be revisited without an explicit doctrine change.**
+
+### 6.6 D6 — `cosmic-text` rejected for a terminal grid
+
+Factual correction to the option as proposed: `cosmic-text` 0.16.0 **no longer uses
+`rustybuzz`**. Its shaping dependency is `harfrust` ^0.4.1 (HarfBuzz-compatible), and `swash`
+has become optional.
+
+Confirmed dependency set: `fontdb`, `skrifa`, `harfrust`, `unicode-linebreak`, `unicode-bidi`,
+`unicode-script`, `unicode-segmentation`, `linebender_resource_handle`, `self_cell`, `rangemap`,
+`rustc-hash`, `smol_str`, `bitflags`, `log`, plus optional `syntect` and `cosmic_undo_2`.
+
+Rejected on architectural grounds. `unicode-linebreak` and `unicode-bidi` implement paragraph
+layout for continuous prose. Smith has a **fixed cell grid** in which every glyph's position is
+already known, so that machinery cannot produce information we do not have — it can only add
+cache and allocation cost on the render hot path. cosmic-text is a sound text engine and a poor
+match for a terminal.
+
+### 6.8 D6 — pure-Rust rasterization spike (zeno/swash), measured
+
+`examples/font_spike.rs`, release build. Host fonts enumerated via `fontdb`.
+
+#### Environment
+
+Nine monospace families installed: **Consolas, Courier New, IBM Plex Mono, Lucida Console,
+MS Gothic, NSimSun, SimSun-ExtB, SimSun-ExtG, VCR OSD Mono**.
+
+**Cascadia Mono and Cascadia Code are not installed.** The intended default could not be tested.
+
+Consolas selected as the fallback candidate. Metrics at size 16: `units_per_em = 2048`,
+`glyph_count = 3031`, `is_monospace = true`, `ascent = 1521.0`, `descent = 527.0`,
+`leading = 350.0`, `cap_height = 1307.0`.
+
+#### Finding 1 — font fallback is mandatory, not optional
+
+| Case | Consolas |
+|---|---|
+| Latin `A` | gid 4, advance 1126, bitmap 9x11 |
+| Latin `g` | gid 137, advance 1126, bitmap 9x12 |
+| `e` + U+0301 | gid 135, advance 1126, bitmap 8x9 |
+| CJK 漢 | **NO GLYPH** |
+| Emoji 😀 | **NO GLYPH** |
+| Emoji ZWJ family | **NO GLYPH** |
+| Devanagari क | **NO GLYPH** |
+
+Across all nine installed monospace families: **every** family covers Latin and the base of the
+combining sequence. Only **MS Gothic** and **NSimSun** cover CJK. **No installed monospace font
+covers emoji or Devanagari at all.**
+
+This is the most decision-relevant result of the spike. A terminal that resolves glyphs against
+a single font will render tofu for CJK, emoji, and Indic text — which is most non-Latin content
+a developer encounters. Cross-font fallback is a **core requirement of the renderer**, not a
+polish item, and it must be designed in from the start rather than added after tofu appears.
+
+#### Finding 2 — performance is adequate, provided the API is used correctly
+
+| Measurement | Result |
+|---|---|
+| cmap lookup, `Charmap` hoisted and reused | **11.6 ns/lookup** |
+| cmap lookup, `Charmap` re-materialized per call | 48.0 ns/lookup |
+| Rasterization, `Render` + `Image` reused | **2.83 µs/glyph** |
+| Rasterization, `Render` rebuilt + `Image` allocated per call | 3.07 µs/glyph |
+
+Allocation overhead is ~1x and therefore **not** worth optimizing; the meaningful lever is
+hoisting `Charmap`. At 2.83 µs, rasterizing a full 80x40 grid costs ~9 ms once. With a glyph
+cache this is a startup cost, not a per-frame cost. Conclusion: **zeno is fast enough for a
+terminal provided glyphs are cached and `Charmap` is held, not rebuilt.**
+
+#### Methodology errors made and corrected
+
+Both were mine, and both would have produced a wrong decision:
+
+1. **First benchmark ran in debug mode.** It reported 1878 ns/lookup and 44.6 µs/glyph — a 100x
+   overstatement. Release build: 11.6 ns and 2.83 µs. Any future timing work here must assert
+   `--release`.
+2. **First benchmark measured API misuse.** `font.charmap()` re-materializes the character map
+   on every call, so a per-lookup call pattern measures table re-lookup, not lookup. The naive
+   and hoisted figures are both reported above so the gap is visible.
+
+#### Finding 3 — cmap-only lookup is provably insufficient
+
+A ZWJ emoji family reports a present glyph for its first codepoint yet **cannot be rendered**
+without shaping; the same is true of the U+0301 mark, which needs mark attachment rather than
+independent placement. A cmap-only fast path is therefore correct for Latin, CJK, and symbols,
+but shaping is **required** for emoji and Indic, not merely desirable.
+
+#### Status
+
+**D6 is NOT closed.** The DirectWrite half of the comparison — hinting, ClearType subpixel
+rendering, glyph metrics agreement, and OS-level fallback behaviour — has **not** been
+implemented or measured. The zeno half is complete.
+
+The pure-Rust path is confirmed **viable**, not confirmed **optimal**. The remaining open
+question is whether unhinted grayscale output is acceptable for Smith's default rendering, which
+is a visual judgement that measurements alone cannot settle.
+
+### 6.9 Cascadia Mono is absent from this host
+
+Intended as the default theme font, Cascadia Mono/Code are not installed, so the spike fell back
+to Consolas. Any glyph-coverage and metric figures gathered here are **Consolas figures** and
+must not be presented as Cascadia results.
+
+`swash` 0.2.0 dependencies: `skrifa` ^0.26.2 (required), `zeno` ^0.3.2 (optional rasterizer),
+`yazi` ^0.2.1 (optional), `core_maths` (optional). **No FreeType and no C library**, satisfying
+the stated requirement for a C-free text pipeline.
 
 `src/bin/gpu_probe.rs`. Enumeration only; no device request, no surface. Blocked on an executor,
 so the binary carries a ~20-line `Box::pin` poller rather than taking a dependency for one

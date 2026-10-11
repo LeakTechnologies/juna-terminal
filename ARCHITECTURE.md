@@ -97,6 +97,11 @@ Design points:
   makes column arithmetic uniform and keeps cursor/scroll logic free of width special-casing.
 - No heap allocation per cell. Cell content borrows from a slab/arena so the grid is
   contiguous and `Send`.
+- **Glyph fallback across fonts is a correctness requirement, not polish.** Measured: Consolas
+  contains no CJK, emoji, or Indic glyphs, and on the test host no installed monospace font
+  covers emoji or Devanagari at all. A cell whose cluster has no glyph in the primary font
+  must resolve through an ordered fallback chain, and must render a visible tofu marker if the
+  entire chain misses. This must not be deferred to a later milestone.
 
 ### 2.2 Grid
 
@@ -518,7 +523,7 @@ Status values: **DIRECTION SET** (lead has given a direction; not yet proven).
 | **D3** | Unicode data | **UNRESOLVED** | Pinned Unicode version behind a pure API. | Compare internal tables against `unicode-width`, `unicode-segmentation`, `unicode-properties` before committing. See `DECISIONS.md` §6. |
 | **D4** | Scrollback reflow | **DIRECTION SET — specified** | Reflow logical lines. | Specified in §3.4. Wide cells, cursor, scroll-region resize, and tab rules are now explicit. |
 | **D5** | ConPTY binding | **APPROVED — `conpty-oxide` 0.1.2** | Measured against six criteria; `conpty` 0.7 failed five and was removed. Smith wraps it in its own transport boundary. Replacement criteria in `DECISIONS.md` §6.3. |
-| **D6** | Font shaping | **UNRESOLVED** | Decide before renderer implementation. | Prototype shaping, fallback, rasterization, and atlas as one pipeline. Must cover combining marks, wide glyphs, emoji, and missing-glyph fallback. |
+| **D6** | Font shaping and rasterization | **PARTIAL — pure-Rust path viable, comparison incomplete** | `fontdb` + `swash`/`zeno` behind a Smith-owned trait, custom atlas. Measured: cmap 11.6 ns/lookup, rasterization 2.83 µs/glyph. | DirectWrite comparison **not yet measured**. **Cross-font fallback is mandatory** — Consolas has no CJK, emoji, or Indic glyphs. Shaping is required for emoji and Indic, not optional. See `DECISIONS.md` §6.8. |
 | **D7** | Damage model | **DIRECTION SET** | Row-level damage plus full-redraw support; retain cell-level option. | Specified in §3.5. Rationale is a hypothesis pending Phase 3 profiling. |
 | **D8** | wgpu backends | **APPROVED PROVISIONALLY** | `default-features = false`, features `std, dx12, vulkan, gles, wgsl`. Enumeration confirms dx12=3, vulkan=1, gles=1. | `gles` retained. Feature set is **not** to be changed on enumeration evidence alone; presentation paths are untested. See `DECISIONS.md` §6.4. |
 | **D9** | Adapter selection policy | **DIRECTION SET — must be explicit** | Never take the first adapter by default. | Reject `DeviceType::Cpu` (a WARP software rasteriser is exposed and could be selected silently). Prefer `DiscreteGpu`; treat software as last-resort fallback. The DX12 list contains apparent duplicates, so do not assume deduplication. |

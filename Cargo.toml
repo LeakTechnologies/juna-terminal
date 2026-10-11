@@ -19,9 +19,14 @@ log = "0.4"
 env_logger = "0.11"
 
 [dev-dependencies]
+swash = "0.2"
+fontdb = "0.23"
 windows = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_System_Console",
     "Win32_Storage_FileSystem",
     "Win32_Security",
+    "Win32_System_Com",
+    "Win32_Graphics_DirectWrite",
+    "Win32_Graphics_Gdi",
 ] }
