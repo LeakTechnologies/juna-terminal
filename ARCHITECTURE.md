@@ -1,4 +1,4 @@
-# Smith Terminal Engine — Architecture & Interface Specification
+# Juna Terminal Engine — Architecture & Interface Specification
 
 Status: **PROPOSED — architecture direction approved; not approved as a frozen implementation
 contract. Engine coding remains unauthorized.**
@@ -23,7 +23,7 @@ images, ligatures, sixel/kitty bitmap output, arbitrary DCS passthrough payloads
 
 ### 1.1 State machine
 
-Smith's parser is a byte-driven finite-state machine over the DEC ANSI parser model. States:
+Juna's parser is a byte-driven finite-state machine over the DEC ANSI parser model. States:
 
 | State | Purpose |
 |---|---|
@@ -43,7 +43,7 @@ Smith's parser is a byte-driven finite-state machine over the DEC ANSI parser mo
 Byte classification (`0x00..=0x1F`, `0x20..=0x7F`, `0x80..=0x9F` C1, `>= 0xA0` UTF-8) is
 data, not a hardcoded match arm, so the tables are testable in isolation.
 
-### 1.2 Control sequence families Smith targets
+### 1.2 Control sequence families Juna targets
 
 - **C0 execution**: `BEL BS HT LF VT FF CR SO SI`
 - **C1 (7-bit and 8-bit)**: `IND NEL HTS RI SS2 SS3 DCS SOS PM APC OSC`
@@ -356,7 +356,7 @@ Backpressure is a symptom detector, not a solution. Every pause is a defect repo
 
 #### 3.0.3 Verification status
 
-Implemented as `smith::transport::StreamBuffer` with six passing unit tests:
+Implemented as `Juna::transport::StreamBuffer` with six passing unit tests:
 
 | Test | Property |
 |---|---|
@@ -427,7 +427,7 @@ Explicit, ordered, and non-blocking:
 6. Join the reader thread.
 7. Drop GPU resources, then the window.
 
-Child processes must not outlive the app. A leaked `powershell.exe` after closing Smith is a
+Child processes must not outlive the app. A leaked `powershell.exe` after closing Juna is a
 release-blocking defect, not a cosmetic issue.
 
 ### 3.4 Scrollback reflow on resize (D4)
@@ -638,8 +638,8 @@ Status values: **DIRECTION SET** (lead has given a direction; not yet proven).
 | **D2** | Async runtime | **DIRECTION SET — implemented** | Remove Tokio. Standard threads + explicit buffer handoff. | None. Async may return only with a demonstrated requirement. |
 | **D3** | Unicode data | **UNRESOLVED** | Pinned Unicode version behind a pure API. | Compare internal tables against `unicode-width`, `unicode-segmentation`, `unicode-properties` before committing. See `DECISIONS.md` §6. |
 | **D4** | Scrollback reflow | **DIRECTION SET — specified** | Reflow logical lines. | Specified in §3.4. Wide cells, cursor, scroll-region resize, and tab rules are now explicit. |
-| **D5** | ConPTY binding | **APPROVED — `conpty-oxide` 0.1.2** | Measured against six criteria; `conpty` 0.7 failed five and was removed. Smith wraps it in its own transport boundary. Replacement criteria in `DECISIONS.md` §6.3. |
-| **D6** | Font rasterization | **CLOSED — pure-Rust primary, DirectWrite deferred** | `fontdb` + `swash`/`zeno` behind a Smith-owned trait, with a Smith-owned glyph atlas. Measured 11.6 ns/lookup, 2.83 µs/glyph. | DirectWrite may return as a second backend if small-size readability proves poor. **Fallback, shaping, and atlas are mandatory, not deferred.** Shaper choice (`harfrust` vs `rustybuzz`) still open. See `DECISIONS.md` §6.11. |
+| **D5** | ConPTY binding | **APPROVED — `conpty-oxide` 0.1.2** | Measured against six criteria; `conpty` 0.7 failed five and was removed. Juna wraps it in its own transport boundary. Replacement criteria in `DECISIONS.md` §6.3. |
+| **D6** | Font rasterization | **CLOSED — pure-Rust primary, DirectWrite deferred** | `fontdb` + `swash`/`zeno` behind a Juna-owned trait, with a Juna-owned glyph atlas. Measured 11.6 ns/lookup, 2.83 µs/glyph. | DirectWrite may return as a second backend if small-size readability proves poor. **Fallback, shaping, and atlas are mandatory, not deferred.** Shaper choice (`harfrust` vs `rustybuzz`) still open. See `DECISIONS.md` §6.11. |
 | **D7** | Damage model | **DIRECTION SET** | Row-level damage plus full-redraw support; retain cell-level option. | Specified in §3.5. Rationale is a hypothesis pending Phase 3 profiling. |
 | **D8** | wgpu backends | **APPROVED PROVISIONALLY** | `default-features = false`, features `std, dx12, vulkan, gles, wgsl`. Enumeration confirms dx12=3, vulkan=1, gles=1. | `gles` retained. Feature set is **not** to be changed on enumeration evidence alone; presentation paths are untested. See `DECISIONS.md` §6.4. |
 | **D9** | Adapter selection policy | **DIRECTION SET — must be explicit** | Never take the first adapter by default. | Reject `DeviceType::Cpu` (a WARP software rasteriser is exposed and could be selected silently). Prefer `DiscreteGpu`; treat software as last-resort fallback. The DX12 list contains apparent duplicates, so do not assume deduplication. |

@@ -1,15 +1,15 @@
-# AGENTS.md — Smith
+# AGENTS.md — Juna
 
-Project-specific engineering rules for Smith. Binding on every agent session in this
+Project-specific engineering rules for Juna. Binding on every agent session in this
 repository. Where this file and the global `~/.config/opencode/AGENTS.md` conflict, this file
 wins on project-specific matters; the global file still governs cost, commit protocol, and
 model selection.
 
-## 1. What Smith is
+## 1. What Juna is
 
 A native Windows terminal emulator and developer workspace, written in Rust.
 
-Smith implements its **own** VT engine: parser, state machine, screen model, cursor,
+Juna implements its **own** VT engine: parser, state machine, screen model, cursor,
 scrollback, alternate screen, and control-sequence semantics.
 
 ## 2. Provenance — absolute constraint
@@ -45,7 +45,7 @@ A task is not complete because it compiles. It is complete when its acceptance c
 
 - No dependency without a written justification naming the concrete requirement it serves.
 - Prefer standard library over a crate when the standard library is adequate.
-- Existing crates used only for standards data may be wrapped behind a Smith-owned pure API so
+- Existing crates used only for standards data may be wrapped behind a Juna-owned pure API so
   the implementation can be swapped without touching call sites.
 - Record every addition and removal in `DECISIONS.md`.
 - Do not add an async runtime without a demonstrated requirement.
@@ -98,7 +98,7 @@ without that comment will be rejected.
 
 ## 10. Scope discipline
 
-Smith is a terminal first. Editor, agent drawer, transparency, and notifications must not
+Juna is a terminal first. Editor, agent drawer, transparency, and notifications must not
 compromise terminal correctness. If a feature cannot be built without weakening the terminal,
 it does not get built yet.
 

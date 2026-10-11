@@ -1,4 +1,4 @@
-# Smith — Decision Register
+# Juna — Decision Register
 
 Status: **Phase 0 reconnaissance complete. Engine coding remains unauthorized.**
 
@@ -12,7 +12,7 @@ Established by direct inspection and direct execution. Not inferred, not assumed
 
 | Fact | Value | How it was established |
 |---|---|---|
-| Working directory | `E:\Development\smith-terminal` | `Get-Location` |
+| Working directory | `E:\Development\Juna-terminal` | `Get-Location` |
 | Repository state | **Not a git repository.** No `.git`, no commits. | `git status` → `fatal: not a git repository` |
 | Prior contents | Directory was **completely empty** | `Get-ChildItem -Force` → no output |
 | Active toolchain | `stable-x86_64-pc-windows-gnu` 1.97.0 (`2d8144b7`) | `rustc --version --verbose` |
@@ -82,7 +82,7 @@ A green build is build evidence, not proof of a functioning terminal. Zero tests
 | **D4** | Scrollback reflow | **SPECIFIED** | `ARCHITECTURE.md` §3.4. |
 | **D5** | ConPTY binding | **APPROVED — `conpty-oxide` 0.1.2** | `conpty` 0.7 removed from the manifest. Safeguards and replacement criteria in §6.3. |
 | **B6** | wgpu features | **RESOLVED** | See §6.1. | — |
-| **D6** | Font rasterization | **CLOSED — zeno primary, DirectWrite deferred** | `fontdb` + `swash`/`zeno` behind a Smith trait. Shaper choice (harfrust vs rustybuzz) still open. See §6.8–6.11. |
+| **D6** | Font rasterization | **CLOSED — zeno primary, DirectWrite deferred** | `fontdb` + `swash`/`zeno` behind a Juna trait. Shaper choice (harfrust vs rustybuzz) still open. See §6.8–6.11. |
 | **D7** | Damage model | **DIRECTION SET** | Row damage + full redraw. `ARCHITECTURE.md` §3.5. |
 
 ---
@@ -137,8 +137,8 @@ machine, grid, scrollback, alternate screen. Unicode standards data is reference
 terminal implementation. Reimplementing grapheme segmentation from scratch is out of scope and
 would be a correctness liability.
 
-**Recommendation:** adopt `unicode-width` + `unicode-segmentation` **behind a Smith-owned pure
-API** (`smith_term::text::width(c) -> Columns`, `graphemes(s) -> impl Iterator<Item = &str>`),
+**Recommendation:** adopt `unicode-width` + `unicode-segmentation` **behind a Juna-owned pure
+API** (`Juna_term::text::width(c) -> Columns`, `graphemes(s) -> impl Iterator<Item = &str>`),
 with versions pinned via `Cargo.lock` and the corresponding Unicode version recorded in the
 docs. The wrapper preserves the ability to swap implementations or vendor tables later without
 touching call sites. Caveat to record: neither crate exposes its source Unicode version at
@@ -233,12 +233,12 @@ large build-time reduction is made; that was not measured.
 ### 6.3 D5 — approved, with supply-risk safeguards
 
 **Approved by the design lead: `conpty-oxide` 0.1.2. `conpty` 0.7 removed from the manifest.**
-Smith owns a thin wrapper so the engine/transport boundary stays explicit.
+Juna owns a thin wrapper so the engine/transport boundary stays explicit.
 
 The concern is supply and maintenance risk, not correctness. Three safeguards are recorded in
 place of reimplementing several hundred lines of Win32 `unsafe`:
 
-1. **Pin and regress.** Version stays pinned via `Cargo.lock`. Smith's own acceptance tests in
+1. **Pin and regress.** Version stays pinned via `Cargo.lock`. Juna's own acceptance tests in
    `tests/conpty_acceptance.rs` cover the four areas that matter and are independent of
    upstream's suite:
 
@@ -260,7 +260,7 @@ place of reimplementing several hundred lines of Win32 `unsafe`:
    - **abandonment or unmaintenance** that prevents a necessary fix from landing;
    - a **demonstrated incompatibility** with a supported Windows environment.
 
-   Replacement means either a vetted successor or a Smith-owned Win32 implementation, decided
+   Replacement means either a vetted successor or a Juna-owned Win32 implementation, decided
    per the Design-First gate. It is not grounds to fall back to `conpty` 0.7.
 
 ### 6.5 D6 — `crossfont` rejected by doctrine
@@ -278,7 +278,7 @@ code belongs to the Alacritty organization and its maintainers.
 A narrower reading is available — `crossfont` provides font metrics and rasterization, which §2
 classifies as *infrastructure*, and it does not interpret escape sequences or manage a screen
 buffer. That reading was considered and rejected, because the *renderer* clause is unconditional
-and adopting Alacritty's own rasterization component would put Smith on Alacritty's renderer
+and adopting Alacritty's own rasterization component would put Juna on Alacritty's renderer
 stack — precisely the dependency the original-engine doctrine exists to prevent.
 
 **Settled by doctrine, not preference. Not to be revisited without an explicit doctrine change.**
@@ -294,7 +294,7 @@ Confirmed dependency set: `fontdb`, `skrifa`, `harfrust`, `unicode-linebreak`, `
 `rustc-hash`, `smol_str`, `bitflags`, `log`, plus optional `syntect` and `cosmic_undo_2`.
 
 Rejected on architectural grounds. `unicode-linebreak` and `unicode-bidi` implement paragraph
-layout for continuous prose. Smith has a **fixed cell grid** in which every glyph's position is
+layout for continuous prose. Juna has a **fixed cell grid** in which every glyph's position is
 already known, so that machinery cannot produce information we do not have — it can only add
 cache and allocation cost on the render hot path. cosmic-text is a sound text engine and a poor
 match for a terminal.
@@ -374,7 +374,7 @@ rendering, glyph metrics agreement, and OS-level fallback behaviour — has **no
 implemented or measured. The zeno half is complete.
 
 The pure-Rust path is confirmed **viable**, not confirmed **optimal**. The remaining open
-question is whether unhinted grayscale output is acceptable for Smith's default rendering, which
+question is whether unhinted grayscale output is acceptable for Juna's default rendering, which
 is a visual judgement that measurements alone cannot settle.
 
 ### 6.10 Gap resolutions — all adopted
@@ -436,6 +436,27 @@ output. `unicode_width_is_exhaustive()` returns `false` and a test asserts it st
 the gap is visible rather than forgotten. D3 (pinned Unicode version and table source) must
 close before release.
 
+### 6.15 Project renamed to Juna Terminal
+
+**Decision:** the project is named **Juna**. The Cargo package, binary, and library are `juna`.
+
+Originally established as "Smith" during Phase 0 reconnaissance, then held provisional pending a
+working prototype.
+
+**Rationale for rejecting "Juniper":** it collides with Juniper Networks and Junos OS. Network
+engineers use terminals daily against Juniper routers and switches, so searching for a terminal
+named "Juniper" would be dominated by enterprise vendor results, making the project effectively
+undiscoverable. "Juna" keeps the personal tribute while avoiding that collision. "Juniper"
+remains the warm inspiration behind the name and is not used as an identifier.
+
+**Scope of this rename:** package/binary/library identifier and project documentation only. The
+**working directory is still `E:\Development\smith-terminal` and has not been renamed**, because
+moving a git repository out from under an active session carries avoidable risk. Renaming the
+directory is a separate, explicit step.
+
+**Not yet renamed:** the git repository has no remote, so no repository slug or package registry
+name is affected yet.
+
 ### 6.13 Known clippy artifact
 
 `cargo clippy --all-targets` reports `state` and `screen_text` in `src/vt/tests.rs` as unused.
@@ -445,7 +466,7 @@ linting the `#[cfg(test)]` module without the test functions. Reported rather th
 ### 6.14 D6 — closed: rasterization backend
 
 **Resolved.** Primary rasterizer is the pure-Rust stack: **`fontdb`** (system font discovery) +
-**`swash`/`zeno`** (rasterization), behind a Smith-owned trait, with a Smith-owned glyph atlas.
+**`swash`/`zeno`** (rasterization), behind a Juna-owned trait, with a Juna-owned glyph atlas.
 
 **DirectWrite is deferred**, not rejected. It may be added later as a second backend behind the
 same trait if small-font-size readability proves inadequate in real use. Rationale as given:
@@ -549,7 +570,7 @@ a wedged session. Raw output:
 --- CHECK 2: output round-trip ---
 [HANG] conpty 0.7 rt did not finish within 8000ms
 [FAIL] conpty 0.7      TIMEOUT after 8000ms (blocking read/close)
-[PASS] conpty-oxide    SMITH_RT_9F3A
+[PASS] conpty-oxide    Juna_RT_9F3A
 
 --- CHECK 3: resize (120x40 then 80x25) ---
 [PASS] conpty-oxide    final size 80x25
@@ -636,7 +657,7 @@ release.
 #### Recommendation for D5
 
 **`conpty-oxide` 0.1.2.** It passes every measured item; `conpty` 0.7 fails five of six.
-Its `blocking` feature is default, so D2 holds. Smith still owns a thin wrapper so the boundary
+Its `blocking` feature is default, so D2 holds. Juna still owns a thin wrapper so the boundary
 between engine and transport stays explicit.
 
 Outstanding risk, unchanged and unmeasured by this spike: **maturity**. Published 2026-07-31,

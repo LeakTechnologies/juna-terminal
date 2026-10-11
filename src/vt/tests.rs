@@ -262,8 +262,8 @@ fn alternate_screen_does_not_collect_scrollback() {
 #[test]
 fn osc_title_is_captured() {
     let mut s = state(10, 2);
-    s.advance(b"\x1b]0;smith\x07");
-    assert_eq!(s.title(), "smith");
+    s.advance(b"\x1b]0;Juna\x07");
+    assert_eq!(s.title(), "Juna");
     s.advance(b"\x1b]2;other\x1b\\");
     assert_eq!(s.title(), "other");
 }
@@ -334,3 +334,4 @@ fn realistic_shell_prompt_sequence() {
     assert!(s.title().contains("PowerShell"));
     assert_eq!(screen_text(&s, 0).trim_end(), "PS C:\\Users\\dev>".trim_end());
 }
+
