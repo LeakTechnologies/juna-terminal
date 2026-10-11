@@ -377,7 +377,70 @@ The pure-Rust path is confirmed **viable**, not confirmed **optimal**. The remai
 question is whether unhinted grayscale output is acceptable for Smith's default rendering, which
 is a visual judgement that measurements alone cannot settle.
 
-### 6.10 D6 — closed: rasterization backend
+### 6.10 Gap resolutions approved, with four consequences requiring sign-off
+
+The six specification gaps were resolved by the design lead (`ARCHITECTURE.md` §2.8): `Arc<str>`
+cell content, `u32` `Attrs` bitfield, `Arc<[Cell]>` snapshots, a 512x256 grid clamp, validated
+wide-character writes, and a `TerminalEngine` trait taking `&mut self`.
+
+Four consequences of those resolutions were **not** part of the resolutions and need approval.
+Each is a correctness or safety issue, not a preference.
+
+#### D10.1 — `Arc<str>` per cell contradicts "no heap allocation per cell"
+
+`ARCHITECTURE.md` §2.1 states cells must not allocate per cell. `Arc<str>` is a 16-byte fat
+pointer **plus a heap allocation**, so a naive implementation allocates once per cell written —
+and a row copied into scrollback carries one allocation per non-trivial grapheme.
+
+Two things are required for the resolution to hold:
+1. **Interning.** Unique grapheme clusters are interned per font configuration, so the set of
+   live `Arc<str>` is bounded by distinct clusters rather than by cells written.
+2. **Inline storage for the common case.** Most terminal content is a single scalar character.
+   A `CellContent` enum with an inline `Char(u32)` variant and an `Arc<str>` variant only for
+   true multi-code-point clusters keeps the ASCII/Latin path allocation-free and the cell small.
+
+**Recommendation:** adopt both. Without them the resolution silently reverses an existing design
+invariant.
+
+#### D10.2 — `Arc<[Cell]>` snapshots loosen the renderer boundary
+
+`ARCHITECTURE.md` §3.1 states the renderer "may not store references into engine buffers that
+outlive a frame." A snapshot holding `Arc<[Cell]>` over engine-owned memory stays alive as long
+as the renderer keeps the Arc, which is exactly the reference lifetime the rule forbids.
+
+**Recommendation:** the snapshot should own **only damaged rows**, not the whole grid. Copying
+just the dirty rows into a fresh `Vec<Row>` per frame gives the renderer stable, owned data with
+a strictly bounded lifetime, and the snapshot is dropped at end of frame. This preserves the
+boundary instead of redefining it, and it costs nothing because row-level damage (D7) already
+limits the set.
+
+#### D10.3 — scrollback bounded by lines is not bounded by memory
+
+`ARCHITECTURE.md` §2.3 specifies a 10 000-line scrollback. The new 512-column clamp (gap 4)
+makes a single line up to 512 cells rather than a typical 80–120. At maximum width, 10 000 lines
+is 5.12 M cells, roughly **200 MB or more** at an assumed ~40 B/cell. A user with a 4K monitor
+and a wide window would see memory grow with width, not with content.
+
+**Recommendation:** bound scrollback by **bytes** (a configurable budget, default ~64 MiB) and
+report the effective line count as `budget / (cols * size_of::<Cell>())`, floored at a small
+minimum. Truncation stays oldest-first and observable, per §2.3. Alternatively cap scrollback
+lines at 10 000 **and** re-derive the line cap from current width on resize.
+
+#### D10.4 — `&mut self` does not enforce single-owner
+
+A trait whose methods take `&mut self` prevents aliasing within a thread, but it does not stop
+the type being moved to or shared across threads if it is `Send + Sync`. §3's rule is "exactly
+one thread owns mutable engine state", and that is not currently enforced by types.
+
+**Recommendation:** mark the engine type `!Sync` while leaving it `Send`, e.g. via a
+`PhantomData<*mut ()>` marker or a private `NotSync` field. `Send` allows the engine to be
+constructed on, and moved with, the UI thread; `!Sync` makes it impossible to share references
+across threads. This makes §3 a compiler-enforced invariant rather than a convention.
+
+**Status: all four awaiting design-lead approval.** None blocks recording the six resolutions;
+all four must be settled before `src/vt/` is written.
+
+### 6.11 D6 — closed: rasterization backend
 
 **Resolved.** Primary rasterizer is the pure-Rust stack: **`fontdb`** (system font discovery) +
 **`swash`/`zeno`** (rasterization), behind a Smith-owned trait, with a Smith-owned glyph atlas.

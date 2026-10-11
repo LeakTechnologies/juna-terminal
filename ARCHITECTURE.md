@@ -177,6 +177,34 @@ Cursor { row, col, shape, visible, blink, style: Steady|Blink|SteadyHollow }
 - **Ambiguous width** is a user setting, default narrow — this is a real cross-platform
   divergence and must not be silently hardcoded.
 
+### 2.8 Resolved data-model decisions
+
+Approved by the design lead, closing the six gaps raised during the specification review. **Not
+yet implemented** — engine coding remains unauthorized.
+
+| # | Gap | Resolution |
+|---|---|---|
+| 1 | Cell content lifetimes | Frame-scoped arenas rejected. Multi-code-point graphemes use **`Arc<str>`**, so scrollback rows (`Vec<Cell>`) outlive any individual frame and clone without lifetime anchoring. |
+| 2 | `Attrs` layout | Packed **`u32` bitfield** via `bitflags!`. Bits 0–3 underline style, bits 4–11 font-modifier flags (bold, italic, dim, inverse, blink, invisible, strikethrough, overline). Bits 12–31 reserved. Keeps `Cell` memory-dense. |
+| 3 | Engine→renderer boundary | Immutable value types: `Snapshot` carrying shared cells (`Arc<[Cell]>`) alongside targeted `Damage` enums. See §3.1 and open item **D10.2**. |
+| 4 | Grid dimensions | `cols` and `rows` clamped to **512 × 256** at init and on resize, so malformed escape sequences cannot trigger unbounded allocation. See open item **D10.3**. |
+| 5 | Wide-character invariant | Raw mutable slice exposure on the grid is forbidden. Writing a wide character at column *N* automatically places `CellContent::WideCharSpacer` at *N+1*, via safe validated write methods only. |
+| 6 | Single-owner enforcement | The state machine is wrapped in a **`TerminalEngine` trait** taking `&mut self` for all advances. See open item **D10.4**. |
+
+#### Open consequences not covered by the resolutions
+
+These are recorded as **D10.1–D10.4** in `DECISIONS.md` and require approval before coding:
+
+- **D10.1** — `Arc<str>` per cell contradicts §2.1's "no heap allocation per cell" unless graphemes
+  are **interned** and single characters are stored inline. Without both, every cell is a heap
+  allocation.
+- **D10.2** — `Arc<[Cell]>` held by the renderer loosens the §3.1 rule that the renderer "may not
+  store references into engine buffers that outlive a frame."
+- **D10.3** — a 10 000-line scrollback at the newly-permitted 512 columns is ~5.12 M cells
+  (roughly 200 MB+ at ~40 B/cell). Scrollback bounded by **lines** is not bounded by **memory**.
+- **D10.4** — a trait taking `&mut self` does not by itself prevent cross-thread sharing; `Sync`
+  must be removed for thread confinement to be enforced statically.
+
 ---
 
 ## 3. State ownership & concurrency
@@ -572,7 +600,7 @@ Status values: **DIRECTION SET** (lead has given a direction; not yet proven).
 | **D3** | Unicode data | **UNRESOLVED** | Pinned Unicode version behind a pure API. | Compare internal tables against `unicode-width`, `unicode-segmentation`, `unicode-properties` before committing. See `DECISIONS.md` §6. |
 | **D4** | Scrollback reflow | **DIRECTION SET — specified** | Reflow logical lines. | Specified in §3.4. Wide cells, cursor, scroll-region resize, and tab rules are now explicit. |
 | **D5** | ConPTY binding | **APPROVED — `conpty-oxide` 0.1.2** | Measured against six criteria; `conpty` 0.7 failed five and was removed. Smith wraps it in its own transport boundary. Replacement criteria in `DECISIONS.md` §6.3. |
-| **D6** | Font rasterization | **CLOSED — pure-Rust primary, DirectWrite deferred** | `fontdb` + `swash`/`zeno` behind a Smith-owned trait, with a Smith-owned glyph atlas. Measured 11.6 ns/lookup, 2.83 µs/glyph. | DirectWrite may return as a second backend if small-size readability proves poor. **Fallback, shaping, and atlas are mandatory, not deferred.** Shaper choice (`harfrust` vs `rustybuzz`) still open. See `DECISIONS.md` §6.10. |
+| **D6** | Font rasterization | **CLOSED — pure-Rust primary, DirectWrite deferred** | `fontdb` + `swash`/`zeno` behind a Smith-owned trait, with a Smith-owned glyph atlas. Measured 11.6 ns/lookup, 2.83 µs/glyph. | DirectWrite may return as a second backend if small-size readability proves poor. **Fallback, shaping, and atlas are mandatory, not deferred.** Shaper choice (`harfrust` vs `rustybuzz`) still open. See `DECISIONS.md` §6.11. |
 | **D7** | Damage model | **DIRECTION SET** | Row-level damage plus full-redraw support; retain cell-level option. | Specified in §3.5. Rationale is a hypothesis pending Phase 3 profiling. |
 | **D8** | wgpu backends | **APPROVED PROVISIONALLY** | `default-features = false`, features `std, dx12, vulkan, gles, wgsl`. Enumeration confirms dx12=3, vulkan=1, gles=1. | `gles` retained. Feature set is **not** to be changed on enumeration evidence alone; presentation paths are untested. See `DECISIONS.md` §6.4. |
 | **D9** | Adapter selection policy | **DIRECTION SET — must be explicit** | Never take the first adapter by default. | Reject `DeviceType::Cpu` (a WARP software rasteriser is exposed and could be selected silently). Prefer `DiscreteGpu`; treat software as last-resort fallback. The DX12 list contains apparent duplicates, so do not assume deduplication. |
