@@ -397,7 +397,52 @@ section no longer contradicts D10.3.
 remain for the parser, grid, cursor, scrollback, or engine/renderer boundary. Implementation
 still requires explicit design-lead authorization.
 
-### 6.11 D6 — closed: rasterization backend
+### 6.12 VT engine core — implemented
+
+Authorized and built under `src/vt/`. 89 engine tests, 121 total, green in debug and release.
+
+| Module | Contents |
+|---|---|
+| `vt::parser` | Byte-driven FSM over the DEC ANSI model, UTF-8 decoding, totality fuzz |
+| `vt::grid` | Cells, cursor, margins, tabs, deferred-wrap latch, resize |
+| `vt::scrollback` | Byte-bounded history per D10.3 |
+| `vt::cell` | `CellContent`, `Color`, `Attrs` (u32 bitfield), `Interner` |
+| `vt::width` | Pure width/cluster API |
+| `vt::TerminalState` | Binds parser to grid; `!Sync` and `Send` per D10.4 |
+
+#### Bugs the tests caught
+
+1. **`ESC [` was dispatched as an escape final.** `[` is `0x5B`, inside the `0x40..=0x7E` final
+   range, so **every CSI sequence was misparsed**. This alone would have broken the terminal.
+2. **`ESC 7` / `ESC 8` (DECSC/DECRC) were misread as CSI parameters.** `7` is `0x37`, inside
+   the parameter range. The Escape state must treat `0x30..=0x7E` as finals; only `ESC [` is
+   a CSI introducer.
+3. **`flush_utf8` ran at the end of every `advance()`.** A multi-byte scalar routinely spans two
+   chunks, so **every non-ASCII character was corrupted** into replacement characters.
+   Flushing is now an explicit `Parser::flush()`, called only at a true end of stream.
+4. **`ground()` handled printable ASCII without checking for a pending UTF-8 sequence**, so a
+   continuation byte `0x80..=0x9F` was executed as a C1 control instead of being consumed.
+5. **`ESC` inside an OSC/DCS string was appended to the string** instead of restarting the
+   sequence, so `ESC \` (ST) could never terminate a string.
+6. **Wide characters advanced the cursor twice** — once manually, once through
+   `advance_cursor` — leaving the cursor one column too far right.
+7. The `ZERO` width table was **unsorted**, silently breaking binary search: U+FE0F variation
+   selectors returned width 1 instead of 0. A test now asserts the tables are sorted.
+
+#### D3 remains open
+
+`vt::width` uses a hand-maintained range table covering the ranges that occur in terminal
+output. `unicode_width_is_exhaustive()` returns `false` and a test asserts it stays that way, so
+the gap is visible rather than forgotten. D3 (pinned Unicode version and table source) must
+close before release.
+
+### 6.13 Known clippy artifact
+
+`cargo clippy --all-targets` reports `state` and `screen_text` in `src/vt/tests.rs` as unused.
+They are used by `#[test]` functions — 121 tests pass. This is clippy's `--all-targets` pass
+linting the `#[cfg(test)]` module without the test functions. Reported rather than suppressed.
+
+### 6.14 D6 — closed: rasterization backend
 
 **Resolved.** Primary rasterizer is the pure-Rust stack: **`fontdb`** (system font discovery) +
 **`swash`/`zeno`** (rasterization), behind a Smith-owned trait, with a Smith-owned glyph atlas.
