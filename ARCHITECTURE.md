@@ -698,6 +698,34 @@ ConPTY. A fake that could pass on Windows and fail elsewhere would not be testin
 The Linux dependency graph is verified to contain zero Windows-only crates
 (`DECISIONS.md` §6.18). `conpty-oxide` is referenced from `src/session/windows.rs` and nowhere else.
 
+#### Why `split` is required rather than optional
+
+A terminal **cannot** drive a session from one thread. `read` blocks and ConPTY never delivers EOF,
+so a thread blocked reading cannot also answer input — if the child waits for input before producing
+output, a single-threaded loop deadlocks. §3 already prescribes the fix (reads on their own thread)
+but that requires ownership to be *divided*, which is what `split` does. `reader` goes to the reader
+thread; `writer` and `control` stay on the UI thread. No handle is shared, so no locking.
+
+---
+
+## 3.10 Conformance harness — normative
+
+`src/bin/juna_headless.rs` drives a real shell through the entire production path and prints the
+rendered screen. It is the primary evidence that the engine is correct against real programs.
+
+**Every component is production code.** Real shell, real ConPTY backend, real `StreamBuffer`, real
+`TerminalState`. Nothing is stubbed. A stubbed path would prove only that the stub works.
+
+| Rule | Reason |
+|---|---|
+| Input is sent only after the shell goes **quiet**, never matched against a prompt string | matching a prompt couples the harness to one shell, which §5.1 forbids. PowerShell discards input written before its console host attaches (~1.5s of profile loading), so a fixed delay is not sufficient and a prompt match is not permitted. |
+| Markers are asserted on **screen or scrollback** | content that scrolled off is still history; reporting that as a miss would be wrong |
+| Erased content is expected to be **gone** | xterm does not push lines erased by ED 2 into scrollback, and neither does Juna |
+| Teardown always reaps | §3.9 `kill` is asynchronous; the harness polls `try_wait` before exiting |
+
+`tests/shell_roundtrip.rs` is the automated form of the same harness: real `cmd.exe`, five tests, all
+shell-independent because every assertion is on text the test itself chose.
+
 ---
 
 ## 4. Conformance & test strategy
@@ -758,7 +786,7 @@ Status values: **DIRECTION SET** (lead has given a direction; not yet proven).
 | **D8** | wgpu backends | **APPROVED PROVISIONALLY** | `default-features = false`, features `std, dx12, vulkan, gles, wgsl`. Enumeration confirms dx12=3, vulkan=1, gles=1. | `gles` retained. Feature set is **not** to be changed on enumeration evidence alone; presentation paths are untested. See `DECISIONS.md` §6.4. |
 | **D9** | Adapter selection policy | **DIRECTION SET — must be explicit** | Never take the first adapter by default. | Reject `DeviceType::Cpu` (a WARP software rasteriser is exposed and could be selected silently). Prefer `DiscreteGpu`; treat software as last-resort fallback. The DX12 list contains apparent duplicates, so do not assume deduplication. |
 | **D10** | Process privilege | **DIRECTION SET — specified** | Elevation is a property of the **host process**, never requested by Juna for a child. No manifest elevation; no in-UI elevation affordance; token APIs forbidden in `src/`. | Specified in §3.8. Enforced by `tests/elevation_boundary.rs`, verified non-vacuous by fault injection. §3.0 byte-exactness becomes a **release gate** for any elevated build, not only a correctness gate. |
-| **D11** | Cross-platform | **DIRECTION SET — seam built** | Cross-platform is a **direction**, not a shipping commitment. `src/session/` is the sole place permitted to name a platform process API; backends are additive. | Seam specified in §3.9 and implemented: `ConptySession` (Windows) + `FakeSession` (portable). **The Unix PTY backend is not implemented** — `spawn` returns `Unsupported` there. No Linux compile has been performed; only the dependency graph is verified. |
+| **D11** | Cross-platform | **DIRECTION SET — seam built** | Cross-platform is a **direction**, not a shipping commitment. Windows is first and must be mature; the seam exists so Linux is not foreclosed. `src/session/` is the sole place permitted to name a platform process API; backends are additive. | Seam specified in §3.9 and implemented: `ConptySession` (Windows) + `FakeSession` (portable). **The Unix PTY backend is not implemented** — `spawn` returns `Unsupported` there. No Linux compile has been performed; only the dependency graph is verified. |
 
 ### 5.1 Shell acceptance targets
 

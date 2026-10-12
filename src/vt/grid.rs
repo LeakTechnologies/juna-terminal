@@ -45,6 +45,13 @@ pub struct Grid {
     pub default_bg: Color,
     pub default_fg: Color,
     pub autowrap: bool,
+    /// Rows pushed off the top of the scroll region since the last drain.
+    ///
+    /// The grid cannot decide whether these belong in scrollback: that depends on
+    /// whether the scroll region is the whole screen and on whether the alternate
+    /// screen is active, and both facts live in `TerminalState`. So the grid
+    /// records them and the engine decides.
+    pending_history: Vec<Vec<Cell>>,
 }
 
 impl Grid {
@@ -67,6 +74,7 @@ impl Grid {
             default_bg: Color::Default,
             default_fg: Color::Default,
             autowrap: true,
+            pending_history: Vec::new(),
         };
         g.reset_tabs();
         g
@@ -271,22 +279,22 @@ impl Grid {
         pushed
     }
 
-    pub fn scroll_up(&mut self, n: u16) -> Vec<Vec<Cell>> {
+    pub fn scroll_up(&mut self, n: u16) {
         let top = self.scroll_top;
         let bottom = self.scroll_bottom;
         self.scroll_region_impl(top, bottom, n, true)
     }
 
-    pub fn scroll_down(&mut self, n: u16) -> Vec<Vec<Cell>> {
+    pub fn scroll_down(&mut self, n: u16) {
         let top = self.scroll_top;
         let bottom = self.scroll_bottom;
         self.scroll_region_impl(top, bottom, n, false)
     }
 
-    fn scroll_region_impl(&mut self, top: u16, bottom: u16, n: u16, up: bool) -> Vec<Vec<Cell>> {
+    fn scroll_region_impl(&mut self, top: u16, bottom: u16, n: u16, up: bool) {
         let height = bottom.saturating_sub(top);
         if height == 0 || n == 0 {
-            return Vec::new();
+            return;
         }
         let n = n.min(height);
         let width = self.cols as usize;
@@ -311,6 +319,10 @@ impl Grid {
             for c in region[len - shift..].iter_mut() {
                 *c = blank.clone();
             }
+            // `drain(..)` moves each row rather than copying it, so recording
+            // history costs no extra allocation beyond the row the grid already
+            // built for the scroll itself.
+            self.pending_history.append(&mut removed);
         } else {
             for i in (0..len - shift).rev() {
                 region[i] = region[i + shift].clone();
@@ -319,7 +331,6 @@ impl Grid {
                 *c = blank.clone();
             }
         }
-        removed
     }
 
     pub fn save_cursor(&mut self) {
@@ -402,6 +413,21 @@ impl Grid {
             self.cursor.row -= 1;
         }
     }
+
+    /// Take every row scrolled off the top since the last call, oldest first.
+    ///
+    /// Scrolling *down* never records history: it pulls blank lines in at the top,
+    /// so nothing left the screen.
+    pub fn take_pending_history(&mut self) -> Vec<Vec<Cell>> {
+        std::mem::take(&mut self.pending_history)
+    }
+
+    /// True when the scroll region covers the whole screen. Lines leaving a
+    /// *restricted* region are still on screen conceptually and must not become
+    /// scrollback (`ARCHITECTURE.md` 2.3).
+    pub fn scrolls_whole_screen(&self) -> bool {
+        self.scroll_top == 0 && self.scroll_bottom + 1 >= self.rows
+    }
 }
 
 #[cfg(test)]
@@ -475,7 +501,8 @@ mod tests {
         for r in 0..3u16 {
             g.cell_mut(r, 0).unwrap().attrs.set(crate::vt::cell::Attrs::BOLD, r == 1);
         }
-        let removed = g.scroll_up(1);
+        g.scroll_up(1);
+        let removed = g.take_pending_history();
         assert_eq!(removed.len(), 1);
         assert!(!removed[0][0].attrs.is(crate::vt::cell::Attrs::BOLD));
         assert!(

@@ -1,4 +1,6 @@
-use super::{fake, Dimensions, ExitStatus, Session, SessionSpec};
+use super::{
+    fake, Dimensions, ExitStatus, Session, SessionParts, SessionSpec,
+};
 use std::io;
 
 fn dims() -> Dimensions {
@@ -152,6 +154,81 @@ fn spawn_reports_a_missing_program_instead_of_panicking() {
         cwd: None,
     };
     assert!(super::spawn(&spec, dims()).is_err());
+}
+
+#[test]
+fn split_halves_move_independently_across_threads() {
+    // The reason `split` exists: a reader thread blocks on `read` while the UI
+    // thread writes. If the halves were not genuinely independent, this deadlocks
+    // or the write never lands.
+    let fake = fake::FakeSession::new(dims());
+    let parts: Box<dyn Session> = Box::new(fake.clone());
+
+    let SessionParts {
+        reader,
+        mut writer,
+        mut control,
+    } = parts.split().expect("split must succeed");
+
+    // The UI thread owns writer + control; the reader thread owns only reader.
+    let handle = std::thread::spawn(move || {
+        let mut reader = reader;
+        let mut buf = [0u8; 64];
+        let n = reader.read(&mut buf).expect("reader thread read");
+        buf[..n].to_vec()
+    });
+
+    writer.write(b"typed by the ui thread").expect("write");
+    fake.feed(b"pumped back to the reader");
+
+    let got = handle.join().expect("reader thread");
+    assert_eq!(got, b"pumped back to the reader");
+
+    assert_eq!(fake.written(), b"typed by the ui thread");
+    assert!(control.try_wait().expect("try_wait").is_none());
+}
+
+#[test]
+fn split_control_plane_still_reports_exit() {
+    let fake = fake::FakeSession::new(dims());
+    let mut parts = Box::new(fake.clone()).split().expect("split");
+    fake.finish(7);
+
+    let status = parts.control.try_wait().expect("try_wait");
+    assert_eq!(status.map(|s| s.code()), Some(7));
+}
+
+#[test]
+fn split_writes_are_all_or_error_on_the_shim_too() {
+    let fake = fake::FakeSession::new(dims());
+    fake.fail_write();
+    let mut parts = Box::new(fake).split().expect("split");
+    assert_eq!(
+        parts.writer.write(b"x").unwrap_err().kind(),
+        io::ErrorKind::BrokenPipe
+    );
+}
+
+#[test]
+fn split_survives_a_reader_that_reads_before_anything_is_written() {
+    // Ordering the harness relies on: the reader thread starts first and blocks,
+    // and the write that follows must still be delivered rather than lost to a
+    // race.
+    let fake = fake::FakeSession::new(dims());
+    let parts = Box::new(fake.clone()).split().expect("split");
+
+    let reader = parts.reader;
+    let mut writer = parts.writer;
+
+    let h = std::thread::spawn(move || {
+        let mut reader = reader;
+        let mut buf = [0u8; 8];
+        reader.read(&mut buf).expect("read")
+    });
+
+    writer.write(b"later").expect("write");
+    assert_eq!(h.join().unwrap(), 0, "nothing was queued for the reader yet");
+    assert_eq!(fake.written(), b"later");
 }
 
 #[cfg(not(windows))]

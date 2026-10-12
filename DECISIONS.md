@@ -942,6 +942,82 @@ that gets either wrong hangs or leaks.
 - **`FakeSession` is compiled into release builds.** It is small, kept public deliberately so a
   future Linux CI can test the wiring, and the linker will drop it if unreferenced.
 
+### 6.20 Slice 1 — headless conformance harness, and the scrollback defect it found
+
+**Built 2026-10-11.** `src/bin/juna_headless.rs` drives a real shell through the whole production
+data path and renders the screen as text:
+
+```
+session ─read─► reader thread ─► StreamBuffer ─► TerminalState ─► screen text
+     └──────────write──────────────────────────────────────────────▲
+```
+
+No window, no GPU, no winit. Every component is production code. This answers *"is the engine
+correct against a real shell?"* before a renderer exists to confuse the answer.
+
+#### Defect found: scrollback was never populated
+
+**Severity: high. Tier 1 requirement, silently non-functional.**
+
+`Scrollback::push` had **no call sites outside its own tests.** `TerminalState` only ever called
+`len`, `get`, `set_cols`, and `clear`. The `Scrollback` type passed all of its unit tests and was
+entirely inert: no matter what a program printed, `scrollback_len()` stayed `0` forever.
+
+Unit tests missed this completely. They tested `Scrollback` as a type and the engine's grid and
+parser separately, and nothing ever asserted the two were connected. The harness found it on its
+first real run: 60 lines into a 24-row window produced `scrollback=0`.
+
+**Fixed.** `Grid` now records rows pushed off the top into `pending_history`; `TerminalState` drains
+it into `Scrollback` after each action, per `ARCHITECTURE.md` 2.3. Eligibility rules:
+
+| Rule | Reason |
+|---|---|
+| primary screen only | §2.3: "alternate screen does not" |
+| full-screen scroll region only | lines leaving a *restricted* region are still on screen; filing them would duplicate them on region reset |
+| rows are **drained** even when ineligible | buffering ineligible rows would leak a line per scroll |
+
+Rows move via `Vec::append`, not `clone`, so recording history costs no extra allocation beyond the
+row the grid already builds for the scroll.
+
+`Grid::scroll_up`/`scroll_down`/`scroll_region_impl` changed from returning `Vec<Vec<Cell>>` to
+returning `()`. Only one call site used the value, and after the change it would always have been
+empty — a return type that silently lies. `take_pending_history()` replaces it.
+
+#### Two harness bugs found in my own test, not the engine
+
+Both were recorded because the instinct to blame the engine was wrong twice:
+
+1. **`\e[5;10H` appeared to land at column 1.** Not an engine bug: PowerShell's `Write-Host` host
+   repositions the cursor before writing. Proven by driving the identical escape through
+   `[Console]::Out.Write`, which bypasses the host — the cursor landed exactly at column 11.
+2. **A truecolor line went missing.** The engine's SGR handling is correct; proven by a new test,
+   `text_after_extended_colour_sgr_is_printed_not_consumed`, and by raw-byte output through
+   `[Console]::Out.Write`. The pre-existing `sgr_truecolor_and_256_color` test asserted only the
+   *colour*, never that following text printed — a gap this exposed.
+
+**Lesson recorded:** when a conformance failure appears, isolate the byte sequence before blaming
+the engine. `Write-Host` applies host-side formatting and repositioning that raw writes do not.
+
+#### Verified results
+
+| Target | Result |
+|---|---|
+| `cmd.exe` | Banner, prompt, echo, `cls`, 400-line bulk output — all correct |
+| **Windows PowerShell 5.1** (primary target, §5.1) | Full ANSI prompt renders, including posh-git powerline segments; truecolor, 256-colour, bold/underline/reverse, box drawing, CJK 漢 字, combining `é`, CUP all correct; OSC title captured |
+| Scrollback | 48 lines retained across a 60-line scroll, first/middle/last all found |
+| Reaping | Child exits cleanly, nothing orphaned |
+
+New coverage: `tests/shell_roundtrip.rs` — **5** tests against real `cmd.exe`, all shell-independent
+(assertions are only on text the test itself chose, never on prompt strings). `split_survives...`
+and three more join the session suite for **19** session tests.
+
+**Total: 154 tests** (141 lib + 4 conpty + 4 elevation + 5 shell round-trip).
+
+#### Still not true
+
+There is **no window and no renderer.** `src/main.rs` still prints a banner. A user cannot type
+into Juna. What exists is a proven data path from a real child process to a correct screen.
+
 ---
 
 ## 7. Blockers

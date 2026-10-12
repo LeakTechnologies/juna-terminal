@@ -178,6 +178,36 @@ fn sgr_truecolor_and_256_color() {
     assert_eq!(s.grid().cell(0, 1).unwrap().bg, Color::Indexed(200));
 }
 
+/// Text after an extended-colour SGR must still print. The colour assertions above
+/// pass even if the engine swallows the following characters as parameters, so the
+/// only way to catch that is to assert the text actually reached the grid.
+#[test]
+fn text_after_extended_colour_sgr_is_printed_not_consumed() {
+    for prefix in [
+        &b"\x1b[38;2;255;100;50m"[..],
+        &b"\x1b[48;2;255;100;50m"[..],
+        &b"\x1b[38;5;208m"[..],
+        &b"\x1b[38;2;1;2;3;4;5;6m"[..],
+        &b"\x1b[1;4;7;38;2;9;9;9m"[..],
+    ] {
+        let mut s = state(20, 2);
+        let mut stream = prefix.to_vec();
+        stream.extend_from_slice(b"XY");
+        s.advance(&stream);
+        let row: String = (0..2)
+            .map(|c| match s.grid().cell(0, c).unwrap().content {
+                CellContent::Char(cp) => char::from_u32(cp).unwrap_or('?').to_string(),
+                _ => String::new(),
+            })
+            .collect();
+        assert_eq!(
+            row, "XY",
+            "text after {:?} was consumed instead of printed",
+            String::from_utf8_lossy(prefix)
+        );
+    }
+}
+
 #[test]
 fn bce_makes_erased_cells_take_the_current_background() {
     let mut s = state(10, 2);
@@ -334,4 +364,3 @@ fn realistic_shell_prompt_sequence() {
     assert!(s.title().contains("PowerShell"));
     assert_eq!(screen_text(&s, 0).trim_end(), "PS C:\\Users\\dev>".trim_end());
 }
-

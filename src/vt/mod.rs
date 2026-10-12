@@ -127,6 +127,25 @@ impl TerminalState {
         self.scrollback.len()
     }
 
+    /// Borrow one scrollback line, oldest first. `None` when `index` is out of range.
+    ///
+    /// Added because scrollback was otherwise write-only from outside the module:
+    /// nothing outside `vt` could read what it had captured, so a scrollback bug
+    /// would be undetectable until a viewport existed to show it.
+    pub fn scrollback_line(&self, index: usize) -> Option<&[Cell]> {
+        self.scrollback.get(index)
+    }
+
+    /// Lines evicted because the byte budget (D10.3) was exceeded. Non-zero is not
+    /// an error, but it means history is incomplete and a test must say so.
+    pub fn scrollback_dropped(&self) -> u64 {
+        self.scrollback.dropped_lines()
+    }
+
+    pub fn scrollback_bytes(&self) -> usize {
+        self.scrollback.bytes()
+    }
+
     pub fn parser_state(&self) -> State {
         self.parser.state()
     }
@@ -149,10 +168,37 @@ impl TerminalState {
         let mut delta = SnapshotDelta::default();
         for a in actions {
             self.apply(a, &mut delta);
+            self.collect_history();
         }
         delta.wrap_pending = self.grid().wrap_pending;
         delta.alternate = self.alternate_active();
         delta
+    }
+
+    /// Move rows the grid scrolled off into scrollback, when they belong there.
+    ///
+    /// `ARCHITECTURE.md` 2.3: the primary screen pushes scrolled-off lines into
+    /// scrollback; the alternate screen does not. Lines leaving a *restricted*
+    /// scroll region are excluded too, because they are still on screen and a
+    /// terminal that filed them into history would duplicate them once the region
+    /// was reset.
+    ///
+    /// **This was absent until the headless harness caught it.** The `Scrollback`
+    /// type worked and passed its own tests, but nothing ever called `push`, so
+    /// scrollback was permanently empty no matter what the program printed.
+    fn collect_history(&mut self) {
+        let region_is_full = self.grid().scrolls_whole_screen();
+        let primary = !self.alternate_active();
+        if !region_is_full || !primary {
+            // Still drain: rows leaving a region are discarded, not buffered
+            // forever. Buffering them would leak a line per scroll.
+            self.grid_mut().take_pending_history();
+            return;
+        }
+        for row in self.grid_mut().take_pending_history() {
+            let wrapped = false;
+            self.scrollback.push(row, wrapped);
+        }
     }
 
     fn apply(&mut self, action: Action, delta: &mut SnapshotDelta) {

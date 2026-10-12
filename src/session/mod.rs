@@ -59,11 +59,48 @@ impl ExitStatus {
     }
 }
 
+/// A `Session` split into independently-owned halves.
+///
+/// This exists because a terminal **cannot** drive a session from one thread.
+/// `read` blocks (and ConPTY never delivers EOF), so a single thread that blocks
+/// reading cannot also answer input: if the child waits for input before
+/// producing output, the loop deadlocks. `ARCHITECTURE.md` 3 already prescribes
+/// the fix — reads happen on their own thread — but that is only possible if
+/// ownership can be divided. `Session::split` is what divides it.
+///
+/// Typical ownership: `reader` onto the reader thread, `writer` and `control`
+/// onto the UI thread. No handle is shared, so no locking is required.
+pub struct SessionParts {
+    pub reader: Box<dyn SessionReader>,
+    pub writer: Box<dyn SessionWriter>,
+    pub control: Box<dyn SessionControl>,
+}
+
+/// The blocking read half. Lives on the reader thread and holds **no** engine state.
+pub trait SessionReader: Send {
+    fn read(&mut self, dst: &mut [u8]) -> io::Result<usize>;
+}
+
+/// The write half. Lives on the UI thread alongside the engine.
+pub trait SessionWriter: Send {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<()>;
+}
+
+/// Resize, exit checking, and termination. Lives on the UI thread.
+///
+/// `kill` is asynchronous on every current backend; see `Session::kill`.
+pub trait SessionControl: Send {
+    fn resize(&mut self, dims: Dimensions) -> io::Result<()>;
+    fn try_wait(&mut self) -> io::Result<Option<ExitStatus>>;
+    fn kill(&mut self) -> io::Result<()>;
+    fn pid(&self) -> Option<u32>;
+}
+
 /// A byte-exact bidirectional pipe to one child process.
 ///
 /// `Session` is object-safe and carries no platform types, so callers hold
 /// `Box<dyn Session>` and never learn which backend they got.
-pub trait Session {
+pub trait Session: Send {
     /// Write **every** byte of `bytes`, or return an error.
     ///
     /// A backend that can only partially write must loop internally rather than
@@ -79,7 +116,8 @@ pub trait Session {
     /// output pipe open after the child exits and does not deliver EOF
     /// (`DECISIONS.md` 6.5). A caller that waits for `Ok(0)` in order to notice
     /// exit therefore hangs forever. **Detect exit with `try_wait`, and run reads
-    /// on their own thread**, which is what `ARCHITECTURE.md` 3 specifies.
+    /// on their own thread**, which is what `ARCHITECTURE.md` 3 specifies and what
+    /// `split` makes possible.
     fn read(&mut self, dst: &mut [u8]) -> io::Result<usize>;
 
     /// Tell the child its window changed. Failure is reported, not swallowed.
@@ -99,6 +137,13 @@ pub trait Session {
 
     /// Child process id, when the backend exposes one.
     fn pid(&self) -> Option<u32>;
+
+    /// Divide ownership so reads and writes can proceed on different threads.
+    ///
+    /// Required rather than optional: a backend that cannot split cannot be
+    /// driven interactively, and a default that quietly returns an error would
+    /// surface as a hang at runtime rather than a compile error here.
+    fn split(self: Box<Self>) -> io::Result<SessionParts>;
 }
 
 /// Spawn a session using this target's backend.

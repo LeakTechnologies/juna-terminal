@@ -1,4 +1,7 @@
-use super::{Dimensions, ExitStatus, Session, SessionSpec};
+use super::{
+    Dimensions, ExitStatus, Session, SessionControl, SessionParts, SessionReader, SessionWriter,
+    SessionSpec,
+};
 use std::io::{self, Read, Write};
 
 /// ConPTY-backed `Session`.
@@ -94,6 +97,76 @@ impl Session for ConptySession {
     /// Terminates the child **and every descendant**, because the backend holds
     /// the session's job object. That is the property `conpty` 0.7 lacked and the
     /// one its replacement was bought for (`DECISIONS.md` 6.5).
+    fn kill(&mut self) -> io::Result<()> {
+        self.child.kill().map_err(io_err)
+    }
+
+    fn pid(&self) -> Option<u32> {
+        Some(self.child.id())
+    }
+
+    /// ConPTY already hands out independently-owned halves, so the split is a
+    /// move rather than a copy. No handle is duplicated and none is shared, which
+    /// is why the reader and UI threads need no locking between them.
+    fn split(self: Box<Self>) -> io::Result<SessionParts> {
+        Ok(SessionParts {
+            reader: Box::new(ConptyReader { half: self.read }),
+            writer: Box::new(ConptyWriter { half: self.write }),
+            control: Box::new(ConptyControl {
+                controller: self.controller,
+                child: self.child,
+            }),
+        })
+    }
+}
+
+struct ConptyReader {
+    half: conpty_oxide::blocking::OwnedReadHalf,
+}
+
+impl SessionReader for ConptyReader {
+    fn read(&mut self, dst: &mut [u8]) -> io::Result<usize> {
+        self.half.read(dst)
+    }
+}
+
+struct ConptyWriter {
+    half: conpty_oxide::blocking::OwnedWriteHalf,
+}
+
+impl SessionWriter for ConptyWriter {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<()> {
+        // All-or-error, per Session::write. `write_all` already guarantees this,
+        // but the loop keeps the intent visible where a short write would corrupt
+        // the byte stream.
+        let mut n = 0;
+        while n < bytes.len() {
+            n += self.half.write(&bytes[n..])?;
+        }
+        self.half.flush()
+    }
+}
+
+struct ConptyControl {
+    controller: conpty_oxide::PtyController,
+    child: conpty_oxide::blocking::Child,
+}
+
+impl SessionControl for ConptyControl {
+    fn resize(&mut self, dims: Dimensions) -> io::Result<()> {
+        self.controller
+            .resize(conpty_size(dims)?)
+            .map_err(io_err)
+    }
+
+    fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        Ok(self
+            .child
+            .try_wait()
+            .map_err(io_err)?
+            .map(|s| ExitStatus::from_code(exit_code(s))))
+    }
+
     fn kill(&mut self) -> io::Result<()> {
         self.child.kill().map_err(io_err)
     }
