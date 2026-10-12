@@ -21,6 +21,16 @@ env_logger = "0.11"
 swash = "0.2"
 fontdb = "0.23"
 
+# Windows-only, and used for exactly one call: AttachConsole, so a GUI-subsystem
+# binary launched from a terminal still writes diagnostics there instead of
+# growing its own console window. Feature is pinned to that one module.
+[target.'cfg(windows)'.dependencies.windows]
+version = "0.61"
+features = [
+    "Win32_Foundation",
+    "Win32_System_Console",
+]
+
 # Windows-only. conpty-oxide carries `compile_error!` under `cfg(not(windows))`,
 # so depending on it unconditionally is a hard compile error on every other
 # target. It is referenced only from src/session/windows.rs, which is itself
@@ -33,15 +43,3 @@ conpty-oxide = "0.1.2"
 
 [target.'cfg(windows)'.dev-dependencies]
 conpty-oxide = "0.1.2"
-
-[target.'cfg(windows)'.dev-dependencies.windows]
-version = "0.61"
-features = [
-    "Win32_Foundation",
-    "Win32_System_Console",
-    "Win32_Storage_FileSystem",
-    "Win32_Security",
-    "Win32_System_Com",
-    "Win32_Graphics_DirectWrite",
-    "Win32_Graphics_Gdi",
-]
