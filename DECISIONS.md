@@ -451,6 +451,23 @@ and should be regenerated rather than hand-edited.
 Anything else under `assets/` is local reference material, excluded by `.gitignore` and never
 committed.
 
+#### Measured legibility (first pass, 2026-10-11)
+
+Display is 2560x1440 at **150% scaling** (`AppliedDPI 144`). A 24-logical-pixel taskbar icon
+therefore rasterises at 36 physical pixels, so Windows selects the **48x48** entry — confirmed by
+visual inspection.
+
+| Entry | Legible |
+|---|---|
+| 48x48 | Yes — acceptable |
+| 16x16 | No — unusable |
+
+The 16px failure is a **composition** problem, not a resolution gap: at 16px the ears, muzzle,
+collar and fur all collapse into one near-black mass. Adding intermediate sizes will not fix it.
+The remedy is a separate face-only crop (eye and muzzle) for the small entries, keeping the full
+logo for 64 and above. Deliberately deferred — the logo is expected to be revised regardless, and
+this pass exists to establish the baseline. Re-measure after any artwork change.
+
 **Decision:** the project is named **Juna**. The Cargo package, binary, and library are `juna`.
 
 Originally established as "Smith" during Phase 0 reconnaissance, then held provisional pending a
