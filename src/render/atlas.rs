@@ -82,6 +82,7 @@ impl Atlas {
                 ..Default::default()
             })
         })?;
+        log::info!("Terminal font: {:?}", db.face(primary)?.families);
         let mut ids = vec![primary];
         for family in FALLBACK {
             if let Some(id) = db.query(&fontdb::Query {

@@ -5,6 +5,7 @@ fn render(
     queue: &wgpu::Queue,
     renderer: &mut Renderer,
     term: &TerminalState,
+    format: wgpu::TextureFormat,
 ) -> Vec<u8> {
     const W: u32 = 512;
     const H: u32 = 256;
@@ -18,7 +19,7 @@ fn render(
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
+        format,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
@@ -102,9 +103,21 @@ fn rows_are_isolated_and_supported_text_is_visible() {
     .unwrap();
     let mut term = TerminalState::new(24, 8);
     term.advance("Juna terminal acceptance\r\nspaces work here\r\ne\u{301} 漢 😀\r\n\x1b[31;44mWide 漢\x1b[0m\r\n\x1b[1mBold\x1b[0;3m Italic\x1b[0;4m Underline\x1b[0m\r\n\x1b[7mInverse\x1b[0m\r\n\x1b[?25l".as_bytes());
-    let first = render(&device, &queue, &mut renderer, &term);
+    let first = render(
+        &device,
+        &queue,
+        &mut renderer,
+        &term,
+        wgpu::TextureFormat::Rgba8Unorm,
+    );
     term.advance(b"\x1b[2;1H\x1b[2Knew input line");
-    let second = render(&device, &queue, &mut renderer, &term);
+    let second = render(
+        &device,
+        &queue,
+        &mut renderer,
+        &term,
+        wgpu::TextureFormat::Rgba8Unorm,
+    );
     assert_eq!(
         &first[..512 * 4 * 36],
         &second[..512 * 4 * 36],
@@ -130,4 +143,32 @@ fn rows_are_isolated_and_supported_text_is_visible() {
         renderer.atlas.get('漢' as u32).is_some(),
         "CJK fallback unavailable"
     );
+}
+
+#[test]
+#[ignore = "real GPU; checks the color conversion used by the window"]
+fn palette_bytes_are_preserved_on_srgb_surfaces() {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter =
+        block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).unwrap();
+    let (device, queue) =
+        block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
+    for format in [
+        wgpu::TextureFormat::Rgba8Unorm,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+    ] {
+        let mut renderer =
+            Renderer::new(&device, &queue, format, 2048, (20., 28.), 8., 20.).unwrap();
+        let mut term = TerminalState::new(24, 8);
+        term.advance(b"\x1b[48;2;40;42;54m \x1b[48;2;189;147;249m \x1b[?25l");
+        let pixels = render(&device, &queue, &mut renderer, &term, format);
+        for (x, want) in [(12, [40u8, 42, 54]), (32, [189u8, 147, 249])] {
+            let i = (12 * 512 + x) * 4;
+            assert_eq!(
+                &pixels[i..i + 3],
+                &want,
+                "{format:?} changed the palette background"
+            );
+        }
+    }
 }

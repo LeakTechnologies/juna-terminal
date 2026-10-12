@@ -1,5 +1,28 @@
 # Juna — Decision Register
 
+## 2026-10-12 contrast and theme follow-up
+
+Approved: minimum text contrast, unchanged stored background colors, selected-font diagnostics,
+and the three-part THEME_DESIGN.md proposal (Mocha default, menu/settings, 20 presets, custom JSON).
+
+Verified rendering defect before repair: a GPU sRGB texture test read `[110,113,127]` for the
+Dracula background `[40,42,54]`. sRGB-coded palette channels were submitted as linear shader
+colors, then encoded again by the surface. The earlier non-sRGB acceptance frame missed this.
+The renderer now converts palette/clear/emoji color channels for the target encoding. Contrast
+changes only presentation foregrounds after reverse-video resolution, targeting 4.5:1 for nominal
+opaque text; dim and antialiasing still affect final pixel coverage. Existing readable colors
+remain unchanged. `JUNA_MIN_CONTRAST=1` disables correction pending the settings UI.
+
+The GPU test now covers sRGB and non-sRGB surfaces and passes for exact palette background bytes.
+IBM Plex Mono selection is logged when info diagnostics are enabled. Theme palette colors can
+still be intentionally pastel, and an application's truecolor prompt background is not replaced
+by selecting another terminal theme.
+
+Dependency justification for the newly approved theme/settings implementation: `serde` provides
+typed, validated serializable theme/settings structures; `serde_json` provides correct versioned
+JSON parsing and escaping. Handwriting JSON parsing is not justified. Both are data infrastructure,
+not terminal semantics, and no async runtime or terminal-engine dependency is introduced.
+
 ## 2026-10-12 approved readiness repairs
 
 The design lead approved all three stages of AUDIT.md and pushing verified changes.

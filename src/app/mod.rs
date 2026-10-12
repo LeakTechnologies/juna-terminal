@@ -179,15 +179,9 @@ impl App {
             }
         }
         renderer.build(&snapshot, w, h);
-        match g.render(
-            wgpu::Color {
-                r: 0.1569,
-                g: 0.1647,
-                b: 0.2118,
-                a: 1.,
-            },
-            |device, queue, pass| renderer.draw(device, queue, w, h, pass),
-        ) {
+        match g.render(renderer.clear_color(), |device, queue, pass| {
+            renderer.draw(device, queue, w, h, pass)
+        }) {
             Ok(true) => {
                 self.dirty = false;
                 self.frames += 1;

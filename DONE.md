@@ -1,5 +1,11 @@
 # Completed iterations
 
+## 2026-10-12 — approved contrast repair
+
+Confirmed and corrected the sRGB surface brightening defect, added a presentation-only minimum
+contrast policy, and logged actual font selection. Both GPU acceptance tests pass; the new
+right-click/theme design has separate recorded approval in THEME_DESIGN.md.
+
 ## 2026-10-12 — approved terminal readiness repairs
 
 Implemented the three-stage AUDIT.md design. Acceptance evidence and remaining human checks are

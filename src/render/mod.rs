@@ -6,6 +6,7 @@
 //! Font and GPU resources carry no mutable terminal state.
 
 mod atlas;
+mod contrast;
 
 pub use atlas::Atlas;
 
@@ -16,7 +17,8 @@ use bytemuck::{Pod, Zeroable};
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
 pub struct Uniforms {
     pub viewport: [f32; 2],
-    pub atlas: [f32; 2],
+    /// x = 1 when the target encodes linear shader output into sRGB; y reserved.
+    pub encoding: [f32; 2],
 }
 
 /// One glyph, one instance. Plain `f32` rather than a packed vertex format: a
@@ -128,6 +130,8 @@ pub struct Renderer {
     pub cell_h: f32,
     pad: f32,
     debug_frame: u32,
+    srgb_target: bool,
+    minimum_contrast: f32,
 }
 
 impl Renderer {
@@ -135,7 +139,7 @@ impl Renderer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
-        atlas_size: u32,
+        _atlas_size: u32,
         cell: (f32, f32),
         pad: f32,
         font_px: f32,
@@ -261,7 +265,7 @@ impl Renderer {
             0,
             bytemuck::bytes_of(&Uniforms {
                 viewport: [1.0, 1.0],
-                atlas: [atlas_size as f32, atlas_size as f32],
+                encoding: [f32::from(format.is_srgb()), 0.],
             }),
         );
 
@@ -280,6 +284,12 @@ impl Renderer {
             cell_h: cell.1,
             pad,
             debug_frame: 0,
+            srgb_target: format.is_srgb(),
+            minimum_contrast: std::env::var("JUNA_MIN_CONTRAST")
+                .ok()
+                .and_then(|s| s.parse::<f32>().ok())
+                .filter(|v| v.is_finite() && (1.0..=21.0).contains(v))
+                .unwrap_or(contrast::DEFAULT_MINIMUM),
         })
     }
 
@@ -303,6 +313,7 @@ impl Renderer {
                 if cell.attrs.is(crate::vt::Attrs::INVERSE) {
                     std::mem::swap(&mut fg, &mut bg);
                 }
+                fg = contrast::foreground(fg, bg, self.minimum_contrast);
                 self.staging.push(Instance::fill(
                     [x, y],
                     [self.cell_w, self.cell_h],
@@ -392,6 +403,13 @@ impl Renderer {
             ));
         }
         self.count = self.staging.len();
+        if self.srgb_target {
+            for instance in &mut self.staging {
+                for channel in &mut instance.color[..3] {
+                    *channel = contrast::linear(*channel);
+                }
+            }
+        }
         let _ = (width, height);
     }
 
@@ -412,7 +430,7 @@ impl Renderer {
             0,
             bytemuck::bytes_of(&Uniforms {
                 viewport: [width as f32, height as f32],
-                atlas: [self.atlas.size_px() as f32, self.atlas.size_px() as f32],
+                encoding: [f32::from(self.srgb_target), 0.],
             }),
         );
 
@@ -465,6 +483,18 @@ impl Renderer {
             self.atlas.blank,
             self.atlas.missing.len() as u32,
         )
+    }
+    pub fn clear_color(&self) -> wgpu::Color {
+        let mut rgb = [40. / 255., 42. / 255., 54. / 255.];
+        if self.srgb_target {
+            rgb = rgb.map(contrast::linear);
+        }
+        wgpu::Color {
+            r: rgb[0] as f64,
+            g: rgb[1] as f64,
+            b: rgb[2] as f64,
+            a: 1.,
+        }
     }
 }
 

@@ -13,6 +13,13 @@ terminal behavior. No Alacritty / WezTerm / Kitty source has been copied or adap
 
 ### Implemented readiness contract — 2026-10-12
 
+Color clarification: palette and explicit RGB values are sRGB-coded bytes. On an sRGB render
+surface they are converted to linear shader/clear values exactly once; non-sRGB surfaces retain
+byte encoding. Glyph color imagery follows the same path. A presentation-only minimum-contrast
+policy adjusts unreadable foregrounds after reverse-video; it never mutates engine colors or
+background values. GPU acceptance covers both surface formats, rather than inferring display
+fidelity from a non-sRGB capture alone.
+
 This section supersedes conflicting older implementation descriptions below. The design lead
 approved AUDIT.md's three-stage repair plan and the practical query/key-mode subset.
 

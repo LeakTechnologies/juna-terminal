@@ -4,7 +4,7 @@
 
 struct Uniforms {
     viewport: vec2<f32>,
-    atlas:   vec2<f32>,
+    encoding: vec2<f32>,
 };
 
 struct Instance {
@@ -72,6 +72,10 @@ fn fs(in: VSOut) -> @location(0) vec4<f32> {
         return in.color;
     }
     let tex = textureSample(atlas_tex, atlas_smp, in.uv);
+    var rgb=tex.rgb;
+    if (u.encoding.x > 0.5) {
+        rgb=select(pow((rgb+vec3<f32>(0.055))/1.055,vec3<f32>(2.4)),rgb/12.92,rgb<=vec3<f32>(0.04045));
+    }
     // Straight (non-premultiplied) alpha, matching ALPHA_BLENDING below.
-    return vec4<f32>(in.color.rgb * tex.rgb, in.color.a * tex.a);
+    return vec4<f32>(in.color.rgb * rgb, in.color.a * tex.a);
 }

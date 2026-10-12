@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-12 — color readability
+
+- Correct double sRGB encoding that brightened the displayed theme, including surface clear colors.
+- Adjust unreadable foregrounds to a minimum nominal 4.5:1 contrast while preserving backgrounds.
+- Log the selected font and cover both sRGB and non-sRGB render surfaces with exact pixel tests.
+
 ## 2026-10-12
 
 - Repair Space, control/modifier keys, composed input, keypad and terminal mouse encoding.
