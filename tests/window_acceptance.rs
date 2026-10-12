@@ -13,7 +13,7 @@ fn real_window_presents_then_closes_on_shell_exit() {
             vec![
                 "/Q",
                 "/C",
-                "echo WINDOW_ACCEPTANCE & ping -n 3 127.0.0.1 >nul & exit /b 0",
+                "title SHELL_TITLE & echo WINDOW_ACCEPTANCE & ping -n 3 127.0.0.1 >nul & exit /b 0",
             ],
         ),
         (
@@ -21,7 +21,7 @@ fn real_window_presents_then_closes_on_shell_exit() {
             vec![
                 "-NoProfile",
                 "-Command",
-                "[Console]::Out.Write('WINDOW_ACCEPTANCE'); Start-Sleep -Seconds 2; exit 7",
+                "[Console]::Title = 'SHELL_TITLE'; [Console]::Out.Write('WINDOW_ACCEPTANCE'); Start-Sleep -Seconds 2; exit 7",
             ],
         ),
     ] {
@@ -55,6 +55,10 @@ fn real_window_presents_then_closes_on_shell_exit() {
         }
         let log = std::fs::read_to_string(folder.join("Juna/juna.log")).unwrap();
         assert!(log.contains("Shell exited:"), "{log}");
+        assert!(
+            log.contains("Window title: \"Juna Terminal\""),
+            "Shell output overwrote the application title: {log}"
+        );
         assert!(!log.contains("frames=0"), "No frame was presented: {log}");
         assert!(
             log.contains(if shell == "powershell.exe" {

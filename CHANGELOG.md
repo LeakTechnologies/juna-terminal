@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-12 — application title
+
+- Keep the window named Juna Terminal when shells send title changes.
+- Add real-window title regression coverage and record installed Fastfetch smoke evidence.
+
+
 ## 2026-10-12 — themes and options
 
 - Default to Catppuccin Mocha and supply 20 sourced starter palettes.

@@ -141,3 +141,12 @@ code/GPU/window checks. Hands-on mouse/clipboard/IME/mixed-DPI review remains th
 ![Right-click options](docs/acceptance/context-menu.png)
 ![Settings preview](docs/acceptance/settings-menu.png)
 ![Custom theme editor preview](docs/acceptance/theme-editor.png)
+
+## Application title and Fastfetch — 2026-10-12
+
+Verified: installed Fastfetch 2.69.0 ran in PowerShell through the production ConPTY/engine
+path with OS/CPU/GPU/Memory output, a success marker, exit 0 and zero dropped bytes.
+The test refreshed its process PATH from registered Windows machine/user values because
+the parent session had an older PATH. Launch Juna from a fresh Windows session if
+fastfetch is not found; Fastfetch is installed on this host, not bundled with Juna.
+Verified title regression: both real shell windows presented frames, retained Juna Terminal after explicit shell title changes, and closed on shell exit. Check/clippy, all 176 standard tests and both explicit real-window tests passed in this iteration.

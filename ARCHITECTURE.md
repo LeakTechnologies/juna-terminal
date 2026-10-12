@@ -889,3 +889,6 @@ a shell prompt does.
   make parser behavior an external dependency.
 - **Pre-allocating a crate per subsystem**: deferred until a real boundary needs it. A
   workspace split is justified by build-graph or ownership pressure, not by diagram symmetry.
+
+The native application window remains titled Juna Terminal. OSC title sequences continue
+to update engine metadata without changing the application window title.

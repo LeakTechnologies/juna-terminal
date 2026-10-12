@@ -133,12 +133,7 @@ impl App {
         let replies = self.terminal.take_responses();
         self.send(&replies);
         self.dirty = true;
-        if let Some(w) = self.window.as_ref() {
-            let title = self.terminal.title();
-            if !title.is_empty() {
-                w.set_title(title);
-            }
-        }
+        // Shell OSC titles remain engine metadata; the application title stays fixed.
     }
     fn fit(&mut self, width: u32, height: u32) {
         self.minimized = width == 0 || height == 0;
@@ -911,6 +906,9 @@ impl ApplicationHandler for App {
             match runtime.tick() {
                 Ok(true) => {
                     self.terminal.finish();
+                    if let Some(window) = self.window.as_ref() {
+                        log::info!("Window title: {:?}", window.title());
+                    }
                     #[cfg(debug_assertions)]
                     if let Ok(marker) = std::env::var("JUNA_ACCEPT_MARKER") {
                         let content: String = self

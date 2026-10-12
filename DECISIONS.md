@@ -1,5 +1,15 @@
 # Juna — Decision Register
 
+## 2026-10-12 — application title and Fastfetch
+
+Keep the native window title fixed as Juna Terminal; preserve OSC titles in engine metadata.
+Fastfetch is an external user-installed program, with no new Juna dependency or startup hook.
+Windows reports Fastfetch 2.69.0 installed. The initial missing-install claim was incorrect:
+the restricted environment and running process PATH differed from registered Windows PATH.
+Verified PowerShell through Juna's ConPTY/engine ran Fastfetch OS/CPU/GPU/Memory output and
+returned the success marker with exit 0 and zero dropped bytes after refreshing the test process PATH.
+
+
 ## 2026-10-12 contrast and theme follow-up
 
 Approved: minimum text contrast, unchanged stored background colors, selected-font diagnostics,

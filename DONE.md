@@ -1,3 +1,10 @@
+## 2026-10-12 — fixed application title
+
+Keep Juna Terminal as the visible window title while preserving shell OSC title metadata.
+Verified: check/clippy, 176 standard tests, and two explicit real-window tests pass; both
+Command Prompt and PowerShell attempted a title change. Fastfetch 2.69.0 ran through
+PowerShell/ConPTY/the engine with success marker, exit 0 and zero dropped bytes.
+
 # Completed iterations
 
 ## 2026-10-12 — approved theme/options system
