@@ -1,8 +1,14 @@
 # Juna — Decision Register
 
-Status: **Phase 0 reconnaissance complete. Engine coding remains unauthorized.**
+Status: **VT engine core, layout engine, and transport layer implemented. First successful release
+build made 2026-10-11. No subsystem is wired to a window, a GPU surface, or a live shell yet.**
 
-Last updated: 2026-10-10, following design-lead ruling on D1–D7.
+Last updated: 2026-10-11 — full gate re-measured, first release build produced, and a stale-artifact
+test failure diagnosed. See §2 and §6.16.
+
+The previous status line, *"Phase 0 reconnaissance complete. Engine coding remains unauthorized"*, is
+**retracted as stale**. It described the state on 2026-10-10. The engine coding it referred to has
+since been authorized and built (§6.10, §6.12, §6.13).
 
 ---
 
@@ -39,20 +45,35 @@ Established by direct inspection and direct execution. Not inferred, not assumed
 
 ## 2. Honest build status
 
+**Re-measured 2026-10-11** under `stable-x86_64-pc-windows-gnu` 1.97.0 (`2d8144b7`). Every row was
+observed in that session. Nothing here is carried forward from an earlier run.
+
 | Check | Result |
 |---|---|
-| `cargo check` | **PASS** |
-| `cargo clippy --all-targets` | **PASS** — zero warnings |
-| `cargo test` | **PASS but vacuous — `0 passed; 0 failed`. Zero tests exist.** |
+| `cargo check --all-targets` | **PASS** — 2 warnings, the known clippy artifact (§6.13) |
+| `cargo clippy --all-targets` | **PASS** — zero warnings beyond that artifact |
+| `cargo test` | **PASS — `125 passed; 0 failed`** (121 unit + 4 ConPTY acceptance) |
+| `cargo build --release` | **PASS** — `target\release\juna.exe`, 1,176,231 bytes |
+| Binary executes | **PASS** — prints, exit code 0 |
 | `alacritty_terminal` / `vte` in `Cargo.lock` | **ABSENT — confirmed** |
 | Direct `tokio` / `serde` / `serde_json` / `anyhow` deps | **REMOVED — confirmed** |
-| Window opened | **NO** |
-| GPU adapter enumerated | **NO** |
-| ConPTY child spawned | **NO** |
-| Interactive shell round-trip | **NO** |
-| Process cleanup verified | **NO** |
+| GPU adapters enumerated | **YES** — five adapters, §6.4 |
+| ConPTY child spawned and process tree reaped | **YES** — `process_tree_is_reaped_on_teardown` |
+| Sustained output byte-exact | **YES** — `sustained_output_arrives_byte_exact` |
+| Argument vector byte-exact | **YES** — `quoting_preserves_the_argument_vector_exactly` |
+| Reader unblocks on shutdown without EOF | **YES** — `shutdown_unblocks_the_reader_within_the_bound` |
+| **Window opened** | **NO** |
+| **GPU device and surface created** | **NO** |
+| **Interactive shell round-trip** | **NO** |
 
-A green build is build evidence, not proof of a functioning terminal. Zero tests exist.
+### Stale rows in the previous revision of this table — corrected
+
+This table previously asserted `cargo test` was *"PASS but vacuous — `0 passed; 0 failed`. Zero tests
+exist"*, and that GPU enumeration, ConPTY spawn, and process cleanup were all `NO`. Those rows were
+true on 2026-10-10 and are false now. Correcting them here rather than rewriting history silently.
+
+**The build is evidence, not a functioning terminal.** `src/main.rs` is three lines: a `println!` and
+nothing else. There is no window, no surface, no live shell. A green gate does not narrow that gap.
 
 ---
 
@@ -698,6 +719,59 @@ record that choice.
 `conpty` 0.7 should be removed from `[dependencies]` once this is approved. It is currently
 retained only so the spike can keep comparing against it.
 
+### 6.16 A directory rename silently broke three acceptance tests
+
+**Date:** 2026-10-11. **Toolchain:** `stable-x86_64-pc-windows-gnu`. **Impact:** three of four
+ConPTY acceptance tests failed for a reason unrelated to ConPTY.
+
+#### Symptom
+
+`cargo test` reported `1 passed; 3 failed`. The three failures were
+`quoting_preserves_the_argument_vector_exactly`, `sustained_output_arrives_byte_exact`, and
+`process_tree_is_reaped_on_teardown`. All three panicked identically, at
+`tests/conpty_acceptance.rs:21`, with:
+
+```
+Spawn { program: "E:\Development\smith-terminal\target\debug\argv_probe.exe",
+        source: Os { code: 3, kind: NotFound } }
+```
+
+`shutdown_unblocks_the_reader_within_the_bound` passed, because it spawns `cmd.exe` from `PATH`
+rather than the probe.
+
+#### Diagnosis
+
+Not a ConPTY defect and not a code defect. `tests/conpty_acceptance.rs:5` uses
+`env!("CARGO_BIN_EXE_argv_probe")`, which Cargo expands **at compile time** to an absolute path
+under the package root. The working directory was renamed from `smith-terminal` to `juna-terminal`
+after that test binary was last built, and Cargo's fingerprint did not invalidate — the constant was
+frozen at the pre-rename path, which no longer exists.
+
+Confirmed directly: `Test-Path target\debug\argv_probe.exe` → `True`;
+`Test-Path E:\Development\smith-terminal` → `False`.
+
+Touching the test file forced a rebuild. All four tests then passed, unmodified.
+
+#### Why this is recorded rather than dismissed
+
+The failure presented as *"ConPTY acceptance is broken"*, and the panic text names `conpty-oxide` and
+a spawn error — exactly the shape of a D5 regression that would trigger §12's pinned-dependency
+review. It was not one. Three of the four tests guarding the `conpty-oxide` decision were failing for
+an unrelated reason, and the one that failed *not* to fail was the one that does not touch the probe.
+
+**Standing rule adopted:** a failing acceptance test in a pinned-dependency suite must have its panic
+text checked for the *filesystem path it names* before the dependency is suspected. A
+`NotFound`/`ERROR_FILE_NOT_FOUND` on a path under the workspace is an environment or stale-artifact
+fault, not a library fault.
+
+**Not fixed, deliberately.** The source is correct; `env!("CARGO_BIN_EXE_...")` is the right idiom
+and is robust across renames once rebuilt. Adding path-repair code to work around a stale build
+artifact would be a defect. The remedy is a rebuild, not a patch.
+
+**Related artifact.** `target\release\smith.exe` remains from before the rename. It is inside the
+gitignored `target/` directory and has no effect on the build; noted so it is not mistaken for a
+current output.
+
 ---
 
 ## 7. Blockers
@@ -706,13 +780,32 @@ retained only so the spike can keep comparing against it.
 |---|---|---|---|
 | **B1** | **No git repository.** Not yet authorized. | Global CI rule requires commit-per-iteration; nothing can be committed. | Explicit authorization to `git init`. |
 | **B2** | ~~No project `AGENTS.md`~~ | — | **RESOLVED** — `AGENTS.md` drafted this session. |
-| **B3** | **MSVC toolchain cannot link.** `link.exe` absent; VS 2022 BuildTools present but without the C++ workload; no Windows SDK. | **D1 is blocked.** Pinning MSVC now would break every build immediately. | **Requires elevation.** This session is **not** running as Administrator, so the install could not be attempted. See §7.1 for the exact command. |
+| **B3** | ~~MSVC toolchain cannot link.~~ | **DEFERRED by design-lead ruling, 2026-10-11.** Elevation was made available and deliberately not spent on this. | The GNU toolchain links, builds, and passes all 125 tests. MSVC is not required by any current acceptance criterion. See §7.1 for the exact command should the ruling be revisited. |
 | **B4** | ~~`pwsh` not installed~~ | — | **RESOLVED by lead ruling.** PowerShell 5.1 is the primary acceptance target; `cmd.exe` secondary; PowerShell 7 optional later. `pwsh` remains absent from this machine and is **not** a Phase 1 blocker. |
 | **B5** | ~~ConPTY spike incomplete~~ | — | **RESOLVED.** Check 1 (quoting) and check 5 (host console mode) both run and pass for `conpty-oxide`. Check 6's MSVC leg remains blocked by B3. See §6.2. |
 | **B6** | ~~wgpu feature flags not enumerated~~ | — | **RESOLVED.** Feature names, defaults, and dependency consequences recorded in §6.1; configuration applied and verified building. |
 | **B7** | ~~GPU adapter enumeration~~ | — | **PARTIALLY CLOSED.** Five adapters enumerated (`DECISIONS.md` §6.4). Parsec virtual adapter **not** exposed — recorded as a negative result, not as absence. Surface creation and presentation still untested. |
 
 ### 7.1 B3 detail — the fix is a modify, not an install
+
+**Ruling, 2026-10-11 (design lead).** An elevated session was made available specifically so this
+could be closed. **The lead's decision was to leave MSVC alone and continue on GNU.** B3 is
+therefore deferred, not blocked.
+
+**Why this is a sound outcome, stated plainly rather than assumed.** The GNU toolchain was
+re-verified in an elevated session and produces `cargo check`, `cargo clippy --all-targets`,
+`cargo test` (125 passing), and `cargo build --release`, plus a binary that runs. D1's stated
+concern — *"pinning MSVC now would break every build immediately"* — does not arise, because nothing
+is being pinned. `rust-toolchain.toml` **is not created.** The project is fully buildable and fully
+tested in its current state.
+
+**D1 remains OPEN.** The toolchain decision is undecided, not made. If a future requirement genuinely
+needs MSVC — for example C-compatible FFI, or an acceptance target on a machine without the GNU
+runtime — this section becomes live again and the command below applies unchanged.
+
+**Re-verified 2026-10-11:** `link.exe` still absent, MSVC toolchain still fails to link, VS 2022
+BuildTools still present but without the C++ workload, Windows SDK still absent. The machine state
+described below is unchanged.
 
 **Correction.** An earlier revision of this section recorded a `winget install` command. That was
 wrong: it would reinstall or repair, not add a workload to an installation that already exists.
