@@ -436,7 +436,20 @@ output. `unicode_width_is_exhaustive()` returns `false` and a test asserts it st
 the gap is visible rather than forgotten. D3 (pinned Unicode version and table source) must
 close before release.
 
-### 6.15 Project renamed to Juna Terminal
+### 6.15 Icon asset provenance
+
+`assets/juna-logo.png` is the **sole approved source** for Juna artwork.
+`scripts/build-icon.ps1` resizes it into `assets/juna.ico` at seven sizes
+(16/24/32/48/64/128/256), all 32bpp ARGB.
+
+The source already carries a fully transparent background (alpha 0 at every corner), so no
+background stripping is performed and the master is never modified.
+
+Icon generation is reproducible from that single source. The `.ico` is a build artifact of it
+and should be regenerated rather than hand-edited.
+
+Anything else under `assets/` is local reference material, excluded by `.gitignore` and never
+committed.
 
 **Decision:** the project is named **Juna**. The Cargo package, binary, and library are `juna`.
 
