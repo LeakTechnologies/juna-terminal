@@ -74,14 +74,19 @@ pub struct Atlas {
 }
 impl Atlas {
     pub fn new(device: &wgpu::Device, px: f32) -> Option<Self> {
+        Self::new_with_family(device, px, "IBM Plex Mono")
+    }
+    pub fn new_with_family(device: &wgpu::Device, px: f32, preferred: &str) -> Option<Self> {
         let mut db = fontdb::Database::new();
         db.load_system_fonts();
-        let primary = PRIMARY.iter().find_map(|family| {
-            db.query(&fontdb::Query {
-                families: &[fontdb::Family::Name(family)],
-                ..Default::default()
-            })
-        })?;
+        let primary = std::iter::once(preferred)
+            .chain(PRIMARY.iter().copied())
+            .find_map(|family| {
+                db.query(&fontdb::Query {
+                    families: &[fontdb::Family::Name(family)],
+                    ..Default::default()
+                })
+            })?;
         log::info!("Terminal font: {:?}", db.face(primary)?.families);
         let mut ids = vec![primary];
         for family in FALLBACK {

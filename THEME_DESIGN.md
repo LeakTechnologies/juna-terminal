@@ -81,7 +81,8 @@ SettingsV1 { schema_version, active_theme_id, font_family, font_size, minimum_co
 
 The portable theme contains colors, not a running session, fonts, executable commands, or a
 VS Code editor grammar. A future VS Code export maps foreground/background/cursor/selection
-and ANSI black through bright white to `terminal.*` color customizations; it does not promise
+and ANSI black through bright white to `terminal.*` color customizations documented in
+[VS Code's terminal appearance reference](https://code.visualstudio.com/docs/terminal/appearance#_terminal-colors); it does not promise
 an entire editor/syntax theme. Unsupported fields are reported by the exporter rather than lost
 from the saved Juna source theme.
 

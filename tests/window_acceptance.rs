@@ -66,3 +66,36 @@ fn real_window_presents_then_closes_on_shell_exit() {
         );
     }
 }
+
+#[test]
+#[ignore = "interactive Windows desktop; sustained output with an open options overlay"]
+fn options_overlays_keep_shell_output_flowing() {
+    use std::{
+        process::{Command, Stdio},
+        time::{Duration, Instant},
+    };
+    for panel in ["themes", "settings"] {
+        let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("target/acceptance")
+            .join(format!("menu-{panel}"));
+        std::fs::create_dir_all(&folder).unwrap();
+        let mut child=Command::new(env!("CARGO_BIN_EXE_juna")).args(["--shell","cmd.exe","--","/Q","/C","(for /L %i in (1,1,300) do @echo ROW%i) & echo MENU_OUTPUT_END & ping -n 3 127.0.0.1 >nul"]).env("LOCALAPPDATA",&folder).env("RUST_LOG","info").env("JUNA_STARTUP_PANEL",panel).env("JUNA_ACCEPT_MARKER","MENU_OUTPUT_END").stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                assert!(status.success());
+                break;
+            }
+            if Instant::now() > deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("menu shell did not exit");
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        let log = std::fs::read_to_string(folder.join("Juna/juna.log")).unwrap();
+        assert!(log.contains("Options panel:"), "{log}");
+        assert!(log.contains("Acceptance marker present=true"), "{log}");
+        assert!(!log.contains("frames=0"), "{log}");
+    }
+}

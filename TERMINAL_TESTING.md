@@ -16,14 +16,36 @@ are encoded explicitly. The shell interprets `exit`; the single terminal window 
 the actual child exits and its transport threads finish. Nested programs own their own input.
 
 Drag left to select, Ctrl+Shift+C to copy, Ctrl+Shift+V or Shift+Insert to paste.
-Right-click pastes. Wheel or Shift+PageUp/PageDown navigates history. Typing returns to live output.
+Right-click opens Copy/Paste/Select All/Themes/Settings. Wheel or Shift+PageUp/PageDown navigates
+history. Typing returns to live output.
 Hold Shift to use local mouse selection/scrolling while a TUI has enabled mouse reporting.
+Shift+right-click opens Juna's menu when a TUI owns mouse input.
 Multiline unbracketed paste sends line endings to the shell, so use clipboard content you intend
 to execute. Bracketed-paste-aware programs receive the matching start/end delimiters.
 
 Diagnostics are written to `%LOCALAPPDATA%\Juna\juna.log`; startup/session failure also displays
 a Windows error dialog. `RUST_LOG=info` includes adapter, presentation and lifecycle evidence.
 The latest launch replaces that log; copy it before starting another diagnostic run.
+
+## Themes and settings
+
+The default is **Catppuccin Mocha**, with **IBM Plex Mono** as the preferred font. The 20 choices
+and their source links are listed in THEME_DESIGN.md. Theme selection changes the display live;
+the shell is not restarted. Truecolor backgrounds chosen by a prompt are preserved, while the
+contrast setting makes unreadable nominal foregrounds darker or lighter as needed.
+
+Open Themes from right-click, type to search, navigate with arrows, and choose with Enter/click.
+Hovering previews a theme; Escape restores the saved selection. Open Settings to edit font family,
+font size (8–40), or minimum contrast (1–21). Click a field, type or Ctrl+V a replacement, and press
+Enter to save. Missing font families fall back to an installed monospace face and log the actual
+selection. A contrast value of 1 disables foreground adjustment.
+
+Create a custom theme from the selector or edit the current theme from Settings. Built-ins are
+duplicated; existing custom themes can be edited in place. Click a name/color field, enter a name
+or `#RRGGBB`, and use Ctrl+S/Save. Invalid values are reported and are not saved. Escape/Cancel
+discards the draft and restores the saved palette. Settings are in `%LOCALAPPDATA%\Juna\settings.json`;
+custom palettes are in `%LOCALAPPDATA%\Juna\themes`. Files use versioned JSON with portable palette
+fields; VS Code export is not implemented yet.
 
 ## Automated acceptance commands
 
@@ -96,3 +118,26 @@ Vulkan result. No benchmark or universal compatibility claim is made.
 ## Recorded render sample
 
 ![GPU acceptance frame](docs/acceptance/render.png)
+
+## Theme follow-up evidence — 2026-10-12
+
+The GPU tests now verify palette bytes on both sRGB and non-sRGB surfaces; the previous test
+covered only the latter and missed double encoding. Before the correction, Dracula's `[40,42,54]`
+background rendered as `[110,113,127]` on the sRGB path. Both target formats now preserve it.
+Twenty theme backgrounds and actual menu-overlay drawing were captured and checked. The real
+window received an end marker after 300 output rows with theme/settings panels open, then closed
+when the shell exited. An initially incorrect test command delayed every loop iteration; explicit
+grouping fixed that fixture, and both menu cases passed.
+
+Final theme iteration: 176 standard tests pass, plus three explicitly run GPU tests and two
+explicitly run window tests. Check/clippy are warning-free, and the release executable was rebuilt.
+
+Custom storage tests cover round trips, replacement saves, corrupt/unsupported/duplicate records,
+read-only settings preservation, and cancellation without changing engine cells. These are automated
+code/GPU/window checks. Hands-on mouse/clipboard/IME/mixed-DPI review remains the human checklist.
+
+![Catppuccin Mocha and readable prompt box](docs/acceptance/catppuccin-mocha.png)
+![Theme selector preview](docs/acceptance/theme-menu.png)
+![Right-click options](docs/acceptance/context-menu.png)
+![Settings preview](docs/acceptance/settings-menu.png)
+![Custom theme editor preview](docs/acceptance/theme-editor.png)

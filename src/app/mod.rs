@@ -2,6 +2,7 @@
 mod clipboard;
 mod input;
 mod runtime;
+pub mod ui;
 use crate::{
     gpu::{FrameSkip, Gpu},
     session::{Dimensions, SessionSpec},
@@ -47,9 +48,20 @@ pub struct App {
     last_report: Instant,
     failure: Option<String>,
     last_sync: Instant,
+    settings: crate::settings::Settings,
+    themes: Vec<crate::theme::Theme>,
+    store: crate::settings::Store,
+    ui: Option<ui::Ui>,
+    pointer_px: [f32; 2],
+    ui_mouse_latch: Vec<MouseButton>,
 }
 impl App {
     pub fn new(cols: u16, rows: u16) -> Self {
+        let store = crate::settings::Store::new(crate::settings::application_directory());
+        let (settings, themes, errors) = store.load();
+        for error in errors {
+            log::warn!("Settings/theme: {error}");
+        }
         Self {
             window: None,
             gpu: None,
@@ -73,6 +85,12 @@ impl App {
             last_report: Instant::now(),
             failure: None,
             last_sync: Instant::now(),
+            settings,
+            themes,
+            store,
+            ui: None,
+            pointer_px: [0., 0.],
+            ui_mouse_latch: Vec::new(),
         }
     }
     fn fail(&mut self, message: String) {
@@ -155,6 +173,8 @@ impl App {
         if self.minimized {
             return;
         }
+        let selection_theme = self.active_theme();
+        let selection_top = self.history_start();
         let Some(g) = self.gpu.as_ref() else { return };
         let Some(renderer) = self.renderer.as_mut() else {
             return;
@@ -166,19 +186,37 @@ impl App {
         }
         if let Some((a, b)) = self.selection {
             let (a, b) = if a <= b { (a, b) } else { (b, a) };
-            let top = self.terminal.scrollback_len().saturating_sub(self.offset);
+            let top = selection_top;
             for row in 0..snapshot.rows {
                 for col in 0..snapshot.cols {
                     let point = (top + row as usize, col);
                     if point >= a && point <= b {
-                        snapshot.cells[row as usize * snapshot.cols as usize + col as usize]
-                            .attrs
-                            .set(crate::vt::Attrs::INVERSE, true);
+                        let cell = &mut snapshot.cells
+                            [row as usize * snapshot.cols as usize + col as usize];
+                        let theme = &selection_theme;
+                        let to_color = |value: &str| {
+                            let c = crate::theme::rgb(value).unwrap();
+                            crate::vt::Color::Rgb(
+                                (c[0] * 255.).round() as u8,
+                                (c[1] * 255.).round() as u8,
+                                (c[2] * 255.).round() as u8,
+                            )
+                        };
+                        cell.fg = to_color(&theme.colors.selection_foreground);
+                        cell.bg = to_color(&theme.colors.selection_background);
+                        cell.attrs.set(crate::vt::Attrs::INVERSE, false);
                     }
                 }
             }
         }
         renderer.build(&snapshot, w, h);
+        if let Some(ui) = self.ui.as_mut() {
+            let rows = ui.rows(&self.themes, &self.settings);
+            let (_, visible, _) = ui.geometry(w as f32, h as f32, self.scale, rows.len());
+            ui.ensure_visible(visible, rows.len());
+            let scene = ui.scene(&rows, w as f32, h as f32, self.scale);
+            renderer.overlay(&scene);
+        }
         match g.render(renderer.clear_color(), |device, queue, pass| {
             renderer.draw(device, queue, w, h, pass)
         }) {
@@ -254,6 +292,345 @@ impl App {
             Err(e) => log::warn!("Paste: {e}"),
         }
     }
+    fn active_theme(&self) -> crate::theme::Theme {
+        self.themes
+            .iter()
+            .find(|t| t.id == self.settings.active_theme_id)
+            .cloned()
+            .unwrap_or_else(crate::theme::default_theme)
+    }
+    fn history_start(&self) -> usize {
+        if self.terminal.alternate_active() {
+            0
+        } else {
+            self.terminal.scrollback_len().saturating_sub(self.offset)
+        }
+    }
+    fn rebuild_renderer(&mut self) {
+        let Some(window) = self.window.as_ref() else {
+            return;
+        };
+        self.scale = window.scale_factor() as f32 * self.settings.font_size / FONT_PX;
+        if let Some(gpu) = self.gpu.as_ref() {
+            self.renderer = crate::render::Renderer::new_with_family(
+                &gpu.device,
+                &gpu.queue,
+                gpu.format,
+                2048,
+                (CELL_W * self.scale, CELL_H * self.scale),
+                PAD * self.scale,
+                FONT_PX * self.scale,
+                &self.settings.font_family,
+            );
+        }
+        let theme = self.active_theme();
+        if let Some(r) = self.renderer.as_mut() {
+            let _ = r.apply_theme(&theme, self.settings.minimum_contrast);
+        }
+        let size = window.inner_size();
+        self.fit(size.width, size.height);
+        self.dirty = true;
+    }
+    fn open_ui(&mut self, kind: ui::Kind) {
+        log::info!("Options panel: {kind:?}");
+        let anchor = if kind == ui::Kind::Context {
+            self.pointer_px
+        } else {
+            [16. * self.scale, 16. * self.scale]
+        };
+        let mut ui = ui::Ui::new(kind, anchor);
+        if kind == ui::Kind::Themes {
+            ui.focus = self
+                .themes
+                .iter()
+                .position(|t| t.id == self.settings.active_theme_id)
+                .unwrap_or(0)
+                + 1;
+        }
+        let rows = ui.rows(&self.themes, &self.settings);
+        ui.focus_row(ui.focus, &rows);
+        self.ui = Some(ui);
+        self.selecting = false;
+        self.dirty = true;
+    }
+    fn preview_ui(&mut self) {
+        let mut preview = None;
+        if let Some(ui) = self.ui.as_mut() {
+            let rows = ui.rows(&self.themes, &self.settings);
+            if ui.kind == ui::Kind::Themes {
+                if let Some(ui::Action::Pick(id)) = rows.get(ui.focus).map(|r| &r.action) {
+                    preview = self.themes.iter().find(|t| &t.id == id).cloned();
+                }
+            }
+            if ui.kind == ui::Kind::Editor {
+                if let Some(row) = rows.get(ui.focus) {
+                    let draft = ui.draft.as_mut().unwrap();
+                    let result = match row.action {
+                        ui::Action::Name => {
+                            draft.name = ui.buffer.clone();
+                            Ok(())
+                        }
+                        ui::Action::Color(i) => draft.set_color(i, ui.buffer.clone()),
+                        _ => Ok(()),
+                    };
+                    ui.message = result.err().unwrap_or_default();
+                    if draft.validate().is_ok() {
+                        preview = Some(draft.clone());
+                    }
+                }
+            }
+        }
+        if let (Some(theme), Some(renderer)) = (preview, self.renderer.as_mut()) {
+            let _ = renderer.apply_theme(&theme, self.settings.minimum_contrast);
+        }
+        self.dirty = true;
+    }
+    fn close_ui(&mut self) {
+        self.ui = None;
+        let theme = self.active_theme();
+        if let Some(r) = self.renderer.as_mut() {
+            let _ = r.apply_theme(&theme, self.settings.minimum_contrast);
+        }
+        self.dirty = true;
+    }
+    fn ui_action(&mut self, action: ui::Action) {
+        use ui::{Action, Kind};
+        let result = (|| -> Result<(), String> {
+            match action {
+                Action::Copy => {
+                    let text = self.selection_text();
+                    if !text.is_empty() {
+                        if let Some(window) = self.window.as_ref() {
+                            clipboard::write(window, &text)?;
+                        }
+                    }
+                    self.close_ui();
+                }
+                Action::Paste => {
+                    self.close_ui();
+                    self.paste();
+                }
+                Action::SelectAll => {
+                    let history = if self.terminal.alternate_active() {
+                        0
+                    } else {
+                        self.terminal.scrollback_len()
+                    };
+                    self.selection =
+                        Some(((0, 0), (history + self.rows as usize - 1, self.cols - 1)));
+                    self.close_ui();
+                }
+                Action::Themes => self.open_ui(Kind::Themes),
+                Action::Settings => self.open_ui(Kind::Settings),
+                Action::Cancel => self.close_ui(),
+                Action::Pick(id) => {
+                    let mut settings = self.settings.clone();
+                    settings.active_theme_id = id;
+                    self.store.save_settings(&settings)?;
+                    self.settings = settings;
+                    self.close_ui();
+                }
+                Action::Duplicate | Action::Edit => {
+                    let mut theme = self.active_theme();
+                    if action == Action::Duplicate || !theme.id.starts_with("custom-") {
+                        theme.id = crate::settings::new_id();
+                        theme.name = format!("My {}", theme.name);
+                        theme.source = None;
+                    }
+                    let mut ui = ui::Ui::new(Kind::Editor, [16. * self.scale, 16. * self.scale]);
+                    ui.draft = Some(theme);
+                    let rows = ui.rows(&self.themes, &self.settings);
+                    ui.focus_row(0, &rows);
+                    self.ui = Some(ui);
+                }
+                Action::Save => {
+                    let ui = self.ui.as_ref().ok_or("No theme editor")?;
+                    if !ui.message.is_empty() {
+                        return Err(ui.message.clone());
+                    }
+                    let theme = ui.draft.as_ref().ok_or("No theme draft")?.clone();
+                    self.store.save_theme(&theme)?;
+                    let mut settings = self.settings.clone();
+                    settings.active_theme_id = theme.id.clone();
+                    self.store.save_settings(&settings)?;
+                    if let Some(existing) = self.themes.iter_mut().find(|t| t.id == theme.id) {
+                        *existing = theme;
+                    } else {
+                        self.themes.push(theme);
+                    }
+                    self.settings = settings;
+                    self.close_ui();
+                }
+                Action::Setting(i) => {
+                    let value = self
+                        .ui
+                        .as_ref()
+                        .ok_or("No settings form")?
+                        .buffer
+                        .trim()
+                        .to_owned();
+                    let mut settings = self.settings.clone();
+                    match i {
+                        0 => settings.font_family = value,
+                        1 => {
+                            settings.font_size =
+                                value.parse().map_err(|_| "Font size must be 8–40")?
+                        }
+                        2 => {
+                            settings.minimum_contrast =
+                                value.parse().map_err(|_| "Contrast must be 1–21")?
+                        }
+                        _ => return Err("Unknown setting".into()),
+                    };
+                    self.store.save_settings(&settings)?;
+                    self.settings = settings;
+                    self.rebuild_renderer();
+                }
+                Action::Search | Action::Color(_) | Action::Name => {}
+            }
+            Ok(())
+        })();
+        if let Err(error) = result {
+            log::warn!("Options: {error}");
+            if let Some(ui) = self.ui.as_mut() {
+                ui.message = error;
+            }
+        }
+        self.dirty = true;
+    }
+    fn handle_ui(&mut self, event: &WindowEvent) -> bool {
+        if let WindowEvent::CursorMoved { position, .. } = event {
+            self.pointer_px = [position.x as f32, position.y as f32];
+        }
+        if let WindowEvent::MouseInput {
+            state: ElementState::Released,
+            button,
+            ..
+        } = event
+        {
+            if self.ui_mouse_latch.contains(button) {
+                self.ui_mouse_latch.retain(|b| b != button);
+                return true;
+            }
+        }
+        let Some(mut ui) = self.ui.take() else {
+            return false;
+        };
+        let rows = ui.rows(&self.themes, &self.settings);
+        let size = self
+            .window
+            .as_ref()
+            .map(|w| w.inner_size())
+            .unwrap_or(winit::dpi::PhysicalSize::new(1024, 768));
+        let width = size.width as f32;
+        let height = size.height as f32;
+        let mut action = None;
+        let consumed = match event {
+            WindowEvent::CursorMoved { .. } => {
+                if let Some(index) = ui.hit(self.pointer_px, width, height, self.scale, rows.len())
+                {
+                    if index != ui.focus {
+                        ui.focus_row(index, &rows);
+                    }
+                }
+                true
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                if *state == ElementState::Pressed {
+                    if !self.ui_mouse_latch.contains(button) {
+                        self.ui_mouse_latch.push(*button);
+                    }
+                    if *button == MouseButton::Left {
+                        if let Some(index) =
+                            ui.hit(self.pointer_px, width, height, self.scale, rows.len())
+                        {
+                            ui.focus_row(index, &rows);
+                            if rows[index].value.is_none() {
+                                action = Some(rows[index].action.clone());
+                            }
+                        } else {
+                            let (r, _, _) = ui.geometry(width, height, self.scale, rows.len());
+                            if self.pointer_px[0] < r[0]
+                                || self.pointer_px[0] > r[0] + r[2]
+                                || self.pointer_px[1] < r[1]
+                                || self.pointer_px[1] > r[1] + r[3]
+                            {
+                                action = Some(ui::Action::Cancel);
+                            }
+                        }
+                    } else if *button == MouseButton::Right {
+                        action = Some(ui::Action::Cancel);
+                    }
+                }
+                true
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if event.state == ElementState::Pressed {
+                    if self.modifiers.control_key()
+                        && matches!(&event.logical_key,Key::Character(s)if s.eq_ignore_ascii_case("v"))
+                    {
+                        if ui.kind == ui::Kind::Themes
+                            || rows.get(ui.focus).is_some_and(|r| r.value.is_some())
+                        {
+                            match clipboard::read() {
+                                Ok(text) => ui.paste_text(&text),
+                                Err(e) => ui.message = e,
+                            }
+                        }
+                    } else {
+                        action = ui.key(
+                            &event.logical_key,
+                            event.text.as_deref(),
+                            self.modifiers.control_key(),
+                            &rows,
+                        );
+                    }
+                }
+                true
+            }
+            WindowEvent::Ime(Ime::Commit(text)) => {
+                self.ime = false;
+                ui.key(
+                    &Key::Character(text.clone().into()),
+                    Some(text),
+                    false,
+                    &rows,
+                );
+                true
+            }
+            WindowEvent::Ime(Ime::Preedit(text, _)) => {
+                self.ime = !text.is_empty();
+                true
+            }
+            WindowEvent::Ime(Ime::Disabled) => {
+                self.ime = false;
+                true
+            }
+            WindowEvent::Ime(_) => true,
+            WindowEvent::MouseWheel { delta, .. } => {
+                let up = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => *y > 0.,
+                    MouseScrollDelta::PixelDelta(p) => p.y > 0.,
+                };
+                let focus = if up {
+                    ui.focus.saturating_sub(3)
+                } else {
+                    (ui.focus + 3).min(rows.len().saturating_sub(1))
+                };
+                ui.focus_row(focus, &rows);
+                true
+            }
+            _ => false,
+        };
+        self.ui = Some(ui);
+        if consumed {
+            self.preview_ui();
+            if let Some(action) = action {
+                self.ui_action(action);
+            }
+        }
+        consumed
+    }
 }
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
@@ -274,7 +651,7 @@ impl ApplicationHandler for App {
                     .map_err(|e| e.to_string())?,
             );
             window.set_ime_allowed(true);
-            self.scale = window.scale_factor() as f32;
+            self.scale = window.scale_factor() as f32 * self.settings.font_size / FONT_PX;
             let size = window.inner_size();
             let display = event_loop.owned_display_handle();
             let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle(
@@ -290,7 +667,7 @@ impl ApplicationHandler for App {
             .map_err(|e| e.to_string())?;
             log::info!("GPU: {:?}", gpu.choice);
             self.renderer = Some(
-                crate::render::Renderer::new(
+                crate::render::Renderer::new_with_family(
                     &gpu.device,
                     &gpu.queue,
                     gpu.format,
@@ -298,11 +675,16 @@ impl ApplicationHandler for App {
                     (CELL_W * self.scale, CELL_H * self.scale),
                     PAD * self.scale,
                     FONT_PX * self.scale,
+                    &self.settings.font_family,
                 )
                 .ok_or("No usable font")?,
             );
             self.gpu = Some(gpu);
             self.window = Some(window);
+            let theme = self.active_theme();
+            if let Some(r) = self.renderer.as_mut() {
+                r.apply_theme(&theme, self.settings.minimum_contrast)?;
+            }
             self.fit(size.width, size.height);
             let spec = SessionSpec::from_environment().map_err(|e| e.to_string())?;
             self.runtime = Some(
@@ -315,6 +697,14 @@ impl ApplicationHandler for App {
                 )
                 .map_err(|e| e.to_string())?,
             );
+            #[cfg(debug_assertions)]
+            if let Ok(panel) = std::env::var("JUNA_STARTUP_PANEL") {
+                match panel.as_str() {
+                    "themes" => self.open_ui(ui::Kind::Themes),
+                    "settings" => self.open_ui(ui::Kind::Settings),
+                    _ => {}
+                }
+            }
             Ok(())
         })();
         if let Err(e) = result {
@@ -324,6 +714,9 @@ impl ApplicationHandler for App {
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + FRAME));
     }
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        if self.handle_ui(&event) {
+            return;
+        }
         match event {
             WindowEvent::CloseRequested => {
                 if let Some(r) = self.runtime.as_mut() {
@@ -334,22 +727,8 @@ impl ApplicationHandler for App {
             }
             WindowEvent::Resized(size) => self.fit(size.width, size.height),
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                self.scale = scale_factor as f32;
-                if let Some(g) = self.gpu.as_ref() {
-                    self.renderer = crate::render::Renderer::new(
-                        &g.device,
-                        &g.queue,
-                        g.format,
-                        2048,
-                        (CELL_W * self.scale, CELL_H * self.scale),
-                        PAD * self.scale,
-                        FONT_PX * self.scale,
-                    );
-                }
-                if let Some(w) = self.window.as_ref() {
-                    let s = w.inner_size();
-                    self.fit(s.width, s.height);
-                }
+                self.scale = scale_factor as f32 * self.settings.font_size / FONT_PX;
+                self.rebuild_renderer();
             }
             WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
             WindowEvent::Focused(f) => {
@@ -443,7 +822,7 @@ impl ApplicationHandler for App {
                     ));
                 }
                 if self.selecting {
-                    let top = self.terminal.scrollback_len().saturating_sub(self.offset);
+                    let top = self.history_start();
                     if let Some((_, b)) = self.selection.as_mut() {
                         *b = (top + self.pointer.0 as usize, self.pointer.1);
                     }
@@ -479,8 +858,7 @@ impl ApplicationHandler for App {
                 self.selecting = state == ElementState::Pressed;
                 if self.selecting {
                     let p = (
-                        self.terminal.scrollback_len().saturating_sub(self.offset)
-                            + self.pointer.0 as usize,
+                        self.history_start() + self.pointer.0 as usize,
                         self.pointer.1,
                     );
                     self.selection = Some((p, p));
@@ -491,7 +869,12 @@ impl ApplicationHandler for App {
                 state: ElementState::Pressed,
                 button: MouseButton::Right,
                 ..
-            } => self.paste(),
+            } => {
+                if !self.ui_mouse_latch.contains(&MouseButton::Right) {
+                    self.ui_mouse_latch.push(MouseButton::Right);
+                }
+                self.open_ui(ui::Kind::Context);
+            }
             WindowEvent::MouseWheel { delta, .. } => {
                 let lines = match delta {
                     MouseScrollDelta::LineDelta(_, y) => y * 3.,
@@ -528,6 +911,23 @@ impl ApplicationHandler for App {
             match runtime.tick() {
                 Ok(true) => {
                     self.terminal.finish();
+                    #[cfg(debug_assertions)]
+                    if let Ok(marker) = std::env::var("JUNA_ACCEPT_MARKER") {
+                        let content: String = self
+                            .terminal
+                            .snapshot(0)
+                            .cells
+                            .iter()
+                            .map(|c| match &c.content {
+                                CellContent::Char(cp) | CellContent::WideChar(cp) => {
+                                    char::from_u32(*cp).unwrap_or('�').to_string()
+                                }
+                                CellContent::Cluster(s) => s.to_string(),
+                                _ => " ".into(),
+                            })
+                            .collect();
+                        log::info!("Acceptance marker present={}", content.contains(&marker));
+                    }
                     log::info!(
                         "Shell exited: {:?}; stream: {:?}; frames={}",
                         runtime.exit,
@@ -595,4 +995,41 @@ pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
         return Err(failure.into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod option_tests {
+    use super::*;
+    #[test]
+    fn previews_cancel_and_custom_saves_preserve_engine_cells() {
+        let dir = std::env::temp_dir().join(crate::settings::new_id());
+        let mut app = App::new(10, 3);
+        app.store = crate::settings::Store::new(dir.clone());
+        app.settings = crate::settings::Settings::default();
+        app.themes = crate::theme::builtins();
+        app.terminal.advance(b"terminal stays here");
+        let before = app.terminal.snapshot(0).cells;
+        app.ui_action(ui::Action::Themes);
+        app.ui_action(ui::Action::Pick("nord".into()));
+        assert_eq!(app.settings.active_theme_id, "nord");
+        app.ui_action(ui::Action::Duplicate);
+        assert!(app.handle_ui(&WindowEvent::Ime(Ime::Commit("My custom".into()))));
+        assert_eq!(
+            app.ui.as_ref().unwrap().draft.as_ref().unwrap().name,
+            "My custom"
+        );
+        app.ui_action(ui::Action::Cancel);
+        assert_eq!(app.settings.active_theme_id, "nord");
+        assert_eq!(app.themes.len(), 20);
+        app.ui_action(ui::Action::Duplicate);
+        app.handle_ui(&WindowEvent::Ime(Ime::Commit("Stored custom".into())));
+        app.ui_action(ui::Action::Save);
+        assert_eq!(app.themes.len(), 21);
+        let (settings, themes, errors) = app.store.load();
+        assert!(errors.is_empty());
+        assert_eq!(settings.active_theme_id, app.settings.active_theme_id);
+        assert!(themes.iter().any(|t| t.name == "Stored custom"));
+        assert_eq!(app.terminal.snapshot(0).cells, before);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }

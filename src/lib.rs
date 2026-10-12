@@ -5,3 +5,5 @@ pub mod layout;
 pub mod render;
 pub mod session;
 pub mod vt;
+pub mod theme;
+pub mod settings;

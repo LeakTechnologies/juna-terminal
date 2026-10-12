@@ -7,6 +7,7 @@
 
 mod atlas;
 mod contrast;
+pub mod overlay;
 
 pub use atlas::Atlas;
 
@@ -65,32 +66,9 @@ impl Instance {
     }
 }
 
-/// Dracula theme color palette (https://draculatheme.com/)
-fn xterm(n: u8) -> [f32; 3] {
+fn color256(n: u8, palette: &[[f32; 3]; 16]) -> [f32; 3] {
     match n {
-        0 => [40.0 / 255.0, 42.0 / 255.0, 54.0 / 255.0], // #282a36 background
-        1 => [1.0, 85.0 / 255.0, 85.0 / 255.0],          // #ff5555 red
-        2 => [80.0 / 255.0, 250.0 / 255.0, 123.0 / 255.0], // #50fa7b green
-        3 => [241.0 / 255.0, 250.0 / 255.0, 140.0 / 255.0], // #f1fa8c yellow
-        4 => [189.0 / 255.0, 147.0 / 255.0, 249.0 / 255.0], // #bd93f9 purple/blue
-        5 => [1.0, 121.0 / 255.0, 198.0 / 255.0],        // #ff79c6 pink/magenta
-        6 => [139.0 / 255.0, 233.0 / 255.0, 253.0 / 255.0], // #8be9fd cyan
-        7 => [248.0 / 255.0, 248.0 / 255.0, 242.0 / 255.0], // #f8f8f2 white/foreground
-        8 => [98.0 / 255.0, 114.0 / 255.0, 164.0 / 255.0], // #6272a4 bright black (comment)
-        9 => [1.0, 85.0 / 255.0, 85.0 / 255.0],          // #ff5555 bright red
-        10 => [80.0 / 255.0, 250.0 / 255.0, 123.0 / 255.0], // #50fa7b bright green
-        11 => [241.0 / 255.0, 250.0 / 255.0, 140.0 / 255.0], // #f1fa8c bright yellow
-        12 => [189.0 / 255.0, 147.0 / 255.0, 249.0 / 255.0], // #bd93f9 bright blue
-        13 => [1.0, 121.0 / 255.0, 198.0 / 255.0],       // #ff79c6 bright pink
-        14 => [139.0 / 255.0, 233.0 / 255.0, 253.0 / 255.0], // #8be9fd bright cyan
-        15 => [248.0 / 255.0, 248.0 / 255.0, 242.0 / 255.0], // #f8f8f2 bright white
-        _ => [1.0, 1.0, 1.0],
-    }
-}
-
-fn color256(n: u8) -> [f32; 3] {
-    match n {
-        0..=15 => xterm(n),
+        0..=15 => palette[n as usize],
         16..=231 => {
             let i = n as u32 - 16;
             let steps = [0u8, 95, 135, 175, 215, 255];
@@ -101,17 +79,17 @@ fn color256(n: u8) -> [f32; 3] {
             ]
         }
         _ => {
-            let v = (n as u32 - 232) as f32 / 24.0;
+            let v = (8 + 10 * (n as u32 - 232)) as f32 / 255.0;
             [v, v, v]
         }
     }
 }
-
-fn resolve(c: Color, default: [f32; 3]) -> [f32; 3] {
+fn themed_color(c: Color, default: [f32; 3], palette: &[[f32; 3]; 16]) -> [f32; 3] {
     match c {
         Color::Default => default,
-        Color::Indexed(n) => color256(n),
-        Color::Rgb(r, g, b) => [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0],
+        Color::Indexed(n) if n < 16 => palette[n as usize],
+        Color::Indexed(n) => color256(n, palette),
+        Color::Rgb(r, g, b) => [r as f32 / 255., g as f32 / 255., b as f32 / 255.],
     }
 }
 
@@ -132,6 +110,8 @@ pub struct Renderer {
     debug_frame: u32,
     srgb_target: bool,
     minimum_contrast: f32,
+    theme: crate::theme::Theme,
+    palette: [[f32; 3]; 16],
 }
 
 impl Renderer {
@@ -144,7 +124,33 @@ impl Renderer {
         pad: f32,
         font_px: f32,
     ) -> Option<Self> {
-        let atlas = Atlas::new(device, font_px)?;
+        Self::new_with_family(
+            device,
+            queue,
+            format,
+            _atlas_size,
+            cell,
+            pad,
+            font_px,
+            "IBM Plex Mono",
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_with_family(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+        _atlas_size: u32,
+        cell: (f32, f32),
+        pad: f32,
+        font_px: f32,
+        family: &str,
+    ) -> Option<Self> {
+        let atlas = Atlas::new_with_family(device, font_px, family)?;
+        let theme = crate::theme::default_theme();
+        let palette = std::array::from_fn(|i| {
+            crate::theme::rgb(&theme.colors.ansi[i]).expect("validated palette")
+        });
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("juna-shader"),
@@ -290,6 +296,8 @@ impl Renderer {
                 .and_then(|s| s.parse::<f32>().ok())
                 .filter(|v| v.is_finite() && (1.0..=21.0).contains(v))
                 .unwrap_or(contrast::DEFAULT_MINIMUM),
+            theme,
+            palette,
         })
     }
 
@@ -298,8 +306,8 @@ impl Renderer {
         self.debug_frame += 1;
         self.staging.clear();
         self.atlas.begin_frame();
-        let default_fg = [0.9725, 0.9725, 0.9490];
-        let default_bg = [0.1569, 0.1647, 0.2118];
+        let default_fg = crate::theme::rgb(&self.theme.colors.foreground).unwrap();
+        let default_bg = crate::theme::rgb(&self.theme.colors.background).unwrap();
         let mut foreground = Vec::new();
         let atlas_px = self.atlas.size_px() as f32;
         let text_h = self.atlas.ascent() + self.atlas.descent();
@@ -308,8 +316,8 @@ impl Renderer {
             for (col, cell) in screen.row(row).iter().enumerate() {
                 let x = self.pad + col as f32 * self.cell_w;
                 let y = self.pad + row as f32 * self.cell_h;
-                let mut fg = resolve(cell.fg, default_fg);
-                let mut bg = resolve(cell.bg, default_bg);
+                let mut fg = themed_color(cell.fg, default_fg, &self.palette);
+                let mut bg = themed_color(cell.bg, default_bg, &self.palette);
                 if cell.attrs.is(crate::vt::Attrs::INVERSE) {
                     std::mem::swap(&mut fg, &mut bg);
                 }
@@ -396,11 +404,10 @@ impl Renderer {
                 5 | 6 => ([x, y], [2., self.cell_h]),
                 _ => ([x, y], [self.cell_w, self.cell_h]),
             };
-            self.staging.push(Instance::fill(
-                pos,
-                size,
-                [default_fg[0], default_fg[1], default_fg[2], 0.45],
-            ));
+            self.staging.push(Instance::fill(pos, size, {
+                let c = crate::theme::rgb(&self.theme.colors.cursor).unwrap();
+                [c[0], c[1], c[2], 0.45]
+            }));
         }
         self.count = self.staging.len();
         if self.srgb_target {
@@ -485,7 +492,7 @@ impl Renderer {
         )
     }
     pub fn clear_color(&self) -> wgpu::Color {
-        let mut rgb = [40. / 255., 42. / 255., 54. / 255.];
+        let mut rgb = crate::theme::rgb(&self.theme.colors.background).unwrap();
         if self.srgb_target {
             rgb = rgb.map(contrast::linear);
         }
@@ -495,6 +502,54 @@ impl Renderer {
             b: rgb[2] as f64,
             a: 1.,
         }
+    }
+    pub fn apply_theme(&mut self, theme: &crate::theme::Theme, minimum: f32) -> Result<(), String> {
+        theme.validate()?;
+        self.theme = theme.clone();
+        self.palette = std::array::from_fn(|i| crate::theme::rgb(&theme.colors.ansi[i]).unwrap());
+        self.minimum_contrast = minimum;
+        Ok(())
+    }
+    pub fn overlay(&mut self, scene: &overlay::Overlay) {
+        let start = self.staging.len();
+        let atlas_px = self.atlas.size_px() as f32;
+        for r in &scene.rectangles {
+            self.staging.push(Instance::fill(
+                [r.rect[0], r.rect[1]],
+                [r.rect[2], r.rect[3]],
+                r.color,
+            ));
+        }
+        for text in &scene.text {
+            for positioned in self.atlas.text(&text.value) {
+                let g = positioned.glyph;
+                let mut inst = Instance::glyph(
+                    [
+                        text.pos[0] + positioned.x + g.left as f32,
+                        text.pos[1] + self.atlas.ascent() - g.top as f32 - positioned.y,
+                    ],
+                    [g.w as f32, g.h as f32],
+                    [g.x as f32 / atlas_px, g.y as f32 / atlas_px],
+                    [(g.x + g.w) as f32 / atlas_px, (g.y + g.h) as f32 / atlas_px],
+                    text.color,
+                );
+                if clip_glyph(
+                    &mut inst,
+                    text.pos,
+                    [text.pos[0] + text.width, text.pos[1] + self.cell_h],
+                ) {
+                    self.staging.push(inst);
+                }
+            }
+        }
+        if self.srgb_target {
+            for instance in &mut self.staging[start..] {
+                for c in &mut instance.color[..3] {
+                    *c = contrast::linear(*c);
+                }
+            }
+        }
+        self.count = self.staging.len();
     }
 }
 

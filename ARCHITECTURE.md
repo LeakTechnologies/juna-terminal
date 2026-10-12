@@ -20,6 +20,26 @@ policy adjusts unreadable foregrounds after reverse-video; it never mutates engi
 background values. GPU acceptance covers both surface formats, rather than inferring display
 fidelity from a non-sRGB capture alone.
 
+Approved theme/options implementation: `theme` is a pure versioned palette/validation API;
+`settings` owns file I/O outside `vt`. Twenty immutable starter palettes use Catppuccin Mocha
+as the default. The renderer holds validated presentation settings, consumes the owned terminal
+snapshot, and separately consumes owned overlay drawing data; menu/editor state never occupies
+terminal cells. Palette changes recolor indexed/default cells; explicit RGB backgrounds remain
+application-controlled. Minimum contrast affects presentation foregrounds only.
+
+The application owns a non-modal right-click menu, searchable theme selector, font/contrast
+settings, and custom-theme editor. All overlay keyboard/pointer events are consumed before terminal
+input routing; mouse releases from a menu click are latched so they cannot leak into a child TUI.
+TUI-requested mouse reporting retains right-click ownership unless Shift overrides it. Shell output
+continues through the usual bounded drain while overlays are open. Escape/cancel restores the saved
+active theme; selection preview does not persist until chosen. Custom edits use a draft until save.
+
+Custom palettes and settings use versioned JSON, bounded reads, validated hex colors/IDs, generated
+file names independent of human names, and synchronized temporary files renamed into place. Built-in
+IDs cannot be overwritten through custom saves; malformed/unsupported records remain untouched and
+produce diagnostics. Theme JSON keeps colors separate from font/session settings so future exporters
+can map to other terminals. Export adapters are not implemented in this increment.
+
 This section supersedes conflicting older implementation descriptions below. The design lead
 approved AUDIT.md's three-stage repair plan and the practical query/key-mode subset.
 
@@ -55,7 +75,8 @@ approved AUDIT.md's three-stage repair plan and the practical query/key-mode sub
   DSR/CPR, primary DA, the implemented DEC mode reports, bracketed paste, focus reporting, mouse
   1000/1002/1003 with SGR 1006, REP, and synchronized output with a one-second watchdog.
   DA identifies the basic VT100 subset; it does not claim graphics extensions.
-- Local selection/copy uses Ctrl+Shift+C; paste uses Ctrl+Shift+V, Shift+Insert or right-click.
+- Local selection/copy uses Ctrl+Shift+C; paste uses Ctrl+Shift+V or Shift+Insert. Right-click opens
+  Copy/Paste/Select All/Themes/Settings; Shift+right-click overrides a TUI's mouse reporting.
   Shift overrides mouse reporting for local selection/history. Wheel and Shift+PageUp/PageDown
   navigate retained history; typing returns to live output. Paste removes embedded control codes,
   normalizes line endings, and obeys bracketed-paste mode. OSC 52 remains denied; no program can

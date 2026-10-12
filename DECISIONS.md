@@ -23,6 +23,25 @@ typed, validated serializable theme/settings structures; `serde_json` provides c
 JSON parsing and escaping. Handwriting JSON parsing is not justified. Both are data infrastructure,
 not terminal semantics, and no async runtime or terminal-engine dependency is introduced.
 
+Implemented after explicit design approval: Mocha default, 20 immutable starter palettes, a live
+right-click menu, searchable selector, font/contrast settings, and custom-theme create/edit/save.
+Storage is versioned JSON outside the engine. The palette collection revision and notices are
+recorded in licenses/README.md; source URLs remain in the data. This is a curated set of established
+themes, not a fabricated cross-terminal popularity ranking. Future export is intentionally deferred.
+
+Locked direct serialization dependencies: existing graph version `serde` 1.0.229 with derive
+enabled, and `serde_json` 1.0.151; its added serialization helpers are `itoa` 1.0.18 and `zmij` 1.0.23.
+ConPTY and the terminal engine boundary are unchanged. A temporary resolution at serde 1.0.228
+was corrected back to the existing 1.0.229 graph version before landing.
+
+Verification in this session: settings/custom theme round trips, invalid/unsupported/duplicate
+records, read-only-file preservation, preview cancellation, and engine-cell isolation pass.
+GPU evidence covers all 20 default backgrounds, sRGB fidelity, and the actual overlay drawing.
+Real-window tests verify output reaches the engine with theme/settings panels open and the shell
+still exits. The first menu-output fixture timed out because its delay ran inside every cmd loop
+iteration; grouping the loop explicitly corrected the fixture. Logs established output was flowing
+during the timeout; it was not treated as a terminal freeze. The corrected window tests pass.
+
 ## 2026-10-12 approved readiness repairs
 
 The design lead approved all three stages of AUDIT.md and pushing verified changes.
@@ -50,7 +69,7 @@ Readiness repairs are implemented under the approved 2026-10-12 design, with acc
 Last updated: 2026-10-12 — see the readiness repair record above and TERMINAL_TESTING.md.
 Build evidence below dated 2026-10-11 is historical and is not reused as current verification.
 
-### Current verification — 2026-10-12
+### Readiness baseline verification — 2026-10-12 (before theme follow-up)
 
 - `cargo check --offline`: passed with no warnings.
 - `cargo clippy --all-targets --offline`: passed with no warnings after cleanup.

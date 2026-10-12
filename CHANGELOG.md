@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-12 — themes and options
+
+- Default to Catppuccin Mocha and supply 20 sourced starter palettes.
+- Add a live right-click Copy/Paste/Select All/Themes/Settings menu with keyboard navigation.
+- Add search/live theme previews, font size/family and contrast settings, and custom theme editing.
+- Save validated, versioned theme/settings JSON atomically; retain corrupted files and report errors.
+- Preserve TUI mouse reporting with Shift as the local-menu override; consume overlay input separately.
+- Record GPU palette/menu captures and real shell output continuing with options overlays open.
+
 ## 2026-10-12 — color readability
 
 - Correct double sRGB encoding that brightened the displayed theme, including surface clear colors.

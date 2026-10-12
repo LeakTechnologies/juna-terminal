@@ -1,11 +1,12 @@
 //! Requires a real GPU/backend and installed monospace fonts. Run explicitly for visual evidence.
 use juna::{gpu::block_on, render::Renderer, vt::TerminalState};
-fn render(
+fn render_scene(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     renderer: &mut Renderer,
     term: &TerminalState,
     format: wgpu::TextureFormat,
+    scene: Option<&juna::render::overlay::Overlay>,
 ) -> Vec<u8> {
     const W: u32 = 512;
     const H: u32 = 256;
@@ -31,6 +32,9 @@ fn render(
         mapped_at_creation: false,
     });
     renderer.build(&term.snapshot(0), W, H);
+    if let Some(scene) = scene {
+        renderer.overlay(scene);
+    }
     let mut encoder = device.create_command_encoder(&Default::default());
     {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -83,6 +87,15 @@ fn render(
     readback.unmap();
     pixels
 }
+fn render(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    renderer: &mut Renderer,
+    term: &TerminalState,
+    format: wgpu::TextureFormat,
+) -> Vec<u8> {
+    render_scene(device, queue, renderer, term, format, None)
+}
 #[test]
 #[ignore = "real GPU and system fonts; run --test render_acceptance -- --ignored"]
 fn rows_are_isolated_and_supported_text_is_visible() {
@@ -101,6 +114,15 @@ fn rows_are_isolated_and_supported_text_is_visible() {
         20.,
     )
     .unwrap();
+    renderer
+        .apply_theme(
+            &juna::theme::builtins()
+                .into_iter()
+                .find(|t| t.id == "dracula")
+                .unwrap(),
+            4.5,
+        )
+        .unwrap();
     let mut term = TerminalState::new(24, 8);
     term.advance("Juna terminal acceptance\r\nspaces work here\r\ne\u{301} 漢 😀\r\n\x1b[31;44mWide 漢\x1b[0m\r\n\x1b[1mBold\x1b[0;3m Italic\x1b[0;4m Underline\x1b[0m\r\n\x1b[7mInverse\x1b[0m\r\n\x1b[?25l".as_bytes());
     let first = render(
@@ -171,4 +193,84 @@ fn palette_bytes_are_preserved_on_srgb_surfaces() {
             );
         }
     }
+}
+
+#[test]
+#[ignore = "real GPU; captures theme and context-menu previews"]
+fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
+    use juna::app::ui::{Kind, Ui};
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter =
+        block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).unwrap();
+    let (device, queue) =
+        block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
+    let mut term = TerminalState::new(24, 8);
+    term.advance(b"Theme preview\r\n\x1b[37;45mReadable light box\x1b[0m\r\n\x1b[?25l");
+    let before = term.snapshot(0).cells;
+    let mut renderer = Renderer::new(
+        &device,
+        &queue,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        2048,
+        (20., 28.),
+        8.,
+        20.,
+    )
+    .unwrap();
+    let themes = juna::theme::builtins();
+    std::fs::create_dir_all("target/acceptance/themes").unwrap();
+    for theme in &themes {
+        renderer.apply_theme(theme, 4.5).unwrap();
+        let pixels = render(
+            &device,
+            &queue,
+            &mut renderer,
+            &term,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+        );
+        let wanted = juna::theme::rgb(&theme.colors.background)
+            .unwrap()
+            .map(|v| (v * 255.).round() as u8);
+        let p = (200 * 512 + 12) * 4;
+        assert_eq!(&pixels[p..p + 3], &wanted);
+        let mut ppm = b"P6\n512 256\n255\n".to_vec();
+        for pixel in pixels.chunks_exact(4) {
+            ppm.extend_from_slice(&pixel[..3]);
+        }
+        std::fs::write(format!("target/acceptance/themes/{}.ppm", theme.id), ppm).unwrap();
+    }
+    let settings = juna::settings::Settings::default();
+    renderer.apply_theme(&themes[0], 4.5).unwrap();
+    for kind in [Kind::Context, Kind::Themes, Kind::Settings, Kind::Editor] {
+        let mut ui = Ui::new(kind, [8., 8.]);
+        if kind == Kind::Editor {
+            ui.draft = Some(juna::theme::default_theme());
+        }
+        let rows = ui.rows(&themes, &settings);
+        ui.focus_row(0, &rows);
+        let (_, visible, _) = ui.geometry(512., 256., 1., rows.len());
+        ui.ensure_visible(visible, rows.len());
+        let scene = ui.scene(&rows, 512., 256., 1.);
+        assert!(!scene.text.is_empty());
+        let pixels = render_scene(
+            &device,
+            &queue,
+            &mut renderer,
+            &term,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
+            Some(&scene),
+        );
+        let mut ppm = b"P6\n512 256\n255\n".to_vec();
+        for pixel in pixels.chunks_exact(4) {
+            ppm.extend_from_slice(&pixel[..3]);
+        }
+        let name = match kind {
+            Kind::Context => "context-menu",
+            Kind::Themes => "theme-menu",
+            Kind::Settings => "settings-menu",
+            Kind::Editor => "theme-editor",
+        };
+        std::fs::write(format!("target/acceptance/{name}.ppm"), ppm).unwrap();
+    }
+    assert_eq!(term.snapshot(0).cells, before);
 }

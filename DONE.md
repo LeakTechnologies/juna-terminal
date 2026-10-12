@@ -1,5 +1,15 @@
 # Completed iterations
 
+## 2026-10-12 — approved theme/options system
+
+Implemented THEME_DESIGN.md: Catppuccin Mocha default, 20 starter choices, non-modal right-click
+options, searchable previews, font/contrast settings, and custom-theme draft/save persistence.
+Validation, read-only/corrupt-file preservation, menu geometry/input isolation, all-palette GPU
+captures, and real output with overlays open were exercised. Future VS Code export remains deferred.
+
+Verified for this iteration: warning-free check/clippy; 176 standard tests; three explicitly run
+GPU acceptance tests; two explicitly run real-window acceptance tests; updated release build.
+
 ## 2026-10-12 — approved contrast repair
 
 Confirmed and corrected the sRGB surface brightening defect, added a presentation-only minimum
