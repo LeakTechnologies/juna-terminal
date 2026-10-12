@@ -1,6 +1,16 @@
 use std::collections::VecDeque;
 
 use crate::vt::cell::Cell;
+fn row_bytes(row: &[Cell]) -> usize {
+    std::mem::size_of_val(row)
+        + row
+            .iter()
+            .map(|c| match &c.content {
+                crate::vt::CellContent::Cluster(s) => s.len(),
+                _ => 0,
+            })
+            .sum::<usize>()
+}
 
 pub const DEFAULT_BUDGET: usize = 64 * 1024 * 1024;
 const MIN_LINES: usize = 8;
@@ -59,8 +69,57 @@ impl Scrollback {
     }
 
     pub fn set_cols(&mut self, cols: u16) {
-        self.cols = cols.max(1);
+        let cols = cols.max(1);
+        if cols == self.cols {
+            return;
+        }
+        let old_rows = std::mem::take(&mut self.rows);
+        let old_wrapped = std::mem::take(&mut self.wrapped);
+        self.cols = cols;
+        self.bytes = 0;
+        let mut line = Vec::new();
+        for (mut row, wrap) in old_rows.into_iter().zip(old_wrapped) {
+            if !wrap.wrapped {
+                while row.last().is_some_and(|c| c.content.is_empty()) {
+                    row.pop();
+                }
+            }
+            line.extend(row);
+            if !wrap.wrapped {
+                self.reflow_line(std::mem::take(&mut line));
+            }
+        }
+        if !line.is_empty() {
+            self.reflow_line(line);
+        }
         self.enforce();
+    }
+
+    fn reflow_line(&mut self, line: Vec<Cell>) {
+        use crate::vt::CellContent;
+        let mut row = Vec::new();
+        for mut cell in line {
+            if cell.content == CellContent::WideCharSpacer {
+                continue;
+            }
+            let mut width = cell.content.width().max(1) as usize;
+            if width > self.cols as usize {
+                cell.content = CellContent::Char(0xfffd);
+                width = 1;
+            }
+            if row.len() + width > self.cols as usize {
+                row.resize(self.cols as usize, Cell::default());
+                self.push(std::mem::take(&mut row), true);
+            }
+            let mut spacer = cell.clone();
+            spacer.content = CellContent::WideCharSpacer;
+            row.push(cell);
+            if width == 2 {
+                row.push(spacer);
+            }
+        }
+        row.resize(self.cols as usize, Cell::default());
+        self.push(row, false);
     }
 
     pub fn set_budget(&mut self, budget: usize) {
@@ -73,7 +132,7 @@ impl Scrollback {
             self.dropped_lines += 1;
             return;
         }
-        self.bytes += row.len() * std::mem::size_of::<Cell>();
+        self.bytes += row_bytes(&row);
         self.rows.push_back(row);
         self.wrapped.push_back(WrappedLine { wrapped });
         self.enforce();
@@ -81,18 +140,17 @@ impl Scrollback {
 
     fn enforce(&mut self) {
         let max = self.max_lines();
-        let cell = std::mem::size_of::<Cell>().max(1);
         while self.rows.len() > max {
-            self.bytes = self.bytes.saturating_sub(
-                self.rows.pop_front().map(|r| r.len() * cell).unwrap_or(0),
-            );
+            self.bytes = self
+                .bytes
+                .saturating_sub(self.rows.pop_front().map(|r| row_bytes(&r)).unwrap_or(0));
             self.wrapped.pop_front();
             self.dropped_lines += 1;
         }
         while self.bytes > self.budget && !self.rows.is_empty() {
-            self.bytes = self.bytes.saturating_sub(
-                self.rows.pop_front().map(|r| r.len() * cell).unwrap_or(0),
-            );
+            self.bytes = self
+                .bytes
+                .saturating_sub(self.rows.pop_front().map(|r| row_bytes(&r)).unwrap_or(0));
             self.wrapped.pop_front();
             self.dropped_lines += 1;
         }
@@ -129,12 +187,10 @@ mod tests {
 
     fn row(n: usize, marker: u32) -> Vec<Cell> {
         (0..n)
-            .map(|i| {
-Cell {
+            .map(|i| Cell {
                 content: crate::vt::cell::CellContent::Char(marker + i as u32),
                 ..Default::default()
-            }
-        })
+            })
             .collect()
     }
 
@@ -164,7 +220,10 @@ Cell {
             s.push(row(80, i), false);
         }
         assert!(s.len() <= cap);
-        assert_eq!(s.get(0).unwrap()[0].content, crate::vt::cell::CellContent::Char(50));
+        assert_eq!(
+            s.get(0).unwrap()[0].content,
+            crate::vt::cell::CellContent::Char(50)
+        );
         assert!(s.dropped_lines() >= 50);
     }
 
@@ -185,7 +244,10 @@ Cell {
         }
         let before = s.len();
         s.set_cols(512);
-        assert!(s.len() < before, "history must be trimmed, not kept, after widening");
+        assert!(
+            s.len() < before,
+            "history must be trimmed, not kept, after widening"
+        );
     }
 
     #[test]

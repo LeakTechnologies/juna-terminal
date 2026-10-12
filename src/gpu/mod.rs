@@ -157,20 +157,48 @@ impl Gpu {
     ) -> Result<Self, GpuError> {
         let surface = create_surface(instance).map_err(|e| GpuError::Surface(e.into()))?;
 
-        let adapters = block_on(instance.enumerate_adapters(wgpu::Backends::all()));
-        let (adapter, choice, rejected) = pick_adapter(&adapters)?;
-
-        let requested = adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("juna-device"),
-            required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::downlevel_defaults()
-                .using_resolution(adapter.limits()),
-            memory_hints: wgpu::MemoryHints::default(),
-            trace: wgpu::Trace::Off,
-            experimental_features: wgpu::ExperimentalFeatures::default(),
-        });
-        let (device, queue) =
-            block_on(requested).map_err(GpuError::DeviceRequest)?;
+        let mut adapters = block_on(instance.enumerate_adapters(wgpu::Backends::all()));
+        adapters.sort_by_key(|a| rank(a.get_info().device_type));
+        let mut rejected = Vec::new();
+        let mut selected = None;
+        for adapter in adapters {
+            let info = adapter.get_info();
+            let caps = surface.get_capabilities(&adapter);
+            if !adapter.is_surface_supported(&surface)
+                || caps.formats.is_empty()
+                || caps.alpha_modes.is_empty()
+            {
+                rejected.push(format!(
+                    "{} {:?}: incompatible surface",
+                    info.name, info.backend
+                ));
+                continue;
+            }
+            let requested = adapter.request_device(&wgpu::DeviceDescriptor {
+                label: Some("juna-device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::downlevel_defaults()
+                    .using_resolution(adapter.limits()),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::Off,
+                experimental_features: wgpu::ExperimentalFeatures::default(),
+            });
+            match block_on(requested) {
+                Ok((device, queue)) => {
+                    let choice = AdapterChoice {
+                        name: info.name,
+                        backend: info.backend,
+                        device_type: info.device_type,
+                        driver: info.driver,
+                        software_fallback: info.device_type == wgpu::DeviceType::Cpu,
+                    };
+                    selected = Some((adapter, choice, device, queue));
+                    break;
+                }
+                Err(e) => rejected.push(format!("{} {:?}: {e}", info.name, info.backend)),
+            }
+        }
+        let (adapter, choice, device, queue) = selected.ok_or(GpuError::NoAdapter)?;
 
         let caps = surface.get_capabilities(&adapter);
         let format = caps
@@ -213,7 +241,7 @@ impl Gpu {
     }
 
     /// Render one frame. Takes `&self`: nothing here mutates the device, and taking
-///     `&self` lets the caller hold a `&mut Renderer` at the same time without
+    ///     `&self` lets the caller hold a `&mut Renderer` at the same time without
     /// splitting the borrow of this struct across the closure.
     ///
     /// `Ok(false)` means the frame was skipped for a routine reason (occluded,
@@ -237,11 +265,11 @@ impl Gpu {
         let view = texture
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let mut enc =
-            self.device
-                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("juna-frame"),
-                });
+        let mut enc = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("juna-frame"),
+            });
         {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("juna-pass"),

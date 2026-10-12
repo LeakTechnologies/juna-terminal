@@ -128,6 +128,8 @@ demonstrated incompatibility with a supported Windows environment.
 
 ## 13. Unresolved
 
-Read `DECISIONS.md` before starting work. D1 (toolchain) and D6 (font shaping) are open.
-B3 (MSVC elevation) blocks D1. B7 is partially closed — adapter enumeration is done, but
-surface creation and presentation are untested.
+Read `DECISIONS.md` before starting work. D1 is deferred: GNU is the working toolchain;
+MSVC remains an optional future decision. D3 uses pinned Unicode 17 standards data, and
+D6 uses swash for cluster shaping. Full bidi/contextual run layout remains unsupported.
+B7 now has Vulkan surface/presentation acceptance evidence on this host; DX12/GLES and
+mixed-DPI behavior still require testing. See `TERMINAL_TESTING.md` for current evidence.

@@ -43,8 +43,15 @@ fn crlf_moves_to_the_next_row_column_zero() {
 fn cup_positions_the_cursor_one_based() {
     let mut s = state(20, 5);
     s.advance(b"\x1b[3;2HX");
-    assert_eq!(s.grid().cell(2, 1).unwrap().content, CellContent::Char(u32::from('X')));
-    assert_eq!(s.grid().cursor.col, 2, "cursor advances past the printed glyph");
+    assert_eq!(
+        s.grid().cell(2, 1).unwrap().content,
+        CellContent::Char(u32::from('X'))
+    );
+    assert_eq!(
+        s.grid().cursor.col,
+        2,
+        "cursor advances past the printed glyph"
+    );
 }
 
 #[test]
@@ -118,11 +125,11 @@ fn el_erases_to_the_end_of_the_line() {
 }
 
 #[test]
-fn ed_two_clears_the_screen_and_homes_the_cursor() {
+fn ed_two_clears_the_screen_and_preserves_the_cursor() {
     let mut s = state(10, 3);
     s.advance(b"a\r\nb\r\nc");
     s.advance(b"\x1b[2J");
-    assert_eq!((s.grid().cursor.row, s.grid().cursor.col), (0, 0));
+    assert_eq!((s.grid().cursor.row, s.grid().cursor.col), (2, 1));
     assert!(screen_text(&s, 0).is_empty());
     assert!(screen_text(&s, 2).is_empty());
 }
@@ -201,7 +208,8 @@ fn text_after_extended_colour_sgr_is_printed_not_consumed() {
             })
             .collect();
         assert_eq!(
-            row, "XY",
+            row,
+            "XY",
             "text after {:?} was consumed instead of printed",
             String::from_utf8_lossy(prefix)
         );
@@ -219,7 +227,10 @@ fn bce_makes_erased_cells_take_the_current_background() {
 fn tabs_advance_to_the_next_stop() {
     let mut s = state(40, 2);
     s.advance(b"a\tb");
-    assert_eq!(s.grid().cell(0, 8).unwrap().content, CellContent::Char(u32::from('b')));
+    assert_eq!(
+        s.grid().cell(0, 8).unwrap().content,
+        CellContent::Char(u32::from('b'))
+    );
     assert_eq!(s.grid().cursor.col, 9);
 }
 
@@ -286,7 +297,11 @@ fn alternate_screen_does_not_collect_scrollback() {
     for _ in 0..10 {
         s.advance(b"\x1b[?1049hline\r\n\x1b[?1049l");
     }
-    assert_eq!(s.scrollback_len(), 0, "alternate screen must not grow history");
+    assert_eq!(
+        s.scrollback_len(),
+        0,
+        "alternate screen must not grow history"
+    );
 }
 
 #[test]
@@ -362,5 +377,8 @@ fn realistic_shell_prompt_sequence() {
     s.advance(b" ");
     assert_eq!(s.grid().cursor.row, 0);
     assert!(s.title().contains("PowerShell"));
-    assert_eq!(screen_text(&s, 0).trim_end(), "PS C:\\Users\\dev>".trim_end());
+    assert_eq!(
+        screen_text(&s, 0).trim_end(),
+        "PS C:\\Users\\dev>".trim_end()
+    );
 }

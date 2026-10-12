@@ -2,15 +2,15 @@
 //!
 //! The renderer **consumes an owned, read-only view** of the engine's screen and
 //! never parses VT, never holds engine state, and never mutates the grid
-//! (`ARCHITECTURE.md` 3.1). Everything it needs is copied out of `TerminalState`
-//! per frame; if this struct outlived a frame it could not show stale cells.
+//! (`ARCHITECTURE.md` 3.1). Everything it needs arrives in an owned `RenderSnapshot`.
+//! Font and GPU resources carry no mutable terminal state.
 
 mod atlas;
 
 pub use atlas::Atlas;
 
+use crate::vt::{CellContent, Color, RenderSnapshot};
 use bytemuck::{Pod, Zeroable};
-use crate::vt::{CellContent, Color, TerminalState};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, Pod, Zeroable)]
@@ -66,22 +66,22 @@ impl Instance {
 /// Dracula theme color palette (https://draculatheme.com/)
 fn xterm(n: u8) -> [f32; 3] {
     match n {
-        0 => [40.0/255.0, 42.0/255.0, 54.0/255.0],    // #282a36 background
-        1 => [255.0/255.0, 85.0/255.0, 85.0/255.0],    // #ff5555 red
-        2 => [80.0/255.0, 250.0/255.0, 123.0/255.0],   // #50fa7b green
-        3 => [241.0/255.0, 250.0/255.0, 140.0/255.0],  // #f1fa8c yellow
-        4 => [189.0/255.0, 147.0/255.0, 249.0/255.0],  // #bd93f9 purple/blue
-        5 => [255.0/255.0, 121.0/255.0, 198.0/255.0],  // #ff79c6 pink/magenta
-        6 => [139.0/255.0, 233.0/255.0, 253.0/255.0],  // #8be9fd cyan
-        7 => [248.0/255.0, 248.0/255.0, 242.0/255.0],  // #f8f8f2 white/foreground
-        8 => [98.0/255.0, 114.0/255.0, 164.0/255.0],   // #6272a4 bright black (comment)
-        9 => [255.0/255.0, 85.0/255.0, 85.0/255.0],    // #ff5555 bright red
-        10 => [80.0/255.0, 250.0/255.0, 123.0/255.0],   // #50fa7b bright green
-        11 => [241.0/255.0, 250.0/255.0, 140.0/255.0],  // #f1fa8c bright yellow
-        12 => [189.0/255.0, 147.0/255.0, 249.0/255.0],  // #bd93f9 bright blue
-        13 => [255.0/255.0, 121.0/255.0, 198.0/255.0],  // #ff79c6 bright pink
-        14 => [139.0/255.0, 233.0/255.0, 253.0/255.0],  // #8be9fd bright cyan
-        15 => [248.0/255.0, 248.0/255.0, 242.0/255.0],  // #f8f8f2 bright white
+        0 => [40.0 / 255.0, 42.0 / 255.0, 54.0 / 255.0], // #282a36 background
+        1 => [1.0, 85.0 / 255.0, 85.0 / 255.0],          // #ff5555 red
+        2 => [80.0 / 255.0, 250.0 / 255.0, 123.0 / 255.0], // #50fa7b green
+        3 => [241.0 / 255.0, 250.0 / 255.0, 140.0 / 255.0], // #f1fa8c yellow
+        4 => [189.0 / 255.0, 147.0 / 255.0, 249.0 / 255.0], // #bd93f9 purple/blue
+        5 => [1.0, 121.0 / 255.0, 198.0 / 255.0],        // #ff79c6 pink/magenta
+        6 => [139.0 / 255.0, 233.0 / 255.0, 253.0 / 255.0], // #8be9fd cyan
+        7 => [248.0 / 255.0, 248.0 / 255.0, 242.0 / 255.0], // #f8f8f2 white/foreground
+        8 => [98.0 / 255.0, 114.0 / 255.0, 164.0 / 255.0], // #6272a4 bright black (comment)
+        9 => [1.0, 85.0 / 255.0, 85.0 / 255.0],          // #ff5555 bright red
+        10 => [80.0 / 255.0, 250.0 / 255.0, 123.0 / 255.0], // #50fa7b bright green
+        11 => [241.0 / 255.0, 250.0 / 255.0, 140.0 / 255.0], // #f1fa8c bright yellow
+        12 => [189.0 / 255.0, 147.0 / 255.0, 249.0 / 255.0], // #bd93f9 bright blue
+        13 => [1.0, 121.0 / 255.0, 198.0 / 255.0],       // #ff79c6 bright pink
+        14 => [139.0 / 255.0, 233.0 / 255.0, 253.0 / 255.0], // #8be9fd bright cyan
+        15 => [248.0 / 255.0, 248.0 / 255.0, 242.0 / 255.0], // #f8f8f2 bright white
         _ => [1.0, 1.0, 1.0],
     }
 }
@@ -103,10 +103,6 @@ fn color256(n: u8) -> [f32; 3] {
             [v, v, v]
         }
     }
-}
-
-fn luminance(rgb: &[f32; 3]) -> f32 {
-    0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
 }
 
 fn resolve(c: Color, default: [f32; 3]) -> [f32; 3] {
@@ -211,15 +207,24 @@ impl Renderer {
         });
 
         let instances = make_instance_buffer(device, 8192);
-        let bind_group = build_bind_group(device, &layout, &uniform, &sampler, atlas.view(), &instances);
+        let bind_group = build_bind_group(
+            device,
+            &layout,
+            &uniform,
+            &sampler,
+            atlas.view(),
+            &instances,
+        );
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("juna-pipeline"),
-            layout: Some(&device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("juna-pl"),
-                bind_group_layouts: &[Some(&layout)],
-                immediate_size: 0,
-            })),
+            layout: Some(
+                &device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("juna-pl"),
+                    bind_group_layouts: &[Some(&layout)],
+                    immediate_size: 0,
+                }),
+            ),
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs"),
@@ -278,109 +283,115 @@ impl Renderer {
         })
     }
 
-    /// Rebuild every glyph instance from an owned read of the screen.
-    ///
-    /// Reads only; holds no reference past the call.
-    pub fn build(&mut self, terminal: &TerminalState, width: u32, height: u32) {
+    /// Consume only owned screen values; backgrounds precede all glyphs.
+    pub fn build(&mut self, screen: &RenderSnapshot, width: u32, height: u32) {
         self.debug_frame += 1;
         self.staging.clear();
-
-        let grid = terminal.grid();
-        let ascent = self.atlas.ascent();
-        let descent = self.atlas.descent();
-        // Centre the em box vertically inside the cell.
-        let text_h = ascent + descent;
-        let baseline_pad = ((self.cell_h - text_h) * 0.5).max(0.0);
-
-let default_fg = [0.9725, 0.9725, 0.9490];  // Dracula foreground: #f8f8f2
-let default_bg = [0.1569, 0.1647, 0.2118];  // Dracula background: #282a36
+        self.atlas.begin_frame();
+        let default_fg = [0.9725, 0.9725, 0.9490];
+        let default_bg = [0.1569, 0.1647, 0.2118];
+        let mut foreground = Vec::new();
         let atlas_px = self.atlas.size_px() as f32;
-        for row in 0..grid.rows() {
-            let Some(cells) = grid.row_slice(row) else { continue };
-            let cell_y = self.pad + row as f32 * self.cell_h;
-            for (col, cell) in cells.iter().enumerate() {
-                let base_x = self.pad + col as f32 * self.cell_w;
-
-                // Background first: an empty cell still paints its colour, which
-                // is what makes SGR 44/100 visible.
-                let bg = resolve(cell.bg, default_bg);
-                if std::env::var("JUNA_NOBG").is_err() {
-                    self.staging.push(Instance::fill(
-                        [base_x, cell_y],
-                        [self.cell_w, self.cell_h],
-                        [bg[0], bg[1], bg[2], 1.0],
+        let text_h = self.atlas.ascent() + self.atlas.descent();
+        let baseline = ((self.cell_h - text_h) * 0.5).max(0.0) + self.atlas.ascent();
+        for row in 0..screen.rows {
+            for (col, cell) in screen.row(row).iter().enumerate() {
+                let x = self.pad + col as f32 * self.cell_w;
+                let y = self.pad + row as f32 * self.cell_h;
+                let mut fg = resolve(cell.fg, default_fg);
+                let mut bg = resolve(cell.bg, default_bg);
+                if cell.attrs.is(crate::vt::Attrs::INVERSE) {
+                    std::mem::swap(&mut fg, &mut bg);
+                }
+                self.staging.push(Instance::fill(
+                    [x, y],
+                    [self.cell_w, self.cell_h],
+                    [bg[0], bg[1], bg[2], 1.],
+                ));
+                if matches!(
+                    cell.content,
+                    CellContent::WideCharSpacer | CellContent::Empty
+                ) || cell.attrs.is(crate::vt::Attrs::INVISIBLE)
+                {
+                    continue;
+                }
+                let text = match &cell.content {
+                    CellContent::Char(c) | CellContent::WideChar(c) => {
+                        char::from_u32(*c).unwrap_or('\u{fffd}').to_string()
+                    }
+                    CellContent::Cluster(s) => s.to_string(),
+                    _ => continue,
+                };
+                let alpha = if cell.attrs.is(crate::vt::Attrs::DIM) {
+                    0.55
+                } else {
+                    1.
+                };
+                let cell_width = cell.content.width().max(1) as f32 * self.cell_w;
+                for shaped in self.atlas.text(&text) {
+                    let g = shaped.glyph;
+                    let mut inst = Instance::glyph(
+                        [
+                            x + shaped.x + g.left as f32,
+                            y + baseline - g.top as f32 - shaped.y,
+                        ],
+                        [g.w as f32, g.h as f32],
+                        [g.x as f32 / atlas_px, g.y as f32 / atlas_px],
+                        [(g.x + g.w) as f32 / atlas_px, (g.y + g.h) as f32 / atlas_px],
+                        [fg[0], fg[1], fg[2], alpha],
+                    );
+                    // Clip to the owning row and terminal cell allocation before upload.
+                    if clip_glyph(&mut inst, [x, y], [x + cell_width, y + self.cell_h]) {
+                        foreground.push(inst);
+                        if cell.attrs.is(crate::vt::Attrs::BOLD) {
+                            let mut bold = inst;
+                            bold.pos[0] += 0.65;
+                            if clip_glyph(&mut bold, [x, y], [x + cell_width, y + self.cell_h]) {
+                                foreground.push(bold);
+                            }
+                        }
+                        if cell.attrs.is(crate::vt::Attrs::ITALIC) {
+                            foreground.last_mut().unwrap().pad[0] = 0.12;
+                        }
+                    }
+                }
+                let color = [fg[0], fg[1], fg[2], alpha];
+                if cell.attrs.underline_style() > 0 {
+                    foreground.push(Instance::fill(
+                        [x, y + self.cell_h - 2.],
+                        [cell_width, 1.],
+                        color,
                     ));
                 }
-
-                let cp = match &cell.content {
-                    CellContent::Empty | CellContent::WideCharSpacer => continue,
-                    CellContent::Char(c) | CellContent::WideChar(c) => *c,
-                    CellContent::Cluster(s) => match s.chars().next() {
-                        Some(c) => c as u32,
-                        None => continue,
-                    },
-                };
-                let fg = resolve(cell.fg, default_fg);
-                let alpha = if cell.attrs.is(crate::vt::Attrs::INVISIBLE) {
-                    0.0
-                } else {
-                    1.0
-                };
-                if alpha == 0.0 {
-                    continue;
+                if cell.attrs.is(crate::vt::Attrs::STRIKETHROUGH) {
+                    foreground.push(Instance::fill(
+                        [x, y + self.cell_h * 0.55],
+                        [cell_width, 1.],
+                        color,
+                    ));
                 }
-                let Some(g) = self.atlas.get(cp) else { continue };
-                let x = base_x + g.left as f32;
-                let y = cell_y + baseline_pad + ascent - g.top as f32;
-                // Actual glyph rendering with atlas sampling and proper color.
-                let uv0 = [g.x as f32 / atlas_px, g.y as f32 / atlas_px];
-                let uv1 = [(g.x + g.w) as f32 / atlas_px, (g.y + g.h) as f32 / atlas_px];
-                self.staging.push(Instance::glyph(
-                    [x, y],
-                    [g.w as f32, g.h as f32],
-                    uv0,
-                    uv1,
-                    [fg[0], fg[1], fg[2], alpha],
-                ));
+                if cell.attrs.is(crate::vt::Attrs::OVERLINE) {
+                    foreground.push(Instance::fill([x, y], [cell_width, 1.], color));
+                }
             }
         }
-
-        // The cursor, drawn as an underline block. A real terminal shows a hollow
-        // block when unfocused and a solid one when focused; only the unfocused
-        // form is drawn here.
-        let cur = grid.cursor;
-        self.staging.push(Instance::fill(
-            [
-                self.pad + cur.col as f32 * self.cell_w,
-                self.pad + (cur.row as f32 + 1.0) * self.cell_h - 2.0,
-            ],
-            [self.cell_w, 2.0],
-            [default_fg[0], default_fg[1], default_fg[2], 0.85],
-        ));
-
+        self.staging.extend(foreground);
+        let cur = screen.cursor;
+        if cur.visible {
+            let x = self.pad + cur.col as f32 * self.cell_w;
+            let y = self.pad + cur.row as f32 * self.cell_h;
+            let (pos, size) = match screen.cursor_style {
+                3 | 4 => ([x, y + self.cell_h - 2.], [self.cell_w, 2.]),
+                5 | 6 => ([x, y], [2., self.cell_h]),
+                _ => ([x, y], [self.cell_w, self.cell_h]),
+            };
+            self.staging.push(Instance::fill(
+                pos,
+                size,
+                [default_fg[0], default_fg[1], default_fg[2], 0.45],
+            ));
+        }
         self.count = self.staging.len();
-
-        if false {
-            self.debug_frame = 0;
-            let mut shown = 0;
-            for inst in &self.staging {
-                if inst.solid > 0.5 {
-                    continue;
-                }
-                eprintln!(
-                    "[glyph] pos={:?} size={:?} uv0={:?} uv1={:?} color={:?} solid={}",
-                    inst.pos, inst.size, inst.uv0, inst.uv1, inst.color, inst.solid
-                );
-                shown += 1;
-                if shown >= 5 {
-                    break;
-                }
-            }
-            eprintln!("[glyph] total instances={}", self.staging.len());
-            let nz = self.atlas.pixels.iter().filter(|b| **b != 0).count();
-            let maxv = self.atlas.pixels.iter().copied().max().unwrap_or(0);
-            eprintln!("[atlas] non-zero bytes={nz} max={maxv} full={}", self.atlas.full);
-        }
         let _ = (width, height);
     }
 
@@ -401,10 +412,7 @@ let default_bg = [0.1569, 0.1647, 0.2118];  // Dracula background: #282a36
             0,
             bytemuck::bytes_of(&Uniforms {
                 viewport: [width as f32, height as f32],
-                atlas: [
-                    self.atlas.size_px() as f32,
-                    self.atlas.size_px() as f32,
-                ],
+                atlas: [self.atlas.size_px() as f32, self.atlas.size_px() as f32],
             }),
         );
 
@@ -441,14 +449,22 @@ let default_bg = [0.1569, 0.1647, 0.2118];  // Dracula background: #282a36
                 self.capacity
             );
             for (i, inst) in self.staging.iter().take(4).enumerate() {
-                eprintln!("[draw] inst{i}: pos={:?} size={:?} color={:?} solid={}", inst.pos, inst.size, inst.color, inst.solid);
+                eprintln!(
+                    "[draw] inst{i}: pos={:?} size={:?} color={:?} solid={}",
+                    inst.pos, inst.size, inst.color, inst.solid
+                );
             }
         }
     }
 
     /// (quads, glyphs rasterised, blank glyphs, true fallback misses)
     pub fn stats(&self) -> (usize, u32, u32, u32) {
-        (self.count, self.atlas.rasterized, self.atlas.blank, self.atlas.missing.len() as u32)
+        (
+            self.count,
+            self.atlas.rasterized,
+            self.atlas.blank,
+            self.atlas.missing.len() as u32,
+        )
     }
 }
 
@@ -492,4 +508,26 @@ fn make_instance_buffer(device: &wgpu::Device, capacity: usize) -> wgpu::Buffer 
         usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
         mapped_at_creation: false,
     })
+}
+fn clip_glyph(inst: &mut Instance, low: [f32; 2], high: [f32; 2]) -> bool {
+    for axis in 0..2 {
+        let start = inst.pos[axis];
+        let size = inst.size[axis];
+        if size <= 0. {
+            return false;
+        }
+        let end = start + size;
+        let a = start.max(low[axis]);
+        let b = end.min(high[axis]);
+        if b <= a {
+            return false;
+        }
+        let uv0 = inst.uv0[axis];
+        let span = inst.uv1[axis] - uv0;
+        inst.uv0[axis] = uv0 + span * (a - start) / size;
+        inst.uv1[axis] = uv0 + span * (b - start) / size;
+        inst.pos[axis] = a;
+        inst.size[axis] = b - a;
+    }
+    true
 }

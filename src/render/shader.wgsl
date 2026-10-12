@@ -23,6 +23,7 @@ struct Instance {
     // them and they rendered as solid blocks. That is what made the text look
     // like a glowing outline, and what blanked the screen on resize.
     solid: f32,
+    italic: f32,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -49,7 +50,7 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VSOut
     );
     let c = corners[vi];
 
-    let px = inst.pos + c * inst.size;
+    let px = inst.pos + c * inst.size + vec2<f32>((1.0 - c.y) * inst.italic * inst.size.y,0.0);
     // Screen space is y-down; clip space is y-up.
     let ndc = vec2<f32>(
         px.x / max(u.viewport.x, 1.0) * 2.0 - 1.0,
@@ -70,7 +71,7 @@ fn fs(in: VSOut) -> @location(0) vec4<f32> {
     if (in.solid > 0.5) {
         return in.color;
     }
-    let a = textureSample(atlas_tex, atlas_smp, in.uv).r;
+    let tex = textureSample(atlas_tex, atlas_smp, in.uv);
     // Straight (non-premultiplied) alpha, matching ALPHA_BLENDING below.
-    return vec4<f32>(in.color.rgb, in.color.a * a);
+    return vec4<f32>(in.color.rgb * tex.rgb, in.color.a * tex.a);
 }

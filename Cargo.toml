@@ -16,12 +16,12 @@ wgpu = { version = "29", default-features = false, features = [
 ] }
 log = "0.4"
 env_logger = "0.11"
-winres = { version = "0.1.12", optional = true }
+unicode-width = "=0.2.2"
+unicode-segmentation = "=1.13.3"
 
 # D6 decision: the pure-Rust rasterisation stack is the primary backend.
-# fontdb discovers system fonts, swash+zeno rasterises. Both are C-free and
-# currently sit in the tree as dev-dependencies for `examples/font_spike.rs`;
-# the renderer needs them at runtime, so they are declared here.
+# fontdb discovers system fonts; swash shapes clusters and rasterises glyphs.
+# Both are C-free runtime infrastructure behind Juna's renderer API.
 fontdb = "0.23"
 swash = "0.2"
 # Needed for Pod/ZeroSafe casts between Rust structs and GPU buffers.
@@ -30,14 +30,16 @@ bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 
-# Windows-only, and used for exactly one call: AttachConsole, so a GUI-subsystem
-# binary launched from a terminal still writes diagnostics there instead of
-# growing its own console window. Feature is pinned to that one module.
+# Windows-only platform access: parent console attachment, Unicode clipboard
+# ownership/memory, and visible failure dialogs. No child token/elevation API.
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.61"
 features = [
     "Win32_Foundation",
     "Win32_System_Console",
+    "Win32_System_DataExchange",
+    "Win32_System_Memory",
+    "Win32_UI_WindowsAndMessaging",
 ]
 
 # Windows-only. conpty-oxide carries `compile_error!` under `cfg(not(windows))`,
@@ -48,7 +50,7 @@ features = [
 # A Unix PTY backend will be a separate implementation behind the same session
 # seam -- see ARCHITECTURE.md 3.9.
 [target.'cfg(windows)'.dependencies]
-conpty-oxide = "0.1.2"
+conpty-oxide = "=0.1.2"
 
 [target.'cfg(windows)'.dev-dependencies]
-conpty-oxide = "0.1.2"
+conpty-oxide = "=0.1.2"

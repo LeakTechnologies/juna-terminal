@@ -52,6 +52,8 @@ pub struct Grid {
     /// screen is active, and both facts live in `TerminalState`. So the grid
     /// records them and the engine decides.
     pending_history: Vec<Vec<Cell>>,
+    wrapped: Vec<bool>,
+    pending_wrapped: Vec<bool>,
 }
 
 impl Grid {
@@ -75,6 +77,8 @@ impl Grid {
             default_fg: Color::Default,
             autowrap: true,
             pending_history: Vec::new(),
+            wrapped: vec![false; rows as usize],
+            pending_wrapped: Vec::new(),
         };
         g.reset_tabs();
         g
@@ -92,7 +96,8 @@ impl Grid {
         if row >= self.rows || col >= self.cols {
             return None;
         }
-        self.cells.get(row as usize * self.cols as usize + col as usize)
+        self.cells
+            .get(row as usize * self.cols as usize + col as usize)
     }
 
     pub fn cell_mut(&mut self, row: u16, col: u16) -> Option<&mut Cell> {
@@ -112,6 +117,10 @@ impl Grid {
     }
 
     pub fn fill_row(&mut self, row: u16, cell: Cell) {
+        if row >= self.rows {
+            return;
+        }
+        self.wrapped[row as usize] = false;
         let start = row as usize * self.cols as usize;
         for i in 0..self.cols as usize {
             self.cells[start + i] = cell.clone();
@@ -129,6 +138,7 @@ impl Grid {
         for i in 0..width {
             self.cells[dst + i] = self.cells[src + i].clone();
         }
+        self.wrapped[to as usize] = self.wrapped[from as usize];
     }
 
     /// Copies one cell onto another, validated at the boundary.
@@ -142,7 +152,12 @@ impl Grid {
     }
 
     pub fn scroll_region(&self) -> (u16, u16, u16, u16) {
-        (self.scroll_top, self.scroll_bottom, self.scroll_left, self.scroll_right)
+        (
+            self.scroll_top,
+            self.scroll_bottom,
+            self.scroll_left,
+            self.scroll_right,
+        )
     }
 
     pub fn set_scroll_region(&mut self, top: u16, bottom: u16) {
@@ -220,6 +235,8 @@ impl Grid {
         let cols = cols.clamp(1, MAX_COLS);
         let rows = rows.clamp(1, MAX_ROWS);
         let mut pushed = Vec::new();
+        let full_vertical = self.scroll_top == 0 && self.scroll_bottom == self.rows - 1;
+        let full_horizontal = self.scroll_left == 0 && self.scroll_right == self.cols - 1;
         if cols != self.cols {
             self.set_cols(cols);
         }
@@ -229,8 +246,23 @@ impl Grid {
         self.cursor.row = self.cursor.row.min(self.rows - 1);
         self.cursor.col = self.cursor.col.min(self.cols - 1);
         self.wrap_pending = false;
-        self.scroll_bottom = self.scroll_bottom.min(self.rows - 1);
-        self.scroll_right = self.scroll_right.min(self.cols - 1);
+        self.scroll_bottom = if full_vertical {
+            self.rows - 1
+        } else {
+            self.scroll_bottom.min(self.rows - 1)
+        };
+        self.scroll_top = self.scroll_top.min(self.scroll_bottom);
+        self.scroll_right = if full_horizontal {
+            self.cols - 1
+        } else {
+            self.scroll_right.min(self.cols - 1)
+        };
+        self.scroll_left = self.scroll_left.min(self.scroll_right);
+        if let Some(saved) = self.saved_cursor.as_mut() {
+            saved.cursor.row = saved.cursor.row.min(self.rows - 1);
+            saved.cursor.col = saved.cursor.col.min(self.cols - 1);
+            saved.wrap_pending = false;
+        }
         pushed
     }
 
@@ -249,8 +281,14 @@ impl Grid {
         }
         self.cells = next;
         self.cols = cols;
+        let old_tabs = self.tabs.len();
         self.tabs.resize(cols as usize, false);
-        self.reset_tabs();
+        for c in old_tabs..cols as usize {
+            self.tabs[c] = c % 8 == 0;
+        }
+        for row in 0..self.rows {
+            self.repair_wide(row);
+        }
     }
 
     fn set_rows(&mut self, rows: u16) -> Vec<u16> {
@@ -258,14 +296,19 @@ impl Grid {
         let mut pushed = Vec::new();
         if rows < old {
             let dropped = (old - rows) as usize;
-            let start = rows as usize * self.cols as usize;
-            for i in 0..dropped {
-                let idx = start + i;
-                if idx < self.cells.len() {
-                    pushed.push(idx as u16);
-                }
+            // Keep the live cursor visible, moving displaced top rows to history.
+            let shift = dropped.min(self.cursor.row.saturating_sub(rows - 1) as usize);
+            for r in 0..shift {
+                self.pending_history
+                    .push(self.row_slice(r as u16).unwrap().to_vec());
+                self.pending_wrapped.push(self.wrapped[r]);
+                pushed.push(r as u16);
             }
-            self.cells.truncate(start);
+            self.cells.drain(..shift * self.cols as usize);
+            self.wrapped.drain(..shift);
+            self.cursor.row = self.cursor.row.saturating_sub(shift as u16);
+            self.cells.truncate(rows as usize * self.cols as usize);
+            self.wrapped.truncate(rows as usize);
         } else {
             let extra = (rows - old) as usize;
             let blank = Cell::default();
@@ -275,6 +318,7 @@ impl Grid {
                 }
             }
         }
+        self.wrapped.resize(rows as usize, false);
         self.rows = rows;
         pushed
     }
@@ -292,23 +336,29 @@ impl Grid {
     }
 
     fn scroll_region_impl(&mut self, top: u16, bottom: u16, n: u16, up: bool) {
-        let height = bottom.saturating_sub(top);
-        if height == 0 || n == 0 {
+        let height = bottom.saturating_sub(top) + 1;
+        if n == 0 {
             return;
         }
         let n = n.min(height);
         let width = self.cols as usize;
         let mut removed = Vec::with_capacity(n as usize);
-        for _ in 0..n {
+        for offset in 0..n {
             let idx = if up {
-                top as usize
+                (top + offset) as usize
             } else {
                 bottom as usize
             };
             let start = idx * width;
             removed.push(self.cells[start..start + width].to_vec());
+            if up {
+                self.pending_wrapped.push(self.wrapped[idx]);
+            }
         }
-        let blank = Cell::default();
+        let blank = Cell {
+            bg: self.default_bg,
+            ..Cell::default()
+        };
         let region = &mut self.cells[top as usize * width..(bottom as usize + 1) * width];
         let shift = n as usize * width;
         let len = region.len();
@@ -323,9 +373,23 @@ impl Grid {
             // history costs no extra allocation beyond the row the grid already
             // built for the scroll itself.
             self.pending_history.append(&mut removed);
+            for r in top..=bottom {
+                self.wrapped[r as usize] = if r + n <= bottom {
+                    self.wrapped[(r + n) as usize]
+                } else {
+                    false
+                };
+            }
         } else {
             for i in (0..len - shift).rev() {
-                region[i] = region[i + shift].clone();
+                region[i + shift] = region[i].clone();
+            }
+            for r in (top..=bottom).rev() {
+                self.wrapped[r as usize] = if r >= top + n {
+                    self.wrapped[(r - n) as usize]
+                } else {
+                    false
+                };
             }
             for c in region[..shift].iter_mut() {
                 *c = blank.clone();
@@ -342,7 +406,7 @@ impl Grid {
     }
 
     pub fn restore_cursor(&mut self) {
-        if let Some(s) = self.saved_cursor.take() {
+        if let Some(s) = self.saved_cursor {
             self.cursor = s.cursor;
             self.origin_mode = s.origin_mode;
             self.wrap_pending = s.wrap_pending;
@@ -354,17 +418,22 @@ impl Grid {
         if col + 1 >= self.cols || row >= self.rows {
             return false;
         }
+        self.clear_wide_at(row, col);
+        self.clear_wide_at(row, col + 1);
         if let Some(c) = self.cell_mut(row, col) {
+            *c = cell.clone();
             c.content = CellContent::WideChar(cp);
         }
         if let Some(c) = self.cell_mut(row, col + 1) {
+            *c = cell;
             c.content = CellContent::WideCharSpacer;
         }
-        let _ = cell;
         true
     }
 
     pub fn clear_row_range(&mut self, row: u16, from: u16, to: u16, cell: Cell) {
+        self.clear_wide_at(row, from);
+        self.clear_wide_at(row, to);
         let from = from.min(to);
         let to = to.min(self.cols - 1);
         for col in from..=to {
@@ -419,7 +488,67 @@ impl Grid {
     /// Scrolling *down* never records history: it pulls blank lines in at the top,
     /// so nothing left the screen.
     pub fn take_pending_history(&mut self) -> Vec<Vec<Cell>> {
+        self.pending_wrapped.clear();
         std::mem::take(&mut self.pending_history)
+    }
+
+    pub fn take_history(&mut self) -> Vec<(Vec<Cell>, bool)> {
+        std::mem::take(&mut self.pending_history)
+            .into_iter()
+            .zip(std::mem::take(&mut self.pending_wrapped))
+            .collect()
+    }
+
+    pub fn mark_wrapped(&mut self) {
+        self.wrapped[self.cursor.row as usize] = true;
+    }
+    pub fn row_wrapped(&self, row: u16) -> bool {
+        self.wrapped.get(row as usize).copied().unwrap_or(false)
+    }
+    pub fn clear_wide_at(&mut self, row: u16, col: u16) {
+        let Some(cell) = self.cell(row, col) else {
+            return;
+        };
+        let start = if cell.content == CellContent::WideCharSpacer {
+            col.saturating_sub(1)
+        } else {
+            col
+        };
+        let wide = self
+            .cell(row, start)
+            .is_some_and(|c| c.content.width() == 2);
+        if wide {
+            for c in start..=start.saturating_add(1) {
+                if let Some(v) = self.cell_mut(row, c) {
+                    v.content = CellContent::Empty;
+                }
+            }
+        }
+    }
+    pub fn repair_wide(&mut self, row: u16) {
+        for c in 0..self.cols {
+            let Some(cell) = self.cell(row, c) else {
+                continue;
+            };
+            let orphan = match cell.content {
+                CellContent::WideCharSpacer => {
+                    c == 0
+                        || !self
+                            .cell(row, c - 1)
+                            .is_some_and(|v| v.content.width() == 2)
+                }
+                _ if cell.content.width() == 2 => {
+                    c + 1 >= self.cols
+                        || !self
+                            .cell(row, c + 1)
+                            .is_some_and(|v| v.content == CellContent::WideCharSpacer)
+                }
+                _ => false,
+            };
+            if orphan {
+                self.cell_mut(row, c).unwrap().content = CellContent::Empty;
+            }
+        }
     }
 
     /// True when the scroll region covers the whole screen. Lines leaving a
@@ -499,7 +628,10 @@ mod tests {
     fn scroll_up_removes_from_the_top_and_blanks_the_bottom() {
         let mut g = Grid::new(3, 3);
         for r in 0..3u16 {
-            g.cell_mut(r, 0).unwrap().attrs.set(crate::vt::cell::Attrs::BOLD, r == 1);
+            g.cell_mut(r, 0)
+                .unwrap()
+                .attrs
+                .set(crate::vt::cell::Attrs::BOLD, r == 1);
         }
         g.scroll_up(1);
         let removed = g.take_pending_history();
@@ -517,7 +649,10 @@ mod tests {
         let mut g = Grid::new(3, 3);
         for r in 0..3u16 {
             for c in 0..3u16 {
-                g.cell_mut(r, c).unwrap().attrs.set(crate::vt::cell::Attrs::BOLD, r == 2);
+                g.cell_mut(r, c)
+                    .unwrap()
+                    .attrs
+                    .set(crate::vt::cell::Attrs::BOLD, r == 0);
             }
         }
         g.scroll_down(1);
@@ -530,7 +665,10 @@ mod tests {
         let mut g = Grid::new(3, 4);
         g.set_scroll_region(1, 2);
         for r in 0..4u16 {
-            g.cell_mut(r, 0).unwrap().attrs.set(crate::vt::cell::Attrs::BOLD, r == 0);
+            g.cell_mut(r, 0)
+                .unwrap()
+                .attrs
+                .set(crate::vt::cell::Attrs::BOLD, r == 0);
         }
         g.scroll_up(1);
         assert!(
@@ -579,9 +717,18 @@ mod tests {
     fn wide_write_places_the_spacer_and_refuses_the_edge() {
         let mut g = Grid::new(4, 2);
         assert!(g.write_wide(0, 0, u32::from('漢'), Cell::default()));
-        assert!(matches!(g.cell(0, 0).unwrap().content, CellContent::WideChar(_)));
-        assert!(matches!(g.cell(0, 1).unwrap().content, CellContent::WideCharSpacer));
-        assert!(!g.write_wide(0, 3, u32::from('漢'), Cell::default()), "edge must be refused");
+        assert!(matches!(
+            g.cell(0, 0).unwrap().content,
+            CellContent::WideChar(_)
+        ));
+        assert!(matches!(
+            g.cell(0, 1).unwrap().content,
+            CellContent::WideCharSpacer
+        ));
+        assert!(
+            !g.write_wide(0, 3, u32::from('漢'), Cell::default()),
+            "edge must be refused"
+        );
         assert!(!g.write_wide(9, 0, u32::from('漢'), Cell::default()));
     }
 
@@ -590,7 +737,10 @@ mod tests {
         let mut g = Grid::new(4, 4);
         for r in 0..4u16 {
             for c in 0..4u16 {
-                g.cell_mut(r, c).unwrap().attrs.set(crate::vt::cell::Attrs::BOLD, r == 1 && c == 2);
+                g.cell_mut(r, c)
+                    .unwrap()
+                    .attrs
+                    .set(crate::vt::cell::Attrs::BOLD, r == 1 && c == 2);
             }
         }
         g.resize(6, 6);
@@ -606,7 +756,10 @@ mod tests {
     fn narrowing_discards_columns_beyond_the_new_edge() {
         let mut g = Grid::new(4, 4);
         for c in 0..4u16 {
-            g.cell_mut(1, c).unwrap().attrs.set(crate::vt::cell::Attrs::BOLD, c == 2);
+            g.cell_mut(1, c)
+                .unwrap()
+                .attrs
+                .set(crate::vt::cell::Attrs::BOLD, c == 2);
         }
         g.resize(2, 2);
         assert_eq!((g.cols(), g.rows()), (2, 2));

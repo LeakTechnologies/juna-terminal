@@ -41,12 +41,12 @@ fn drive(lines: &[&str], cols: u16, rows: u16) -> (String, String, i32) {
         let mut reader = parts.reader;
         let mut buf = [0u8; 8192];
         loop {
+            if pump.wait_for_capacity(buf.len()) != ReadState::Open {
+                break;
+            }
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    if pump.wait_for_capacity(n) != ReadState::Open {
-                        break;
-                    }
                     pump.push(&buf[..n]);
                 }
                 Err(_) => break,
@@ -98,7 +98,9 @@ fn cell_text(c: &juna::vt::CellContent) -> String {
     match c {
         juna::vt::CellContent::Empty | juna::vt::CellContent::WideCharSpacer => " ".into(),
         juna::vt::CellContent::Char(cp) | juna::vt::CellContent::WideChar(cp) => {
-            char::from_u32(*cp).map(String::from).unwrap_or_else(|| "?".into())
+            char::from_u32(*cp)
+                .map(String::from)
+                .unwrap_or_else(|| "?".into())
         }
         juna::vt::CellContent::Cluster(s) => s.to_string(),
     }
@@ -108,7 +110,12 @@ fn render(term: &TerminalState) -> String {
     let mut out = String::new();
     for r in 0..term.grid().rows() {
         if let Some(cells) = term.grid().row_slice(r) {
-            out.push_str(&cells.iter().map(|c| cell_text(&c.content)).collect::<String>());
+            out.push_str(
+                &cells
+                    .iter()
+                    .map(|c| cell_text(&c.content))
+                    .collect::<String>(),
+            );
         }
         out.push('\n');
     }
@@ -123,7 +130,12 @@ fn render_history(term: &TerminalState) -> String {
     let mut out = String::new();
     for i in 0..term.scrollback_len() {
         if let Some(cells) = term.scrollback_line(i) {
-            out.push_str(&cells.iter().map(|c| cell_text(&c.content)).collect::<String>());
+            out.push_str(
+                &cells
+                    .iter()
+                    .map(|c| cell_text(&c.content))
+                    .collect::<String>(),
+            );
         }
         out.push('\n');
     }
@@ -172,7 +184,9 @@ fn output_longer_than_the_window_reaches_scrollback() {
     // 120 lines into a 12-row window: the last line must be on screen and the
     // first must survive in history. Before the history wiring this failed with
     // scrollback empty, because nothing ever called Scrollback::push.
-    let mut lines: Vec<String> = (1..=120).map(|i| format!("echo JUNA_SCROLL_{i:04}")).collect();
+    let mut lines: Vec<String> = (1..=120)
+        .map(|i| format!("echo JUNA_SCROLL_{i:04}"))
+        .collect();
     lines.push("exit".into());
     let refs: Vec<&str> = lines.iter().map(String::as_str).collect();
 
@@ -239,5 +253,8 @@ fn sustained_high_volume_output_is_not_truncated() {
         "the final sentinel proves nothing after it was dropped"
     );
     // And the run must actually have produced them, not simply been skipped.
-    assert!(history.contains("JUNA_BULK_1"), "history is empty: {history}");
+    assert!(
+        history.contains("JUNA_BULK_1"),
+        "history is empty: {history}"
+    );
 }

@@ -38,7 +38,11 @@ impl Params {
     }
 
     pub fn get_or(&self, index: usize, default: u16) -> u16 {
-        self.values.get(index).copied().filter(|v| *v != 0).unwrap_or(default)
+        self.values
+            .get(index)
+            .copied()
+            .filter(|v| *v != 0)
+            .unwrap_or(default)
     }
 
     pub fn len(&self) -> usize {
@@ -89,6 +93,7 @@ pub struct Parser {
     intermediates: Vec<u8>,
     private: Option<u8>,
     string: Vec<u8>,
+    string_utf8_need: usize,
     truncated: bool,
     dcs_final: Option<u8>,
     esc_string: Option<State>,
@@ -114,6 +119,7 @@ impl Parser {
             intermediates: Vec::new(),
             private: None,
             string: Vec::new(),
+            string_utf8_need: 0,
             truncated: false,
             dcs_final: None,
             esc_string: None,
@@ -185,7 +191,8 @@ impl Parser {
                 self.clear_sequence();
                 self.state = State::Escape;
             }
-            0x20..=0x7F => self.actions.push(Action::Print(u32::from(b))),
+            0x20..=0x7E => self.actions.push(Action::Print(u32::from(b))),
+            0x7F => {}
             0x80..=0x9F => self.c1(b),
             _ => self.utf8_byte(b),
         }
@@ -221,7 +228,7 @@ impl Parser {
             Utf8State::Idle => {
                 if b < 0x80 {
                     self.actions.push(Action::Print(u32::from(b)));
-} else if (0xC2..=0xDF).contains(&b) {
+                } else if (0xC2..=0xDF).contains(&b) {
                     self.begin_utf8(2);
                     self.utf8[0] = b;
                 } else if (0xE0..=0xEF).contains(&b) {
@@ -246,7 +253,7 @@ impl Parser {
                     self.utf8_state = Utf8State::Idle;
                     self.utf8_len = 0;
                     self.ground(b);
-}
+                }
             }
         }
     }
@@ -292,7 +299,7 @@ impl Parser {
                     self.esc_string = Some(self.state);
                     self.state = State::Escape;
                 }
-                0x9C => self.finish_string(),
+                0x9C if self.string_utf8_need == 0 => self.finish_string(),
                 0x18 | 0x1A => self.abort(),
                 _ => self.string_byte(b),
             }
@@ -345,7 +352,11 @@ impl Parser {
                         self.state = State::SosPmApcString;
                     }
                     _ if (0x20..=0x2F).contains(&b) => {
-                        self.intermediates.push(b);
+                        if self.intermediates.len() < 4 {
+                            self.intermediates.push(b);
+                        } else {
+                            self.state = State::CsiIgnore;
+                        }
                         self.state = State::EscapeIntermediate;
                     }
                     _ if (0x30..=0x7E).contains(&b) => {
@@ -358,7 +369,11 @@ impl Parser {
             }
             State::EscapeIntermediate => {
                 if (0x20..=0x2F).contains(&b) {
-                    self.intermediates.push(b);
+                    if self.intermediates.len() < 4 {
+                        self.intermediates.push(b);
+                    } else {
+                        self.state = State::CsiIgnore;
+                    }
                 } else if (0x30..=0x7E).contains(&b) {
                     self.dispatch_escape(b);
                 } else {
@@ -372,7 +387,11 @@ impl Parser {
                 } else if (0x3C..=0x3F).contains(&b) {
                     self.private = Some(b);
                 } else if (0x20..=0x2F).contains(&b) {
-                    self.intermediates.push(b);
+                    if self.intermediates.len() < 4 {
+                        self.intermediates.push(b);
+                    } else {
+                        self.state = State::CsiIgnore;
+                    }
                     self.state = State::CsiIntermediate;
                 } else if (0x40..=0x7E).contains(&b) {
                     self.dispatch_csi(b);
@@ -384,7 +403,11 @@ impl Parser {
                 if (0x30..=0x3F).contains(&b) {
                     self.param_byte(b);
                 } else if (0x20..=0x2F).contains(&b) {
-                    self.intermediates.push(b);
+                    if self.intermediates.len() < 4 {
+                        self.intermediates.push(b);
+                    } else {
+                        self.state = State::CsiIgnore;
+                    }
                     self.state = State::CsiIntermediate;
                 } else if (0x40..=0x7E).contains(&b) {
                     self.dispatch_csi(b);
@@ -394,7 +417,11 @@ impl Parser {
             }
             State::CsiIntermediate => {
                 if (0x20..=0x2F).contains(&b) {
-                    self.intermediates.push(b);
+                    if self.intermediates.len() < 4 {
+                        self.intermediates.push(b);
+                    } else {
+                        self.state = State::CsiIgnore;
+                    }
                 } else if (0x30..=0x3F).contains(&b) {
                     self.state = State::CsiIgnore;
                 } else if (0x40..=0x7E).contains(&b) {
@@ -415,7 +442,11 @@ impl Parser {
                     self.param_byte(b);
                     self.state = State::DcsParam;
                 } else if (0x20..=0x2F).contains(&b) {
-                    self.intermediates.push(b);
+                    if self.intermediates.len() < 4 {
+                        self.intermediates.push(b);
+                    } else {
+                        self.state = State::CsiIgnore;
+                    }
                     self.state = State::DcsIntermediate;
                 } else if (0x40..=0x7E).contains(&b) {
                     self.dcs_final = Some(b);
@@ -430,7 +461,11 @@ impl Parser {
                 if (0x30..=0x3F).contains(&b) {
                     self.param_byte(b);
                 } else if (0x20..=0x2F).contains(&b) {
-                    self.intermediates.push(b);
+                    if self.intermediates.len() < 4 {
+                        self.intermediates.push(b);
+                    } else {
+                        self.state = State::CsiIgnore;
+                    }
                     self.state = State::DcsIntermediate;
                 } else if (0x40..=0x7E).contains(&b) {
                     self.dcs_final = Some(b);
@@ -443,7 +478,11 @@ impl Parser {
             }
             State::DcsIntermediate => {
                 if (0x20..=0x2F).contains(&b) {
-                    self.intermediates.push(b);
+                    if self.intermediates.len() < 4 {
+                        self.intermediates.push(b);
+                    } else {
+                        self.state = State::CsiIgnore;
+                    }
                 } else if (0x40..=0x7E).contains(&b) {
                     self.dcs_final = Some(b);
                     self.string.clear();
@@ -466,6 +505,9 @@ impl Parser {
 
     fn param_byte(&mut self, b: u8) {
         if b == b';' || b == b':' {
+            if self.params.values.is_empty() && self.current_param.is_none() {
+                self.current_param = Some(0);
+            }
             self.commit_param();
             if self.params.values.len() >= MAX_PARAMS {
                 self.params.overflow = true;
@@ -497,6 +539,7 @@ impl Parser {
         self.intermediates.clear();
         self.private = None;
         self.string.clear();
+        self.string_utf8_need = 0;
         self.truncated = false;
         self.dcs_final = None;
         self.esc_string = None;
@@ -508,10 +551,20 @@ impl Parser {
     }
 
     fn string_byte(&mut self, b: u8) {
-        if b == 0x07 {
+        if b == 0x07 && self.state == State::OscString {
             self.finish_string();
             return;
         }
+        self.string_utf8_need = if self.string_utf8_need > 0 && (0x80..=0xbf).contains(&b) {
+            self.string_utf8_need - 1
+        } else {
+            match b {
+                0xc2..=0xdf => 1,
+                0xe0..=0xef => 2,
+                0xf0..=0xf4 => 3,
+                _ => 0,
+            }
+        };
         if self.string.len() >= MAX_OSC {
             self.truncated = true;
             return;
@@ -523,10 +576,9 @@ impl Parser {
         let payload = String::from_utf8_lossy(&self.string).into_owned();
         let truncated = self.truncated;
         match self.state {
-            State::OscString => self.actions.push(Action::OscDispatch {
-                truncated,
-                payload,
-            }),
+            State::OscString => self
+                .actions
+                .push(Action::OscDispatch { truncated, payload }),
             State::DcsPassthrough => {
                 let final_byte = self.dcs_final.unwrap_or(0);
                 self.commit_param();
@@ -583,7 +635,10 @@ mod tests {
 
     #[test]
     fn c0_controls_execute() {
-        assert_eq!(parse(b"\r\n"), vec![Action::Execute(0x0D), Action::Execute(0x0A)]);
+        assert_eq!(
+            parse(b"\r\n"),
+            vec![Action::Execute(0x0D), Action::Execute(0x0A)]
+        );
     }
 
     #[test]
@@ -592,7 +647,10 @@ mod tests {
             parse(b"\x1b[1;31m"),
             vec![Action::CsiDispatch {
                 private: None,
-                params: Params { values: vec![1, 31], overflow: false },
+                params: Params {
+                    values: vec![1, 31],
+                    overflow: false
+                },
                 intermediates: vec![],
                 final_byte: b'm',
             }]
@@ -603,7 +661,12 @@ mod tests {
     fn private_csi_marks_the_prefix() {
         let a = parse(b"\x1b[?25l");
         match &a[0] {
-            Action::CsiDispatch { private, params, final_byte, .. } => {
+            Action::CsiDispatch {
+                private,
+                params,
+                final_byte,
+                ..
+            } => {
                 assert_eq!(*private, Some(b'?'));
                 assert_eq!(params.get(0), 25);
                 assert_eq!(*final_byte, b'l');
@@ -640,7 +703,10 @@ mod tests {
     fn osc_terminates_on_bel() {
         assert_eq!(
             parse(b"\x1b]0;title\x07"),
-            vec![Action::OscDispatch { truncated: false, payload: "0;title".into() }]
+            vec![Action::OscDispatch {
+                truncated: false,
+                payload: "0;title".into()
+            }]
         );
     }
 
@@ -648,7 +714,10 @@ mod tests {
     fn osc_terminates_on_string_terminator() {
         assert_eq!(
             parse(b"\x1b]0;title\x1b\\"),
-            vec![Action::OscDispatch { truncated: false, payload: "0;title".into() }]
+            vec![Action::OscDispatch {
+                truncated: false,
+                payload: "0;title".into()
+            }]
         );
     }
 
@@ -663,7 +732,7 @@ mod tests {
 
     #[test]
     fn malformed_csi_resynchronises_instead_of_hanging() {
-        let a = parse(b"\x1b[1;\x07" );
+        let a = parse(b"\x1b[1;\x07");
         assert!(!a.is_empty());
     }
 
@@ -711,15 +780,22 @@ mod tests {
     fn raw_c1_bytes_are_executed_not_decoded_as_utf8() {
         assert_eq!(
             parse(&[0x9D, b'a', 0x07]),
-            vec![Action::OscDispatch { truncated: false, payload: "a".into() }],
+            vec![Action::OscDispatch {
+                truncated: false,
+                payload: "a".into()
+            }],
             "0x9D is the 8-bit OSC introducer"
         );
     }
 
-#[test]
+    #[test]
     fn truncated_utf8_at_end_of_input_flushes_a_replacement() {
         let mut p = Parser::new();
-        assert_eq!(p.advance(&[0xE6, 0xBC]), Vec::new(), "must not flush per chunk");
+        assert_eq!(
+            p.advance(&[0xE6, 0xBC]),
+            Vec::new(),
+            "must not flush per chunk"
+        );
         assert_eq!(p.flush(), vec![Action::Print(0xFFFD)]);
     }
 
@@ -757,4 +833,3 @@ mod tests {
         }
     }
 }
-

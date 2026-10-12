@@ -30,6 +30,111 @@ pub struct SessionSpec {
     pub args: Vec<OsString>,
     pub cwd: Option<PathBuf>,
 }
+impl SessionSpec {
+    pub fn from_environment() -> io::Result<Self> {
+        let mut spec = Self {
+            program: std::env::var_os("JUNA_SHELL").unwrap_or_else(|| "powershell.exe".into()),
+            args: Vec::new(),
+            cwd: None,
+        };
+        let mut command = std::env::args_os().skip(1);
+        while let Some(arg) = command.next() {
+            if arg == "--shell" {
+                spec.program = command.next().ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidInput, "--shell requires a program")
+                })?;
+            } else if arg == "--" {
+                spec.args = command.collect();
+                return Ok(spec);
+            } else {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "usage: juna [--shell PROGRAM] [-- ARGS...]",
+                ));
+            }
+        }
+        if let Ok(args) = std::env::var("JUNA_SHELL_ARGS") {
+            spec.args = parse_arguments(&args)?;
+        }
+        Ok(spec)
+    }
+}
+/// Parse the legacy environment value with Windows quote/backslash rules.
+/// CLI arguments after `--` are already an argument vector and bypass this parser.
+pub fn parse_arguments(text: &str) -> io::Result<Vec<OsString>> {
+    let mut out = Vec::new();
+    let mut arg = String::new();
+    let mut quoted = false;
+    let mut active = false;
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            let mut slashes = 1;
+            while chars.peek() == Some(&'\\') {
+                chars.next();
+                slashes += 1;
+            }
+            if chars.peek() == Some(&'"') {
+                arg.extend(std::iter::repeat_n('\\', slashes / 2));
+                chars.next();
+                if slashes % 2 == 1 {
+                    arg.push('"');
+                } else {
+                    quoted = !quoted;
+                }
+            } else {
+                arg.extend(std::iter::repeat_n('\\', slashes));
+            }
+            active = true;
+        } else if c == '"' {
+            quoted = !quoted;
+            active = true;
+        } else if c.is_whitespace() && !quoted {
+            if active {
+                out.push(OsString::from(std::mem::take(&mut arg)));
+                active = false;
+            }
+        } else {
+            arg.push(c);
+            active = true;
+        }
+    }
+    if quoted {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "unclosed quote in JUNA_SHELL_ARGS",
+        ));
+    }
+    if active {
+        out.push(arg.into());
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod argument_tests {
+    #[test]
+    fn quoted_arguments_and_empty_elements_are_preserved() {
+        let args =
+            super::parse_arguments(r#"-NoProfile -Command "write 'a b'" "" "C:\with space\\""#)
+                .unwrap();
+        let args: Vec<_> = args
+            .iter()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            args,
+            vec![
+                "-NoProfile",
+                "-Command",
+                "write 'a b'",
+                "",
+                "C:\\with space\\"
+            ]
+        );
+        assert!(super::parse_arguments("\"unclosed").is_err());
+    }
+}
 
 /// Character-cell dimensions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

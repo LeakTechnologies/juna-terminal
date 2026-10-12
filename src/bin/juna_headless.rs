@@ -69,12 +69,8 @@ fn parse() -> Result<Opts, String> {
         };
         match a.as_str() {
             "--shell" => o.shell = next("--shell")?,
-            "--cols" => {
-                o.cols = next("--cols")?.parse().map_err(|_| "bad --cols")?
-            }
-            "--rows" => {
-                o.rows = next("--rows")?.parse().map_err(|_| "bad --rows")?
-            }
+            "--cols" => o.cols = next("--cols")?.parse().map_err(|_| "bad --cols")?,
+            "--rows" => o.rows = next("--rows")?.parse().map_err(|_| "bad --rows")?,
             "--send" => o.sends.push(next("--send")?),
             "--expect" => o.expect.push(next("--expect")?),
             "--timeout" => {
@@ -98,9 +94,9 @@ fn parse() -> Result<Opts, String> {
 fn cell_text(c: &CellContent) -> String {
     match c {
         CellContent::Empty | CellContent::WideCharSpacer => " ".into(),
-        CellContent::Char(cp) | CellContent::WideChar(cp) => {
-            char::from_u32(*cp).map(String::from).unwrap_or_else(|| "\u{fffd}".into())
-        }
+        CellContent::Char(cp) | CellContent::WideChar(cp) => char::from_u32(*cp)
+            .map(String::from)
+            .unwrap_or_else(|| "\u{fffd}".into()),
         CellContent::Cluster(s) => s.to_string(),
     }
 }
@@ -111,7 +107,12 @@ fn screen_text(t: &TerminalState, keep_padding: bool) -> String {
     for row in 0..grid.rows() {
         let line = grid
             .row_slice(row)
-            .map(|cells| cells.iter().map(|c| cell_text(&c.content)).collect::<String>())
+            .map(|cells| {
+                cells
+                    .iter()
+                    .map(|c| cell_text(&c.content))
+                    .collect::<String>()
+            })
             .unwrap_or_default();
         if keep_padding {
             out.push_str(&line);
@@ -166,15 +167,12 @@ fn main() {
         let mut reader = parts.reader;
         let mut buf = [0u8; READ_CHUNK];
         loop {
+            if pump.wait_for_capacity(buf.len()) != ReadState::Open {
+                break;
+            }
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    // Wait *before* accepting more so memory stays bounded. This
-                    // is ARCHITECTURE.md 3.0.1: backpressure is applied before the
-                    // data is taken, never by discarding it.
-                    if pump.wait_for_capacity(n) != ReadState::Open {
-                        break;
-                    }
                     pump.push(&buf[..n]);
                 }
                 Err(e) => {
@@ -289,7 +287,9 @@ fn main() {
 fn scrollback_text(t: &TerminalState, keep_padding: bool) -> String {
     let mut out = String::new();
     for i in 0..t.scrollback_len() {
-        let Some(cells) = t.scrollback_line(i) else { continue };
+        let Some(cells) = t.scrollback_line(i) else {
+            continue;
+        };
         let line = cells
             .iter()
             .map(|c| cell_text(&c.content))

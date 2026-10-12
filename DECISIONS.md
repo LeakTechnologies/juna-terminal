@@ -1,10 +1,59 @@
 # Juna — Decision Register
 
-Status: **VT engine core, layout engine, and transport layer implemented. First successful release
-build made 2026-10-11. No subsystem is wired to a window, a GPU surface, or a live shell yet.**
+## 2026-10-12 approved readiness repairs
 
-Last updated: 2026-10-11 — full gate re-measured, first release build produced, and a stale-artifact
-test failure diagnosed. See §2 and §6.16.
+The design lead approved all three stages of AUDIT.md and pushing verified changes.
+The following infrastructure requirements justify dependency changes before implementation:
+
+- Add exact `unicode-width` 0.2.2: generated Unicode display-width data, including emoji
+  sequences, replaces incomplete hand-maintained ranges behind `vt::width`.
+- Add exact `unicode-segmentation` 1.13.3: UAX #29 extended grapheme boundaries let streamed
+  scalars form combining/ZWJ clusters without importing terminal semantics.
+- Use the already-installed swash shaper for per-cluster OpenType shaping. No additional
+  shaper dependency is needed. Typography operates inside fixed terminal cell allocations.
+- Extend the existing Windows API features for Unicode clipboard and visible error dialogs;
+  these are platform access, not terminal semantics. Clipboard escape requests remain gated.
+- Remove unused optional `winres` and the inactive UTF-16 `src/build.rs`. There is no functioning
+  resource-build pipeline to preserve; icon embedding is deferred to a reviewed build change.
+
+`conpty-oxide` stays at 0.1.2, and its lockfile resolution must not change.
+No async runtime, borrowed terminal engine, Linux backend, panes, editor, or drawer is added.
+Historical claims below (no window, zero unsafe, green gates) describe earlier revisions,
+not the current code. Current verification will be recorded after the repair gates execute.
+
+Status: **Window, GPU renderer, VT engine, layout library, and live shell integration implemented.
+Readiness repairs are implemented under the approved 2026-10-12 design, with acceptance evidence below.**
+
+Last updated: 2026-10-12 — see the readiness repair record above and TERMINAL_TESTING.md.
+Build evidence below dated 2026-10-11 is historical and is not reused as current verification.
+
+### Current verification — 2026-10-12
+
+- `cargo check --offline`: passed with no warnings.
+- `cargo clippy --all-targets --offline`: passed with no warnings after cleanup.
+- `cargo test --offline --quiet`: **165 passed** (152 library, four ConPTY, four elevation,
+  five shell integration); two desktop/GPU tests ignored by default and explicitly run separately.
+- GPU acceptance: passed; captured `docs/acceptance/render.png`, and compared unchanged row pixels
+  while the next row changed. CJK fallback and shaped combining text are visible in the capture.
+- Actual-window acceptance: cmd exit 0 and PowerShell exit 7 both present frames and close;
+  runtime tests verify tail bytes and joined reader/writer workers. Vulkan on RTX 3060 was selected.
+- `cargo build --release --bin juna --offline`: passed. The updated executable is
+  `target/release/juna.exe`.
+
+The original audit's lint/test failures are resolved. The first window evidence attempt failed
+because the inherited warn-only log filter hid info lines; an explicit test log filter corrected
+that test, and the rerun passed. A later repeat exposed a teardown race: joining the reader before
+the writer finished left no reader handle for the next tick's readiness check. The shutdown now
+joins each completed worker independently and treats an absent handle as already joined;
+a deterministic regression covers that state. Earlier successful runs did not establish that
+all shutdown interleavings worked. No claim of physical keystroke, clipboard, mixed-DPI, real editor
+or pager acceptance is made; these remain the human review matrix in TERMINAL_TESTING.md.
+
+D3 is now implemented with Unicode 17.0.0 in both pinned standards-data crates. D6 uses existing
+swash 0.2.10 for cluster shaping; full bidi/contextual run layout is not claimed. The Windows API
+features serve Unicode clipboard ownership/memory and failure dialogs. Removing unused winres
+also removed its unused toml 0.5.11 lockfile entry. ConPTY remains resolved at 0.1.2;
+both manifest entries now use an exact version requirement to enforce the manual-upgrade rule.
 
 The previous status line, *"Phase 0 reconnaissance complete. Engine coding remains unauthorized"*, is
 **retracted as stale**. It described the state on 2026-10-10. The engine coding it referred to has

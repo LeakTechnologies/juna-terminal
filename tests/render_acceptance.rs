@@ -1,0 +1,133 @@
+//! Requires a real GPU/backend and installed monospace fonts. Run explicitly for visual evidence.
+use juna::{gpu::block_on, render::Renderer, vt::TerminalState};
+fn render(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    renderer: &mut Renderer,
+    term: &TerminalState,
+) -> Vec<u8> {
+    const W: u32 = 512;
+    const H: u32 = 256;
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("acceptance-frame"),
+        size: wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = texture.create_view(&Default::default());
+    let readback = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("readback"),
+        size: (W * H * 4) as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+        mapped_at_creation: false,
+    });
+    renderer.build(&term.snapshot(0), W, H);
+    let mut encoder = device.create_command_encoder(&Default::default());
+    {
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("acceptance"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        renderer.draw(device, queue, W, H, &mut pass);
+    }
+    encoder.copy_texture_to_buffer(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &readback,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(W * 4),
+                rows_per_image: Some(H),
+            },
+        },
+        wgpu::Extent3d {
+            width: W,
+            height: H,
+            depth_or_array_layers: 1,
+        },
+    );
+    queue.submit(Some(encoder.finish()));
+    let (tx, rx) = std::sync::mpsc::channel();
+    readback.slice(..).map_async(wgpu::MapMode::Read, move |r| {
+        tx.send(r).unwrap();
+    });
+    device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+    rx.recv().unwrap().unwrap();
+    let pixels = readback.slice(..).get_mapped_range().to_vec();
+    readback.unmap();
+    pixels
+}
+#[test]
+#[ignore = "real GPU and system fonts; run --test render_acceptance -- --ignored"]
+fn rows_are_isolated_and_supported_text_is_visible() {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter =
+        block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).unwrap();
+    let (device, queue) =
+        block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
+    let mut renderer = Renderer::new(
+        &device,
+        &queue,
+        wgpu::TextureFormat::Rgba8Unorm,
+        2048,
+        (20., 28.),
+        8.,
+        20.,
+    )
+    .unwrap();
+    let mut term = TerminalState::new(24, 8);
+    term.advance("Juna terminal acceptance\r\nspaces work here\r\ne\u{301} 漢 😀\r\n\x1b[31;44mWide 漢\x1b[0m\r\n\x1b[1mBold\x1b[0;3m Italic\x1b[0;4m Underline\x1b[0m\r\n\x1b[7mInverse\x1b[0m\r\n\x1b[?25l".as_bytes());
+    let first = render(&device, &queue, &mut renderer, &term);
+    term.advance(b"\x1b[2;1H\x1b[2Knew input line");
+    let second = render(&device, &queue, &mut renderer, &term);
+    assert_eq!(
+        &first[..512 * 4 * 36],
+        &second[..512 * 4 * 36],
+        "typing in row 1 changed row 0"
+    );
+    assert_ne!(
+        &first[512 * 4 * 36..512 * 4 * 64],
+        &second[512 * 4 * 36..512 * 4 * 64]
+    );
+    let bg = [40u8, 42, 54];
+    let row_text = &second[512 * 4 * 64..512 * 4 * 92];
+    assert!(
+        row_text.chunks_exact(4).filter(|p| p[..3] != bg).count() > 100,
+        "cluster row has no visible glyphs"
+    );
+    std::fs::create_dir_all("target/acceptance").unwrap();
+    let mut ppm = b"P6\n512 256\n255\n".to_vec();
+    for p in second.chunks_exact(4) {
+        ppm.extend_from_slice(&p[..3]);
+    }
+    std::fs::write("target/acceptance/render.ppm", ppm).unwrap();
+    assert!(
+        renderer.atlas.get('漢' as u32).is_some(),
+        "CJK fallback unavailable"
+    );
+}

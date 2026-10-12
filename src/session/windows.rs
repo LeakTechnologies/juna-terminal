@@ -1,6 +1,6 @@
 use super::{
-    Dimensions, ExitStatus, Session, SessionControl, SessionParts, SessionReader, SessionWriter,
-    SessionSpec,
+    Dimensions, ExitStatus, Session, SessionControl, SessionParts, SessionReader, SessionSpec,
+    SessionWriter,
 };
 use std::io::{self, Read, Write};
 
@@ -69,10 +69,7 @@ impl Session for ConptySession {
         // Loop rather than a single `write_all`: the contract is all-or-error, and
         // `write_all` already guarantees that, but the loop keeps the intent
         // visible at the exact place a short write would corrupt the stream.
-        let mut n = 0;
-        while n < bytes.len() {
-            n += self.write.write(&bytes[n..])?;
-        }
+        self.write.write_all(bytes)?;
         self.write.flush()
     }
 
@@ -81,9 +78,7 @@ impl Session for ConptySession {
     }
 
     fn resize(&mut self, dims: Dimensions) -> io::Result<()> {
-        self.controller
-            .resize(conpty_size(dims)?)
-            .map_err(io_err)
+        self.controller.resize(conpty_size(dims)?).map_err(io_err)
     }
 
     fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
@@ -139,10 +134,7 @@ impl SessionWriter for ConptyWriter {
         // All-or-error, per Session::write. `write_all` already guarantees this,
         // but the loop keeps the intent visible where a short write would corrupt
         // the byte stream.
-        let mut n = 0;
-        while n < bytes.len() {
-            n += self.half.write(&bytes[n..])?;
-        }
+        self.half.write_all(bytes)?;
         self.half.flush()
     }
 }
@@ -154,9 +146,7 @@ struct ConptyControl {
 
 impl SessionControl for ConptyControl {
     fn resize(&mut self, dims: Dimensions) -> io::Result<()> {
-        self.controller
-            .resize(conpty_size(dims)?)
-            .map_err(io_err)
+        self.controller.resize(conpty_size(dims)?).map_err(io_err)
     }
 
     fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {

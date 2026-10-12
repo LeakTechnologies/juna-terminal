@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::vt::width::{char_width, char_width_u32};
+use crate::vt::width::{char_width_u32, cluster_width};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Color {
@@ -89,7 +89,7 @@ impl CellContent {
                 let _ = c;
                 2
             }
-            Self::Cluster(s) => s.chars().next().map(char_width).unwrap_or(1).max(1),
+            Self::Cluster(s) => cluster_width(s).max(1),
         }
     }
 
@@ -138,8 +138,13 @@ impl Interner {
             return found.clone();
         }
         let shared: Arc<str> = Arc::from(text);
-        self.map
-            .insert(Box::from(text), shared.clone());
+        if self.map.len() >= 16384 {
+            self.map.retain(|_, v| Arc::strong_count(v) > 1);
+            if self.map.len() >= 16384 {
+                return shared;
+            }
+        }
+        self.map.insert(Box::from(text), shared.clone());
         shared
     }
 

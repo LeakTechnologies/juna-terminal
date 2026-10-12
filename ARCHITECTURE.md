@@ -1,7 +1,7 @@
 # Juna Terminal Engine — Architecture & Interface Specification
 
-Status: **PROPOSED — architecture direction approved; not approved as a frozen implementation
-contract. Engine coding remains unauthorized.**
+Status: **Implemented Windows terminal, with readiness repairs approved 2026-10-12.
+The acceptance record distinguishes verified behavior from pending human testing.**
 
 Authority: Work Order 001 (revised) — original VT engine, no borrowed terminal engine.
 Provenance: All content below is written from public VT/xterm specifications and observable
@@ -10,6 +10,53 @@ terminal behavior. No Alacritty / WezTerm / Kitty source has been copied or adap
 ---
 
 ## 0. Scope boundary
+
+### Implemented readiness contract — 2026-10-12
+
+This section supersedes conflicting older implementation descriptions below. The design lead
+approved AUDIT.md's three-stage repair plan and the practical query/key-mode subset.
+
+- The UI thread is the sole mutable `TerminalState` owner. `RenderSnapshot` owns copied cells,
+  dimensions, wrap metadata, cursor visibility, and cursor style. Renderer methods accept snapshots,
+  not engine references. `Arc<Window>` safely owns the surface's window lifetime without leaking.
+- Reader and writer workers own separate process handles. The reader reserves capacity **before**
+  each read, preserves read order, and reports faults. `StreamBuffer` is now a mutex-protected byte
+  deque: this permits a bounded 64 KiB engine drain per event-loop tick without repeatedly copying
+  an entire backlog. A 64 MiB hard output limit and resume hysteresis propagate backpressure.
+- UI input is queued in order to the writer worker. The pending-input budget is 8 MiB. Requests
+  exceeding it are explicitly rejected **before acceptance**, reported, and close the failed
+  session; accepted bytes are never silently dropped. A 1 MiB clipboard text limit bounds paste.
+- `Runtime` polls the child handle independently of pipe EOF. Closing drops the input sender,
+  lets queued input finish, allows two seconds for exit, then terminates the session job if needed.
+  The UI continues parsing output throughout teardown. Reader and writer threads are joined before
+  successful window closure, after the output queue empties. Ten-second failure is reported rather
+  than an indefinite silent hang. Exceptional process/OS failure is not described as verified reaping.
+- PTY resize must succeed before the engine adopts the same clamped 1–512 by 1–256 dimensions.
+  Full-screen margins expand on growth; restricted margins remain bounded. Shrink preserves the
+  live cursor by filing displaced top rows into history; the active and alternate screens do not
+  reflow. Recorded wrapped history reflows, preserves wide pairs, and remains byte-budgeted.
+- Unicode width and extended grapheme boundaries use pinned Unicode 17 data behind `vt::width`.
+  Clusters are shaped through swash, inside fixed cell allocations. Glyph backgrounds are emitted
+  before foregrounds; glyph geometry is clipped to the owning row/cell allocation. CJK/font fallback
+  uses actual font identity; cached blank glyphs and atlas exhaustion have distinct behavior.
+  The 2048² RGBA atlas recycles only between frames, rebuilding all visible instances. Per-cluster
+  and shape-cache bounds prevent pathological strings from growing indefinitely.
+- Surface-compatible hardware adapters are tried in preference order, then software. Lost/outdated
+  surfaces reconfigure. Zero-size windows suspend presentation. DPI changes rebuild font resources
+  and refit both grid and PTY. Redraw is requested only for changed output/input/view state.
+- Supported input/query modes: application cursor/keypad, Ctrl/Alt/Shift keys, IME commits,
+  DSR/CPR, primary DA, the implemented DEC mode reports, bracketed paste, focus reporting, mouse
+  1000/1002/1003 with SGR 1006, REP, and synchronized output with a one-second watchdog.
+  DA identifies the basic VT100 subset; it does not claim graphics extensions.
+- Local selection/copy uses Ctrl+Shift+C; paste uses Ctrl+Shift+V, Shift+Insert or right-click.
+  Shift overrides mouse reporting for local selection/history. Wheel and Shift+PageUp/PageDown
+  navigate retained history; typing returns to live output. Paste removes embedded control codes,
+  normalizes line endings, and obeys bracketed-paste mode. OSC 52 remains denied; no program can
+  silently read or write the clipboard through escape output.
+
+`TERMINAL_TESTING.md` records actual acceptance evidence and pending human checks. Passing these
+repairs does not imply complete Tier 2 conformance, bidi layout, cross-cell contextual shaping,
+graphics protocols, or a Linux backend. Those remain explicitly outside this testing milestone.
 
 This document specifies the terminal engine and its interfaces. It does **not** yet commit to
 the renderer, BSP layout, editor, or drawer designs; those depend on the engine contract fixed here.
@@ -423,7 +470,7 @@ Explicit, ordered, and non-blocking:
 2. Close PTY input (signals EOF to the shell).
 3. Bounded grace period (default 2 s) for the child to exit.
 4. Terminate, then wait-with-timeout on the process handle.
-5. Drain and discard remaining reader bytes.
+5. Drain and parse every accepted reader byte; flush incomplete UTF-8 only at true stream end.
 6. Join the reader thread.
 7. Drop GPU resources, then the window.
 

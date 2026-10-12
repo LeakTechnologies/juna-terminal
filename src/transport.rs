@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -36,7 +37,7 @@ pub struct Stats {
 }
 
 struct Inner {
-    staging: Vec<u8>,
+    staging: VecDeque<u8>,
     finished: bool,
     cancelled: bool,
     accepted: u64,
@@ -57,7 +58,7 @@ impl StreamBuffer {
     pub fn new(limits: Limits) -> Self {
         Self {
             inner: Mutex::new(Inner {
-                staging: Vec::new(),
+                staging: VecDeque::new(),
                 finished: false,
                 cancelled: false,
                 accepted: 0,
@@ -100,7 +101,12 @@ impl StreamBuffer {
             if g.cancelled {
                 return ReadState::Cancelled;
             }
-            if g.staging.len() + want <= self.limits.hard {
+            if g.finished {
+                return ReadState::Finished;
+            }
+            if g.staging.len().saturating_add(want) <= self.limits.hard
+                && (g.paused_since.is_none() || g.staging.len() <= self.limits.resume)
+            {
                 return ReadState::Open;
             }
             if g.staging.len() > self.limits.soft && g.paused_since.is_none() {
@@ -120,7 +126,7 @@ impl StreamBuffer {
         if let Some(t) = g.paused_since.take() {
             g.paused_total += t.elapsed();
         }
-        g.staging.extend_from_slice(bytes);
+        g.staging.extend(bytes.iter().copied());
         g.accepted += bytes.len() as u64;
         if g.staging.len() > g.max_depth {
             g.max_depth = g.staging.len();
@@ -131,7 +137,15 @@ impl StreamBuffer {
 
     pub fn take(&self) -> Vec<u8> {
         let mut g = self.lock();
-        let out = std::mem::take(&mut g.staging);
+        let out = std::mem::take(&mut g.staging).into_iter().collect();
+        drop(g);
+        self.signal.notify_all();
+        out
+    }
+    pub fn take_up_to(&self, limit: usize) -> Vec<u8> {
+        let mut g = self.lock();
+        let n = limit.min(g.staging.len());
+        let out = g.staging.drain(..n).collect();
         drop(g);
         self.signal.notify_all();
         out
@@ -165,7 +179,9 @@ mod tests {
     use super::*;
 
     fn lcg(state: &mut u64) -> u8 {
-        *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        *state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (*state >> 33) as u8
     }
 
@@ -176,7 +192,8 @@ mod tests {
 
     #[test]
     fn byte_exact_round_trip() {
-        let raw: &[u8] = b"\x1b[31mred\x1b[0m \xf0\x9f\x91\x8d \xff\xfe invalid \x1b[?1049h\x1b[38;2;255;0;0m";
+        let raw: &[u8] =
+            b"\x1b[31mred\x1b[0m \xf0\x9f\x91\x8d \xff\xfe invalid \x1b[?1049h\x1b[38;2;255;0;0m";
         let buf = StreamBuffer::new(Limits::default());
         for chunk in raw.chunks(3) {
             assert_eq!(buf.wait_for_capacity(chunk.len()), ReadState::Open);
@@ -267,7 +284,11 @@ mod tests {
         producer.join().unwrap();
 
         let s = buf.stats();
-        assert!(s.max_depth <= limits.hard + CHUNK, "max_depth {}", s.max_depth);
+        assert!(
+            s.max_depth <= limits.hard + CHUNK,
+            "max_depth {}",
+            s.max_depth
+        );
         assert!(s.pauses > 0, "expected at least one pause");
         assert_eq!(s.accepted, 256 * CHUNK as u64);
     }
