@@ -212,11 +212,15 @@ impl Gpu {
         self.surface.configure(&self.device, &self.config);
     }
 
-    /// Render one frame. `Ok(false)` means the frame was skipped for a routine
-    /// reason (occluded, timed out, surface outdated); the caller should not treat
-    /// that as an error, but should not assume anything was presented either.
-    pub fn render<F: FnOnce(&mut wgpu::RenderPass<'_>)>(
-        &mut self,
+    /// Render one frame. Takes `&self`: nothing here mutates the device, and taking
+///     `&self` lets the caller hold a `&mut Renderer` at the same time without
+    /// splitting the borrow of this struct across the closure.
+    ///
+    /// `Ok(false)` means the frame was skipped for a routine reason (occluded,
+    /// timed out, surface outdated); the caller should not treat that as an
+    /// error, but should not assume anything was presented either.
+    pub fn render<F: FnOnce(&wgpu::Device, &wgpu::Queue, &mut wgpu::RenderPass<'_>)>(
+        &self,
         clear: wgpu::Color,
         draw: F,
     ) -> Result<bool, FrameSkip> {
@@ -255,7 +259,7 @@ impl Gpu {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            draw(&mut pass);
+            draw(&self.device, &self.queue, &mut pass);
         }
         self.queue.submit(Some(enc.finish()));
         texture.present();

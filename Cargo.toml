@@ -16,10 +16,19 @@ wgpu = { version = "29", default-features = false, features = [
 ] }
 log = "0.4"
 env_logger = "0.11"
+winres = { version = "0.1.12", optional = true }
+
+# D6 decision: the pure-Rust rasterisation stack is the primary backend.
+# fontdb discovers system fonts, swash+zeno rasterises. Both are C-free and
+# currently sit in the tree as dev-dependencies for `examples/font_spike.rs`;
+# the renderer needs them at runtime, so they are declared here.
+fontdb = "0.23"
+swash = "0.2"
+# Needed for Pod/ZeroSafe casts between Rust structs and GPU buffers.
+# Already present transitively via wgpu, so this costs no additional compile.
+bytemuck = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
-swash = "0.2"
-fontdb = "0.23"
 
 # Windows-only, and used for exactly one call: AttachConsole, so a GUI-subsystem
 # binary launched from a terminal still writes diagnostics there instead of

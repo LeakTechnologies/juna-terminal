@@ -24,6 +24,7 @@ const FRAME: Duration = Duration::from_millis(16);
 const CELL_W: f32 = 9.0;
 const CELL_H: f32 = 18.0;
 const PAD: f32 = 8.0;
+const FONT_PX: f32 = 16.0;
 const BG: wgpu::Color = wgpu::Color {
     r: 0.11,
     g: 0.11,
@@ -34,6 +35,7 @@ const BG: wgpu::Color = wgpu::Color {
 pub struct App {
     window: Option<&'static Window>,
     gpu: Option<Gpu>,
+    renderer: Option<crate::render::Renderer>,
     instance: Option<wgpu::Instance>,
     stream: Arc<StreamBuffer>,
     terminal: TerminalState,
@@ -42,6 +44,8 @@ pub struct App {
     cols: u16,
     rows: u16,
     frames: u64,
+    last_stats: (usize, u32, u32, u32),
+    diag_done: bool,
     skipped: u64,
     last_tick: Instant,
 }
@@ -51,6 +55,7 @@ impl App {
         Self {
             window: None,
             gpu: None,
+            renderer: None,
             instance: None,
             stream: Arc::new(StreamBuffer::new(Limits::default())),
             terminal: TerminalState::new(cols, rows),
@@ -59,6 +64,8 @@ impl App {
             cols,
             rows,
             frames: 0,
+            last_stats: (0, 0, 0, 0),
+            diag_done: false,
             skipped: 0,
             last_tick: Instant::now(),
         }
@@ -146,9 +153,21 @@ impl App {
         for r in &gpu.rejected {
             eprintln!("[gpu] not selected: {r}");
         }
-        eprintln!("[gpu] surface format: {:?}", gpu.format);
+eprintln!("[gpu] surface format: {:?}", gpu.format);
+
+        let renderer = crate::render::Renderer::new(
+            &gpu.device,
+            &gpu.queue,
+            gpu.format,
+            1024,
+            (CELL_W, CELL_H),
+            PAD,
+            FONT_PX,
+        )
+        .ok_or("no usable monospace font found on this system")?;
 
         self.gpu = Some(gpu);
+        self.renderer = Some(renderer);
         Ok(())
     }
 
@@ -170,14 +189,17 @@ impl App {
 
     fn draw(&mut self) {
         self.drain();
-        let Some(gpu) = self.gpu.as_mut() else { return };
-        let (cols, rows) = (self.cols, self.rows);
-        let cursor = self.terminal.grid().cursor;
-        match gpu.render(BG, |_pass| {
-            // Text is drawn by the renderer slice, not yet implemented. This pass
-            // clears only; see DECISIONS.md for why the atlas follows surface
-            // verification rather than landing with it.
-            let _ = (cols, rows, cursor);
+        let (w, h) = match self.gpu.as_ref() {
+            Some(g) => (g.config.width, g.config.height),
+            None => return,
+        };
+        let Some(renderer) = self.renderer.as_mut() else { return };
+        renderer.build(&self.terminal, w, h);
+        self.last_stats = renderer.stats();
+
+        let gpu = self.gpu.as_ref().expect("gpu present");
+        match gpu.render(BG, |device, queue, pass| {
+            renderer.draw(device, queue, w, h, pass);
         }) {
             Ok(true) => self.frames += 1,
             Ok(false) => self.skipped += 1,
@@ -192,9 +214,13 @@ impl App {
 
     fn report(&mut self) {
         eprintln!(
-            "[app] frames={} skipped={} cols={} rows={} scrollback={} title={:?}",
-            self.frames,
+            "[app] frames={} skipped={} quads={} glyphs={} blank={} missed={} cols={} rows={} scrollback={} title={:?}",
+self.frames,
             self.skipped,
+            self.last_stats.0,
+            self.last_stats.1,
+            self.last_stats.2,
+            self.last_stats.3,
             self.cols,
             self.rows,
             self.terminal.scrollback_len(),
@@ -318,8 +344,48 @@ let display = event_loop.owned_display_handle();
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.drain();
-        if self.last_tick.elapsed() >= Duration::from_secs(10) {
+if self.last_tick.elapsed() >= Duration::from_secs(10) {
             self.last_tick = Instant::now();
+            if !self.diag_done {
+                self.diag_done = true;
+                // One-shot diagnostic: dump the top rows and the first few
+                // non-empty cells so a blank window is diagnosable from a log.
+                let grid = self.terminal.grid();
+                eprintln!("[diag] grid {}x{}", grid.cols(), grid.rows());
+                for row in 0..3u16 {
+                    let line: String = grid
+                        .row_slice(row)
+                        .map(|cs| {
+                            cs.iter()
+                                .take(60)
+                                .map(|c| match &c.content {
+                                    crate::vt::CellContent::Empty => ' '.to_string(),
+                                    crate::vt::CellContent::Char(v) => {
+                                        char::from_u32(*v).unwrap_or('?').to_string()
+                                    }
+                                    crate::vt::CellContent::Cluster(s) => s.to_string(),
+                                    crate::vt::CellContent::WideChar(v) => {
+                                        char::from_u32(*v).unwrap_or('?').to_string()
+                                    }
+                                    crate::vt::CellContent::WideCharSpacer => ' '.to_string(),
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    eprintln!("[diag] row{row}: |{line}|");
+                }
+                let mut n = 0;
+                for row in 0..grid.rows() {
+                    for col in 0..grid.cols() {
+                        if let Some(c) = grid.cell(row, col) {
+                            if !matches!(c.content, crate::vt::CellContent::Empty) && n < 8 {
+                                eprintln!("[diag] cell {row},{col} = {:?}", c.content);
+                                n += 1;
+                            }
+                        }
+                    }
+                }
+            }
             self.report();
         }
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + FRAME));
