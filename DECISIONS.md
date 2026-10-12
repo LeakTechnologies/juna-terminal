@@ -772,6 +772,73 @@ artifact would be a defect. The remedy is a rebuild, not a patch.
 gitignored `target/` directory and has no effect on the build; noted so it is not mistaken for a
 current output.
 
+### 6.17 D10 — process privilege boundary
+
+**Adopted 2026-10-11 (design lead).** Specified normatively in `ARCHITECTURE.md` §3.8.
+
+#### The request
+
+Make Juna runnable as Administrator, with no risk of a catastrophic destructive error.
+
+#### Verified before designing
+
+| Fact | How established |
+|---|---|
+| UAC enabled: `EnableLUA=1`, `ConsentPromptBehaviorAdmin=5`, `PromptOnSecureDesktop=1` | `Get-ItemProperty HKLM:\...\Policies\System` |
+| Current session token is `High Mandatory Level` | `whoami /groups` |
+| **A child inherits High integrity** — spawned `cmd.exe`, queried its groups, got `High Mandatory Level` | direct execution |
+| **Juna spawns no processes today** | `Grep` for `spawn` — only `std::thread::spawn` in `transport.rs` and `argv_probe.rs` (a test probe). `main.rs` is 3 lines. |
+| **`conpty-oxide` exposes no token API** | read vendored `command.rs` — a thin facade over `windows_spawn::Command` |
+| **`windows-spawn` reaches only `CreateProcessW` + `creation_flags`** | read vendored `options.rs`, `sys.rs`, `plan.rs` — no `TokenDuplication`, no `CreateProcessWithTokenW`/`AsUserW`, no `logon` |
+
+#### Ruling
+
+Elevation is a **property of the host process**. Juna requests elevation for no child, ever.
+
+1. No `requireAdministrator` in the manifest — casual launch stays unelevated.
+2. Elevation is a deliberate user choice at launch: `scripts/run-elevated.ps1` (`-Verb RunAs`).
+3. The transport never raises or lowers privilege; a child inherits the host token.
+4. No in-UI "run this shell as Administrator" affordance in this increment.
+
+#### Why the alternative was rejected
+
+An **elevated child spawned from an unelevated Juna** is not achievable on the pinned binding. It
+requires `CreateProcessAsUserW` plus `UpdateProcThreadAttribute(PROCEDURE_ATTRIBUTE_TOKEN)`,
+bypassing `conpty-oxide`'s command path with several hundred lines of `unsafe`. §6.3 permits
+replacing `conpty-oxide` only for a critical lifecycle defect, abandonment, or demonstrated
+incompatibility — **none of which apply**. The binding stands.
+
+#### On "no catastrophic deletion" — the mechanism was corrected
+
+The lead's concern was a Juna bug deleting files. **Juna's engine cannot delete anything.** By
+`AGENTS.md` §5 the VT engine performs no I/O; it is pure state transitions. There is no path from a
+keystroke to a filesystem delete inside Juna. This is a design guarantee, not an untested claim.
+
+The real risk is different and was stated plainly:
+
+- **The shell, not a bug.** At High integrity there is no UAC prompt between the user and
+  `rm -rf` / `del /f /s` / `git clean -fdx`. Windows' *InstallerDetection* mitigation covers
+  installers; it does **not** cover console tools.
+- **One genuinely Juna-specific elevated risk.** A mangled byte stream does not merely garble the
+  display — it can deliver a **corrupted argument to the child process**. Unelevated, that is
+  usually a permission error. Elevated, the same corruption can reach a destructive path with no
+  prompt. This is the concrete reason §3.0's byte-exactness is upgraded from a correctness rule to
+  a **release gate for elevated builds**.
+- **UAC is consent, not a security boundary.** It does not defend against malware already running
+  as the user. The marginal risk of an always-elevated terminal is therefore higher than it may
+  appear.
+
+#### Enforcement
+
+`tests/elevation_boundary.rs` — 4 tests. **Verified non-vacuous by fault injection**, not assumed:
+injecting `// CreateProcessWithTokenW elevated runas token` into `src/transport.rs` failed
+`no_source_reaches_for_a_token_api` and `the_transport_layer_is_free_of_elevation_intent`, both
+naming the offending file and symbol. The injection was reverted and the file confirmed byte-clean.
+
+**Scope limit, stated in the test's own header:** this is a *source-level* guard. It does not parse
+the PE resource section, so it cannot detect a manifest injected by the linker or an external `.rc`
+file. It prevents the mistake in the code we own; it is not a proof about the shipped `.exe`.
+
 ---
 
 ## 7. Blockers

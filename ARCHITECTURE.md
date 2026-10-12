@@ -584,6 +584,65 @@ Row-level damage is the provisional renderer strategy, with full-redraw always a
   starting point. **This reasoning is a hypothesis, not a measurement** — it must be confirmed
   or refuted by profiling in Phase 3 before cell damage is considered.
 
+### 3.8 Process privilege boundary (D10) — normative
+
+**Adopted 2026-10-11.** Elevation is a property of the **host process**, never something Juna
+requests on behalf of a child.
+
+#### Rules
+
+1. **The manifest must not request elevation.** `juna` ships without `requireAdministrator`,
+   `highestAvailable`, or `uiAccess`. Casual launch is unelevated.
+2. **Elevation is chosen at launch, by the user.** `scripts/run-elevated.ps1` launches Juna via
+   the `runas` shell verb, which raises a UAC prompt. This is the *only* supported elevation path.
+3. **The transport layer never raises or lowers privilege.** No ConPTY session may request
+   elevation for its child, and none may impersonate. A child inherits the host's token, full stop.
+4. **The engine is privilege-agnostic.** It performs no I/O and has no access to a token, so the
+   integrity level cannot reach it. There is no code path from a byte in the stream to a privilege
+   change.
+5. **No in-UI elevation affordance in this increment.** "Run this shell as Administrator" is out of
+   scope. See *Rejected* below.
+
+#### Why the boundary is drawn here
+
+`conpty-oxide` 0.1.2 exposes no token API — it wraps `windows-spawn`, which reaches only
+`CreateProcessW` with `creation_flags` (verified by reading the vendored source). A per-pane
+elevated child spawned from an unelevated Juna would therefore require `CreateProcessAsUserW` plus
+`UpdateProcThreadAttribute(PROCEDURE_ATTRIBUTE_TOKEN)`, bypassing the pinned binding with several
+hundred lines of `unsafe`. `DECISIONS.md` §6.3 permits replacing `conpty-oxide` only for a critical
+lifecycle defect, abandonment, or demonstrated incompatibility — **none of which apply**. The
+binding stands.
+
+#### Why §3.0 becomes a safety property under elevation
+
+§3.0 is written as a correctness rule: dropping bytes corrupts parser state. At high integrity it
+is also a **safety** rule, and the reason is specific rather than atmospheric.
+
+A mangled byte stream does not merely garble the display — it can deliver a **corrupted argument to
+the child process**. At unelevated integrity that is usually a permission error. At high integrity
+the same corruption can reach a destructive path with no UAC prompt between it and the filesystem.
+Windows' *InstallerDetection* mitigation covers installers; it does **not** cover console tools.
+
+Therefore: **byte-exact round-trip (§3.0.3) is a release gate for any elevated build**, not only a
+correctness gate. An elevated release that has not demonstrated byte-exact transport on a real shell
+session is not releasable.
+
+#### Threat note
+
+Windows' UAC is a consent prompt, not a security boundary; it does not defend against malware that
+is already running as the user. That does not weaken the rules above — it means the *marginal* risk
+of an always-elevated terminal is higher than a user may assume, because every command typed at the
+prompt inherits full administrative authority with no prompt of its own.
+
+#### Rejected in this increment
+
+- **`requireAdministrator` in the binary manifest.** Rejected: it makes *every* launch elevated,
+  including casual use. Elevation is opt-in per launch instead.
+- **Per-pane elevated child from an unelevated host.** Rejected: contradicts §6.3, as above. It
+  would also make the elevated surface reachable at all times, which is the opposite of the intent.
+- **Silent auto-elevation on detection of a privileged command.** Rejected: it removes the consent
+  boundary the user relies on to know when they are at elevated authority.
+
 ---
 
 ## 4. Conformance & test strategy
@@ -634,7 +693,7 @@ Status values: **DIRECTION SET** (lead has given a direction; not yet proven).
 
 | # | Decision | Status | Direction / requirement | Outstanding |
 |---|---|---|---|---|
-| **D1** | Toolchain | **BLOCKED** | MSVC is the intended toolchain. Project-local pinning via `rust-toolchain.toml`; the global rustup default must not be changed. | Cannot be executed: MSVC `link.exe` is absent. See `DECISIONS.md` §7. Requires VS Build Tools "Desktop development with C++" + Windows SDK. |
+| **D1** | Toolchain | **DEFERRED — GNU in use** | MSVC remains the intended toolchain. Project-local pinning via `rust-toolchain.toml`; the global rustup default must not be changed. | **Deferred by design-lead ruling 2026-10-11.** GNU produces `check`, `clippy`, 129 passing tests, and a release binary. `rust-toolchain.toml` is deliberately **not** created. Re-probed: MSVC `link.exe` still absent. See `DECISIONS.md` §7.1. |
 | **D2** | Async runtime | **DIRECTION SET — implemented** | Remove Tokio. Standard threads + explicit buffer handoff. | None. Async may return only with a demonstrated requirement. |
 | **D3** | Unicode data | **UNRESOLVED** | Pinned Unicode version behind a pure API. | Compare internal tables against `unicode-width`, `unicode-segmentation`, `unicode-properties` before committing. See `DECISIONS.md` §6. |
 | **D4** | Scrollback reflow | **DIRECTION SET — specified** | Reflow logical lines. | Specified in §3.4. Wide cells, cursor, scroll-region resize, and tab rules are now explicit. |
@@ -643,6 +702,7 @@ Status values: **DIRECTION SET** (lead has given a direction; not yet proven).
 | **D7** | Damage model | **DIRECTION SET** | Row-level damage plus full-redraw support; retain cell-level option. | Specified in §3.5. Rationale is a hypothesis pending Phase 3 profiling. |
 | **D8** | wgpu backends | **APPROVED PROVISIONALLY** | `default-features = false`, features `std, dx12, vulkan, gles, wgsl`. Enumeration confirms dx12=3, vulkan=1, gles=1. | `gles` retained. Feature set is **not** to be changed on enumeration evidence alone; presentation paths are untested. See `DECISIONS.md` §6.4. |
 | **D9** | Adapter selection policy | **DIRECTION SET — must be explicit** | Never take the first adapter by default. | Reject `DeviceType::Cpu` (a WARP software rasteriser is exposed and could be selected silently). Prefer `DiscreteGpu`; treat software as last-resort fallback. The DX12 list contains apparent duplicates, so do not assume deduplication. |
+| **D10** | Process privilege | **DIRECTION SET — specified** | Elevation is a property of the **host process**, never requested by Juna for a child. No manifest elevation; no in-UI elevation affordance; token APIs forbidden in `src/`. | Specified in §3.8. Enforced by `tests/elevation_boundary.rs`, verified non-vacuous by fault injection. §3.0 byte-exactness becomes a **release gate** for any elevated build, not only a correctness gate. |
 
 ### 5.1 Shell acceptance targets
 
