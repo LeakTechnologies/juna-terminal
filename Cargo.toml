@@ -3,7 +3,7 @@ name = "juna"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.97"
-description = "A native Windows terminal emulator with an original VT engine"
+description = "A terminal emulator with an original VT engine"
 
 [dependencies]
 winit = "0.30"
@@ -14,14 +14,26 @@ wgpu = { version = "29", default-features = false, features = [
     "gles",
     "wgsl",
 ] }
-conpty-oxide = "0.1.2"
 log = "0.4"
 env_logger = "0.11"
 
 [dev-dependencies]
 swash = "0.2"
 fontdb = "0.23"
-windows = { version = "0.61", features = [
+
+# Windows-only. conpty-oxide carries `compile_error!` under `cfg(not(windows))`,
+# so depending on it unconditionally is a hard compile error on every other
+# target. Nothing under src/ uses it yet; it is consumed solely by the
+# Windows-gated tests/conpty_acceptance.rs.
+#
+# A Unix PTY backend will be a separate implementation behind the same session
+# seam -- see ARCHITECTURE.md 3.9.
+[target.'cfg(windows)'.dev-dependencies]
+conpty-oxide = "0.1.2"
+
+[target.'cfg(windows)'.dev-dependencies.windows]
+version = "0.61"
+features = [
     "Win32_Foundation",
     "Win32_System_Console",
     "Win32_Storage_FileSystem",
@@ -29,4 +41,4 @@ windows = { version = "0.61", features = [
     "Win32_System_Com",
     "Win32_Graphics_DirectWrite",
     "Win32_Graphics_Gdi",
-] }
+]

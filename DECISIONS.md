@@ -839,6 +839,65 @@ naming the offending file and symbol. The injection was reverted and the file co
 the PE resource section, so it cannot detect a manifest injected by the linker or an external `.rc`
 file. It prevents the mistake in the code we own; it is not a proof about the shipped `.exe`.
 
+### 6.18 D11 — cross-platform direction, and the one hard blocker removed
+
+**Raised by the design lead, 2026-10-11:** *"We want to be able to eventually port this app to other
+platforms, including Linux."* Recorded as a **direction**. Not a commitment to ship Linux now.
+
+#### Survey result — the engine is already portable, by design
+
+All 16 `.rs` files under `src/` were scanned recursively for `cfg(windows)`, `cfg(target_os`,
+`windows::`, `Win32_`, `conpty`, `winit`, and `wgpu`. Results:
+
+| Area | Files | Platform coupling |
+|---|---|---|
+| `src/vt/` — parser, grid, scrollback, cell, width | 8 | **NONE** |
+| `src/layout/` — geometry, BSP tree | 4 | **NONE** |
+| `src/transport.rs` — byte stream, backpressure | 1 | **NONE** — pure `std` (`Mutex`, `Condvar`, `Vec<u8>`) |
+| `src/lib.rs`, `src/main.rs` | 2 | **NONE** |
+| `src/bin/gpu_probe.rs` | 1 | `wgpu` + DX12/Vulkan/GL **backend names** |
+
+This is not luck. `AGENTS.md` §5 already mandates it: the engine performs no I/O, the layout engine
+is pure geometry, and the transport moves bytes. **14 of 16 files are platform-neutral by
+construction.**
+
+#### The single hard blocker — found and removed
+
+`conpty-oxide` 0.1.2 carries, at `src/lib.rs:126`:
+
+```rust
+#[cfg(not(windows))]
+compile_error!("conpty-oxide only supports Windows targets; ...");
+```
+
+It was an **unconditional** `[dependencies]` entry. Therefore `cargo build` on any non-Windows
+target failed outright — not degraded, failed. That was the entirety of the hard blocker.
+
+**Fixed.** `conpty-oxide` and `windows` moved to `[target.'cfg(windows)'.dev-dependencies]`.
+
+Both are **dev**-dependencies, not runtime ones: nothing under `src/` references either. The only
+consumer of `conpty-oxide` is `tests/conpty_acceptance.rs`, which is already `#![cfg(windows)]`.
+
+**Verified.** `cargo metadata --filter-platform x86_64-unknown-linux-gnu` resolves **158 packages
+with zero Windows-only crates** — `conpty-oxide`, `windows-spawn`, `windows-sys`, and `windows` are
+all absent from the Linux graph. Windows behaviour is unchanged: all **129 tests** pass, clippy
+clean, release builds.
+
+#### Honest limit on that verification
+
+**This is a resolved dependency graph, not a successful compile.** Only
+`x86_64-pc-windows-gnu` is installed on this host, and a Linux build additionally needs a Linux
+linker, neither of which exists here. A Linux port may still surface compile errors — most likely
+in `src/bin/gpu_probe.rs`, the one file with real backend coupling. **No claim of Linux
+compatibility is made.**
+
+#### Not decided here
+
+A Unix port needs a PTY backend (`forkpty`/`openpty` + `TIOCSWINSZ`). PTY syscalls are *platform
+access*, which §2's boundary test classifies as infrastructure, so an off-the-shelf binding is
+permitted — unlike a terminal engine, which is not. Whether to introduce a session seam now or
+after ConPTY is wired is §3.9's open question, not a decision taken in this entry.
+
 ---
 
 ## 7. Blockers
