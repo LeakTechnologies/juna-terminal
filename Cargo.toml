@@ -23,11 +23,14 @@ fontdb = "0.23"
 
 # Windows-only. conpty-oxide carries `compile_error!` under `cfg(not(windows))`,
 # so depending on it unconditionally is a hard compile error on every other
-# target. Nothing under src/ uses it yet; it is consumed solely by the
-# Windows-gated tests/conpty_acceptance.rs.
+# target. It is referenced only from src/session/windows.rs, which is itself
+# cfg(windows).
 #
 # A Unix PTY backend will be a separate implementation behind the same session
 # seam -- see ARCHITECTURE.md 3.9.
+[target.'cfg(windows)'.dependencies]
+conpty-oxide = "0.1.2"
+
 [target.'cfg(windows)'.dev-dependencies]
 conpty-oxide = "0.1.2"
 

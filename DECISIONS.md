@@ -895,8 +895,52 @@ compatibility is made.**
 
 A Unix port needs a PTY backend (`forkpty`/`openpty` + `TIOCSWINSZ`). PTY syscalls are *platform
 access*, which §2's boundary test classifies as infrastructure, so an off-the-shelf binding is
-permitted — unlike a terminal engine, which is not. Whether to introduce a session seam now or
-after ConPTY is wired is §3.9's open question, not a decision taken in this entry.
+permitted — unlike a terminal engine, which is not.
+
+### 6.19 D11 — session seam implemented
+
+**Approved and built 2026-10-11.** Specified normatively in `ARCHITECTURE.md` §3.9.
+
+`src/session/` is now the only module permitted to name a platform API for process I/O. Callers hold
+`Box<dyn Session>` and never learn the backend.
+
+| Item | Detail |
+|---|---|
+| `Session` | object-safe; `write` / `read` / `resize` / `try_wait` / `kill` / `pid` |
+| `SessionSpec` | program, args, cwd — args kept as **separate** elements, never joined |
+| `ConptySession` | `cfg(windows)`, wraps `conpty-oxide`'s owned halves, **zero `unsafe`** |
+| `FakeSession` | pure `std`, compiles and behaves identically on every target |
+| Tests | 15, of which 4 drive the real ConPTY backend through `dyn Session` |
+
+#### Verified after the change
+
+| Claim | How established |
+|---|---|
+| 144 tests pass; clippy clean; release builds | `cargo test` / `cargo clippy --all-targets` / `cargo build --release` |
+| **Zero `unsafe` in the whole codebase** | recursive scan of `src/` — the single `unsafe` hit is the word inside a doc comment |
+| `conpty_oxide` referenced from exactly one file | recursive scan; no matches outside `src/session/` |
+| Linux graph still Windows-free | `cargo metadata --filter-platform x86_64-unknown-linux-gnu` → 158 packages, zero Windows-only crates |
+
+#### Two contracts the tests discovered, not the docs
+
+1. **`read` blocks and `Ok(0)` means EOF, not "nothing yet".** Already predicted in §6.5 from the
+   `conpty` 0.7 hang; now it is a documented property of our own trait, with a test.
+2. **`kill` is asynchronous.** The first version asserted the child was gone on the very next
+   `try_wait` and **failed**. The backend tears down the session job object and termination proceeds
+   asynchronously. The test now polls, and the trait documents that a successful `kill` is not
+   evidence of death.
+
+Both are recorded in `ARCHITECTURE.md` §3.9 as contracts, not implementation notes, because a caller
+that gets either wrong hangs or leaks.
+
+#### Honest limits
+
+- **The Unix backend is not implemented.** `spawn` returns `ErrorKind::Unsupported` there. This is a
+  seam, not a port.
+- **No Linux compile has been performed.** Only `x86_64-pc-windows-gnu` is installed, and a Linux
+  build needs a Linux linker. The dependency graph resolves; the code is unverified there.
+- **`FakeSession` is compiled into release builds.** It is small, kept public deliberately so a
+  future Linux CI can test the wiring, and the linker will drop it if unreferenced.
 
 ---
 

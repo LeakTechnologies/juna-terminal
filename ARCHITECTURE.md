@@ -643,6 +643,61 @@ prompt inherits full administrative authority with no prompt of its own.
 - **Silent auto-elevation on detection of a privileged command.** Rejected: it removes the consent
   boundary the user relies on to know when they are at elevated authority.
 
+### 3.9 Session seam (D11) — normative
+
+**Adopted 2026-10-11.** `src/session/` is the **only** place in the project permitted to name a
+platform API for process I/O.
+
+```
+        ┌────────────── application / renderer / engine ──────────────┐
+        │   never sees a platform type; holds Box<dyn Session>         │
+        └──────────────────────────┬───────────────────────────────────┘
+                                   │
+        ┌──────────────────────────┴───────────────────────────┐
+        │  SessionSpec → spawn() → Box<dyn Session>            │
+        │  write / read / resize / try_wait / kill / pid       │
+        └───────┬──────────────────────────────┬───────────────┘
+                │                              │
+   FakeSession (pure std,            ConptySession (cfg(windows))
+   runs on every target)            conpty-oxide, zero unsafe
+```
+
+#### Rules
+
+1. **The trait signature carries no platform type.** `Session`, `SessionSpec`, `Dimensions`, and
+   `ExitStatus` are defined in Juna and mention no crate, handle, or Win32 type. If one appears, a
+   backend stops being additive.
+2. **`spawn` is the only entry point.** Callers never name a backend.
+3. **Backends are additive.** A Unix PTY backend is a new file in `src/session/` implementing
+   `Session`. It must not require edits anywhere else.
+4. **A missing backend is an error, never a stub.** `spawn` returns `ErrorKind::Unsupported` where no
+   backend exists. It must not fall back to a fake or a degraded pipe.
+5. **`write` is all-or-error.** Backends loop internally; a short write is never surfaced. §3.0
+   forbids dropping bytes.
+
+#### Two contracts callers must know
+
+These are not implementation details. Both were found by tests, not by reading the docs.
+
+- **`read` blocks, and `Ok(0)` is EOF — not "nothing yet".** ConPTY holds its output pipe open after
+  the child exits and never delivers EOF. Waiting for `Ok(0)` to notice exit hangs forever. **Detect
+  exit with `try_wait`; run reads on their own thread**, per §3.
+- **`kill` returns before the process has died.** The Windows backend tears down the session job
+  object and termination proceeds asynchronously, so `try_wait` can still report `None` immediately
+  after a successful `kill`. Callers must poll. A successful `kill` is **not** evidence of death.
+
+#### Why `FakeSession` is not a test-only convenience
+
+It is the only way to exercise the wiring on a target with no backend. Being pure `std`, it compiles
+and behaves identically everywhere, which is what keeps the seam honest on a machine that has no
+ConPTY. A fake that could pass on Windows and fail elsewhere would not be testing the seam.
+
+#### Enforcement
+
+`src/session/tests.rs` — 15 tests, 4 of which drive the **real** ConPTY backend through `dyn Session`.
+The Linux dependency graph is verified to contain zero Windows-only crates
+(`DECISIONS.md` §6.18). `conpty-oxide` is referenced from `src/session/windows.rs` and nowhere else.
+
 ---
 
 ## 4. Conformance & test strategy
@@ -703,6 +758,7 @@ Status values: **DIRECTION SET** (lead has given a direction; not yet proven).
 | **D8** | wgpu backends | **APPROVED PROVISIONALLY** | `default-features = false`, features `std, dx12, vulkan, gles, wgsl`. Enumeration confirms dx12=3, vulkan=1, gles=1. | `gles` retained. Feature set is **not** to be changed on enumeration evidence alone; presentation paths are untested. See `DECISIONS.md` §6.4. |
 | **D9** | Adapter selection policy | **DIRECTION SET — must be explicit** | Never take the first adapter by default. | Reject `DeviceType::Cpu` (a WARP software rasteriser is exposed and could be selected silently). Prefer `DiscreteGpu`; treat software as last-resort fallback. The DX12 list contains apparent duplicates, so do not assume deduplication. |
 | **D10** | Process privilege | **DIRECTION SET — specified** | Elevation is a property of the **host process**, never requested by Juna for a child. No manifest elevation; no in-UI elevation affordance; token APIs forbidden in `src/`. | Specified in §3.8. Enforced by `tests/elevation_boundary.rs`, verified non-vacuous by fault injection. §3.0 byte-exactness becomes a **release gate** for any elevated build, not only a correctness gate. |
+| **D11** | Cross-platform | **DIRECTION SET — seam built** | Cross-platform is a **direction**, not a shipping commitment. `src/session/` is the sole place permitted to name a platform process API; backends are additive. | Seam specified in §3.9 and implemented: `ConptySession` (Windows) + `FakeSession` (portable). **The Unix PTY backend is not implemented** — `spawn` returns `Unsupported` there. No Linux compile has been performed; only the dependency graph is verified. |
 
 ### 5.1 Shell acceptance targets
 
