@@ -121,6 +121,16 @@ pub fn choices() -> &'static [String] {
         names
     })
 }
+pub fn notices() -> String {
+    let mut text = String::from("Juna bundled font notices\n\n");
+    for font in BUNDLED {
+        text.push_str(font.name);
+        text.push_str("\n\n");
+        text.push_str(font.license);
+        text.push_str("\n\n");
+    }
+    text
+}
 pub fn load_primary(db: &mut fontdb::Database, preferred: &str) -> Option<fontdb::ID> {
     if let Some(font) = BUNDLED
         .iter()

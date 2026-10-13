@@ -67,7 +67,7 @@ Source Code Pro, Iosevka, Inconsolata, Roboto Mono, Ubuntu Sans Mono, Space Mono
 DM Mono, Victor Mono and Monaspace Neon. Installed monospace fonts are also listed.
 
 Original font licenses and pinned sources are retained in [assets/fonts](assets/fonts/manifest.json).
-Use **Settings → Font license** to read the selected bundled font's notice. Fourteen families
+Bundled notices are also written to `%LOCALAPPDATA%\Juna\font-licenses.txt`. Fourteen families
 use SIL OFL 1.1; Ubuntu Sans Mono uses Ubuntu Font Licence 1.0.
 
 Theme choices include Catppuccin, Dracula, Tokyo Night, Gruvbox and Nord. Custom themes and
@@ -93,3 +93,6 @@ Full bidi/contextual text layout, image protocols and a Unix process backend rem
 - [Contribution rules](AGENTS.md)
 
 Junafetch and further bundled terminal tools are being designed; they are not included yet.
+
+See the [roadmap](ROADMAP.md) for tabs, tiled terminals, grouped themes and bundled tools.
+

@@ -47,3 +47,11 @@ zoom/AltGr routing, wheel accumulation, persistence and bounds have focused regr
 GPU captures cover all fifteen, fallback, row isolation and minimum/default/maximum sizes.
 README now displays the approved logo and documents current features and controls.
 Taskbar API/icon handles are verified; user confirmation of the updated Explorer button is pending.
+
+## 2026-10-13 — preview placement and taskbar verified
+
+Right-side previews and a simplified settings menu pass the pixel/geometry checks. All 180
+standard tests, check/clippy, targeted GPU and both real-window tests pass; release rebuilt.
+Direct release launch exited 0, native icon resources match the source, and the user confirmed
+the visible taskbar logo after the fresh-group property correction. Upcoming work has approved
+designs in UI_NEXT_DESIGN.md, JUNAFETCH_DESIGN.md and UPDATE_DESIGN.md.

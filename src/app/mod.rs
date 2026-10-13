@@ -25,6 +25,45 @@ const PAD: f32 = 8.;
 const CELL_W: f32 = 10.;
 const CELL_H: f32 = 22.;
 const FONT_PX: f32 = 16.;
+#[cfg(windows)]
+const APP_ID: &str = "LeakTechnologies.Juna.Terminal.Desktop";
+#[cfg(windows)]
+fn taskbar_properties(hwnd: windows::Win32::Foundation::HWND) -> Result<(), String> {
+    use windows::{
+        core::GUID,
+        Win32::{
+            Foundation::PROPERTYKEY,
+            System::Com::StructuredStorage::PROPVARIANT,
+            UI::Shell::PropertiesSystem::{IPropertyStore, SHGetPropertyStoreForWindow},
+        },
+    };
+    let executable = std::env::current_exe().map_err(|e| e.to_string())?;
+    let executable = executable
+        .to_str()
+        .ok_or("Executable path is not valid Unicode")?;
+    // SAFETY: winit owns this live HWND on the UI thread and initializes its OLE apartment during creation.
+    let store: IPropertyStore = unsafe { SHGetPropertyStoreForWindow(hwnd) }
+        .map_err(|e| format!("Taskbar property store: {e}"))?;
+    for (pid, text) in [
+        (2, format!("\"{executable}\"")),
+        (4, "Juna Terminal".into()),
+        (3, format!("{executable},-1")),
+        (5, APP_ID.into()),
+    ] {
+        let key = PROPERTYKEY {
+            fmtid: GUID::from_u128(0x9f4c2855_9f79_4b39_a8d0_e1d42de1d5f3),
+            pid,
+        };
+        let value = PROPVARIANT::from(text.as_str());
+        // SAFETY: this owned string variant stays live for the synchronous copying call.
+        unsafe { store.SetValue(&key, &value) }
+            .map_err(|e| format!("Taskbar property {pid}: {e}"))?;
+    }
+    // SAFETY: the property store is live and belongs to this window's UI-thread apartment.
+    unsafe { store.Commit() }.map_err(|e| format!("Taskbar property commit: {e}"))?;
+    log::info!("Taskbar relaunch icon configured");
+    Ok(())
+}
 pub struct App {
     window: Option<Arc<Window>>,
     gpu: Option<Gpu>,
@@ -392,10 +431,7 @@ impl App {
         false
     }
     fn open_ui(&mut self, kind: ui::Kind) {
-        if matches!(
-            kind,
-            ui::Kind::Settings | ui::Kind::Fonts | ui::Kind::FontLicense
-        ) {
+        if matches!(kind, ui::Kind::Settings | ui::Kind::Fonts) {
             if self.settings_before.is_none() {
                 self.settings_before = Some(self.settings.clone());
             }
@@ -517,7 +553,6 @@ impl App {
                 Action::Themes => self.open_ui(Kind::Themes),
                 Action::Settings => self.open_ui(Kind::Settings),
                 Action::Fonts => self.open_ui(Kind::Fonts),
-                Action::FontLicense => self.open_ui(Kind::FontLicense),
                 Action::PickFont(name) => {
                     self.settings.font_family = name;
                     self.rebuild_renderer();
@@ -756,6 +791,7 @@ impl ApplicationHandler for App {
         let result = (|| -> Result<(), String> {
             let attributes = Window::default_attributes()
                 .with_title("Juna Terminal")
+                .with_visible(false)
                 .with_inner_size(winit::dpi::LogicalSize::new(
                     self.cols as f32 * CELL_W + PAD * 2.,
                     self.rows as f32 * CELL_H + PAD * 2.,
@@ -770,7 +806,7 @@ impl ApplicationHandler for App {
                 .map_err(|e| format!("Juna window icon: {e}"))?;
                 let large = winit::window::Icon::from_resource(
                     1,
-                    Some(winit::dpi::PhysicalSize::new(256, 256)),
+                    Some(winit::dpi::PhysicalSize::new(48, 48)),
                 )
                 .map_err(|e| format!("Juna taskbar icon: {e}"))?;
                 attributes
@@ -806,7 +842,9 @@ impl ApplicationHandler for App {
                     return Err("Juna native window icon was not installed".into());
                 }
                 log::info!("Window icons verified: small and taskbar");
+                taskbar_properties(HWND(handle.hwnd.get() as *mut _))?;
             }
+            window.set_visible(true);
             window.set_ime_allowed(true);
             self.scale = window.scale_factor() as f32 * self.settings.font_size / FONT_PX;
             let size = window.inner_size();
@@ -866,6 +904,7 @@ impl ApplicationHandler for App {
             Ok(())
         })();
         if let Err(e) = result {
+            log::error!("Startup: {e}");
             self.failure = Some(e);
             event_loop.exit();
         }
@@ -1141,7 +1180,7 @@ pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
         // SAFETY: the static UTF-16 application ID is NUL-terminated and is set before any UI is created.
         unsafe {
             windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID(windows::core::w!(
-                "LeakTechnologies.Juna.Terminal"
+                "LeakTechnologies.Juna.Terminal.Desktop"
             ))?;
         }
     }
@@ -1161,7 +1200,10 @@ pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
         .target(env_logger::Target::Pipe(Box::new(log)))
         .try_init()?;
     #[cfg(windows)]
-    log::info!("Taskbar application ID: LeakTechnologies.Juna.Terminal");
+    log::info!("Taskbar application ID: {APP_ID}");
+    if let Err(error) = std::fs::write(path.join("font-licenses.txt"), crate::fonts::notices()) {
+        log::warn!("Writing bundled font notices: {error}");
+    }
     let event_loop = EventLoop::new()?;
     let mut app = App::new(cols, rows);
     event_loop.run_app(&mut app)?;

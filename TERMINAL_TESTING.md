@@ -165,3 +165,15 @@ and stored sizing are covered. The real window keeps output flowing with a font 
 Verified taskbar evidence: embedded ICO images match the approved source; native small/big icon
 handles exist; Windows accepts the dedicated application ID. The observed user window started
 before that identity build. Explorer's displayed icon after relaunch still needs human confirmation.
+
+## Right-side preview and taskbar — 2026-10-13
+
+Verified: right-edge geometry follows viewport resize; GPU comparison leaves the left 480 pixels
+unchanged in a 1024-pixel frame. Required gates pass (180 tests) and both real-window cases pass.
+A direct release EXE starts, presents, configures relaunch icon properties and exits 0. Native
+small/large icons and all seven embedded resource images are verified. Explorer initially retained
+a generic group icon despite valid resources; a fresh explicit group with relaunch properties
+shows the Juna dog, confirmed by the user. The permanent release setup was visually inspected.
+The unsuccessful Rust borrowed-variant attempt is recorded in DECISIONS.md, including its repair.
+
+![Right-side settings leave terminal text visible](docs/acceptance/right-side-settings.png)

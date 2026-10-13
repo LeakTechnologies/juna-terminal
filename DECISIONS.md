@@ -1254,3 +1254,28 @@ not proof that the new identity has fixed the displayed taskbar button.
 Verified: warning-free check/clippy, 180 standard tests, four GPU acceptance tests (15 fonts,
 clipping/fallback and size limits), two live-window tests (output with fonts/settings/themes open),
 release build, and byte-for-byte approved icon resources. Recorded captures were visually reviewed.
+## 2026-10-13 — right-side previews and verified taskbar display
+
+Settings/fonts/themes/editor geometry now stays against the right edge as the window changes
+size; the context menu retains its pointer anchor. GPU comparisons verify the left 480 pixels
+are unchanged by a panel in a 1024-pixel frame. The standalone font-license selector was removed;
+original notices remain embedded and are written to the app-owned font-licenses.txt file.
+
+Retraction of the taskbar hypothesis: process identity and valid ICON_SMALL/ICON_BIG handles did
+not fix the existing Explorer group. Executable extraction and a fresh file both returned the
+correct logo, but Explorer retained a generic group icon. Setting complete relaunch properties
+and a fresh group ID displayed the dog logo; the user confirmed both taskbar and title-bar icons.
+The permanent setup declares LeakTechnologies.Juna.Terminal.Desktop, configures relaunch command,
+display name and resource -1 before showing the window, and uses a 48px large window icon.
+Windows PropertiesSystem/StructuredStorage/Variant features serve only this platform metadata.
+
+The first Rust property integration incorrectly treated PROPVARIANT as a non-owning wrapper.
+Its Drop implementation freed borrowed storage, and the real-window tests caught heap corruption.
+That uncommitted attempt was replaced by the library's safe owned string conversion; the repeated
+real-window tests and a direct release-executable launch now exit successfully.
+
+Verified: warning-free check/clippy, 180 standard tests, right-panel GPU comparison, both actual
+window tests, updated release build, direct release exit 0, all seven embedded source-icon images
+matching byte-for-byte, and visual taskbar inspection. No terminal-engine boundary changed.
+
+The next UI, Junafetch and update proposals received explicit approval on 2026-10-13, in that order.

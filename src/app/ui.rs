@@ -16,7 +16,6 @@ pub enum Action {
     PickFont(String),
     SaveSettings,
     Resize(i8),
-    FontLicense,
     Pick(String),
     Duplicate,
     Edit,
@@ -33,7 +32,6 @@ pub enum Kind {
     Themes,
     Settings,
     Fonts,
-    FontLicense,
     Editor,
 }
 pub struct Ui {
@@ -157,27 +155,6 @@ impl Ui {
                 rows.push(row("Back to settings".into(), Action::Settings, None));
                 rows
             }
-            Kind::FontLicense => {
-                let mut rows = vec![row("Back to fonts".into(), Action::Fonts, None)];
-                if let Some(font) = crate::fonts::BUNDLED
-                    .iter()
-                    .find(|f| f.name == settings.font_family)
-                {
-                    for line in font.license.lines() {
-                        let chars: Vec<char> = line.chars().collect();
-                        for part in chars.chunks(56) {
-                            rows.push(row(part.iter().collect(), Action::Search, None));
-                        }
-                    }
-                } else {
-                    rows.push(row(
-                        "Installed font: consult its original license.".into(),
-                        Action::Search,
-                        None,
-                    ));
-                }
-                rows
-            }
             Kind::Settings => vec![
                 row(
                     format!("Font: {}", settings.font_family),
@@ -200,7 +177,6 @@ impl Ui {
                     None,
                 ),
                 row("Theme selector...".into(), Action::Themes, None),
-                row("Font license...".into(), Action::FontLicense, None),
                 row("Save settings  Ctrl+S".into(), Action::SaveSettings, None),
                 row("Cancel".into(), Action::Cancel, None),
             ],
@@ -239,7 +215,12 @@ impl Ui {
             .max(1)
             .min(len.max(1));
         let h = (visible as f32 * step + 78. * scale).min(height.max(1.));
-        let x = self.anchor[0].clamp(0., (width - w).max(0.));
+        let anchor_x = if self.kind == Kind::Context {
+            self.anchor[0]
+        } else {
+            width - w - 16. * scale
+        };
+        let x = anchor_x.clamp(0., (width - w).max(0.));
         let y = self.anchor[1].clamp(0., (height - h).max(0.));
         ([x, y, w, h], visible, step)
     }
@@ -395,7 +376,6 @@ impl Ui {
             Kind::Context => "Juna",
             Kind::Themes => "Themes - live preview",
             Kind::Fonts => "Fonts - live preview",
-            Kind::FontLicense => "Font license and copyright",
             Kind::Settings => "Settings - live preview",
             Kind::Editor => "Custom theme - live preview",
         };
@@ -440,7 +420,6 @@ impl Ui {
                 Kind::Themes => "Type to search | Enter selects",
                 Kind::Settings => "Left/Right size | Ctrl+S saves | Esc cancels",
                 Kind::Fonts => "Search | Enter picks | Esc cancels",
-                Kind::FontLicense => "Up/Down scroll | Enter returns | Esc cancels",
                 Kind::Editor => "Ctrl+S saves | Esc cancels",
             }
         } else {
@@ -485,6 +464,13 @@ mod tests {
     use super::*;
     #[test]
     fn geometry_hit_testing_and_keyboard_never_touch_a_terminal() {
+        for kind in [Kind::Settings, Kind::Fonts, Kind::Themes, Kind::Editor] {
+            let panel = Ui::new(kind, [16., 16.]);
+            let (rect, _, _) = panel.geometry(1200., 800., 1., 8);
+            assert_eq!(rect[0] + rect[2], 1184.);
+            let (resized, _, _) = panel.geometry(1400., 800., 1., 8);
+            assert_eq!(resized[0] + resized[2], 1384.);
+        }
         let mut ui = Ui::new(Kind::Context, [1000., 1000.]);
         let rows = ui.rows(&[], &Settings::default());
         let (rect, visible, _) = ui.geometry(640., 480., 1., rows.len());

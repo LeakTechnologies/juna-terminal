@@ -47,3 +47,10 @@
 - Give settings previews Save/Cancel behavior and render variable fonts at regular weight.
 - Set a dedicated Windows taskbar application identity before window creation.
 - Add a GitHub README with the approved Juna logo, features, build instructions and controls.
+
+## 2026-10-13 — preview placement and taskbar
+
+- Place live-preview panels on the right and keep terminal text visible on the left.
+- Remove the license selector; retain embedded notices in the app-owned notices file.
+- Configure explicit taskbar relaunch/icon properties before showing the window.
+- Add the approved tabs/themes, compact/private Junafetch and update roadmap.

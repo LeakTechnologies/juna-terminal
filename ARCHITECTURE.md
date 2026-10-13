@@ -904,3 +904,8 @@ Settings/font previews hold a restorable app-owned preference snapshot; committi
 Store and cancellation restores it. Local zoom is intercepted before shell input and TUI mouse
 reporting, then uses the existing checked PTY/grid resize path. Each Juna process declares its
 Windows taskbar application identity before presenting a window.
+
+Live-preview panel geometry is derived from the current viewport's right edge, independent of
+terminal cells; pointer-anchored context menus keep their existing behavior. Font notices are
+app-owned file I/O. Native Windows relaunch properties are set before the window becomes visible;
+they do not enter terminal state or the byte transport.

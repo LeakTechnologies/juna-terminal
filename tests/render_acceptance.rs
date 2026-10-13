@@ -120,13 +120,24 @@ fn render_scene(
     format: wgpu::TextureFormat,
     scene: Option<&juna::render::overlay::Overlay>,
 ) -> Vec<u8> {
-    const W: u32 = 512;
-    const H: u32 = 256;
+    render_scene_at(device, queue, renderer, term, format, scene, (512, 256))
+}
+fn render_scene_at(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    renderer: &mut Renderer,
+    term: &TerminalState,
+    format: wgpu::TextureFormat,
+    scene: Option<&juna::render::overlay::Overlay>,
+    size: (u32, u32),
+) -> Vec<u8> {
+    let (width, height) = size;
+    assert_eq!(width % 64, 0);
     let texture = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("acceptance-frame"),
         size: wgpu::Extent3d {
-            width: W,
-            height: H,
+            width,
+            height,
             depth_or_array_layers: 1,
         },
         mip_level_count: 1,
@@ -139,11 +150,11 @@ fn render_scene(
     let view = texture.create_view(&Default::default());
     let readback = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("readback"),
-        size: (W * H * 4) as u64,
+        size: (width * height * 4) as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
-    renderer.build(&term.snapshot(0), W, H);
+    renderer.build(&term.snapshot(0), width, height);
     if let Some(scene) = scene {
         renderer.overlay(scene);
     }
@@ -165,7 +176,7 @@ fn render_scene(
             occlusion_query_set: None,
             multiview_mask: None,
         });
-        renderer.draw(device, queue, W, H, &mut pass);
+        renderer.draw(device, queue, width, height, &mut pass);
     }
     encoder.copy_texture_to_buffer(
         wgpu::TexelCopyTextureInfo {
@@ -178,13 +189,13 @@ fn render_scene(
             buffer: &readback,
             layout: wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(W * 4),
-                rows_per_image: Some(H),
+                bytes_per_row: Some(width * 4),
+                rows_per_image: Some(height),
             },
         },
         wgpu::Extent3d {
-            width: W,
-            height: H,
+            width,
+            height,
             depth_or_array_layers: 1,
         },
     );
@@ -358,7 +369,6 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
         Kind::Themes,
         Kind::Settings,
         Kind::Fonts,
-        Kind::FontLicense,
         Kind::Editor,
     ] {
         let mut ui = Ui::new(kind, [8., 8.]);
@@ -388,10 +398,43 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
             Kind::Themes => "theme-menu",
             Kind::Settings => "settings-menu",
             Kind::Fonts => "font-menu",
-            Kind::FontLicense => "font-license",
             Kind::Editor => "theme-editor",
         };
         std::fs::write(format!("target/acceptance/{name}.ppm"), ppm).unwrap();
+        if kind != Kind::Context {
+            let scene = ui.scene(&rows, 1024., 512., 1.);
+            let baseline = render_scene_at(
+                &device,
+                &queue,
+                &mut renderer,
+                &term,
+                wgpu::TextureFormat::Rgba8UnormSrgb,
+                None,
+                (1024, 512),
+            );
+            let pixels = render_scene_at(
+                &device,
+                &queue,
+                &mut renderer,
+                &term,
+                wgpu::TextureFormat::Rgba8UnormSrgb,
+                Some(&scene),
+                (1024, 512),
+            );
+            for y in 0..512 {
+                let start = y * 1024 * 4;
+                assert_eq!(
+                    &pixels[start..start + 480 * 4],
+                    &baseline[start..start + 480 * 4],
+                    "preview obscured the left terminal text"
+                );
+            }
+            let mut ppm = b"P6\n1024 512\n255\n".to_vec();
+            for pixel in pixels.chunks_exact(4) {
+                ppm.extend_from_slice(&pixel[..3]);
+            }
+            std::fs::write(format!("target/acceptance/{name}-right.ppm"), ppm).unwrap();
+        }
     }
     assert_eq!(term.snapshot(0).cells, before);
 }
