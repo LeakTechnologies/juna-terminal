@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1-dev3 — bundled Junafetch
+
+- Embed the pinned console utility and provide `junafetch` and `fetch` in Juna sessions.
+- Present eight local statistics with compact, width-aware artwork and plain/JSON options.
+- Verify cached payloads, repair corruption and retain native-library notices/source pins.
+- Omit personal/network identifiers; terminal-wide masking and hover reveal remain pending.
+
 ## 0.1.1-dev2 — read-only JSON preservation
 
 - Refuse replacing read-only preference/export files consistently across platforms.

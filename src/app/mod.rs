@@ -5,6 +5,8 @@ mod input;
 mod runtime;
 mod settings_files;
 mod tabs;
+#[cfg(windows)]
+mod tools;
 pub mod ui;
 use crate::{
     gpu::{FrameSkip, Gpu},
@@ -1817,6 +1819,15 @@ impl ApplicationHandler for App {
                     None
                 });
             let spec = SessionSpec::from_environment().map_err(|e| e.to_string())?;
+            #[cfg(windows)]
+            let spec = {
+                let mut spec = spec;
+                match tools::prepare(&self.store.directory, &spec.program) {
+                    Ok(environment) => spec.env.extend(environment),
+                    Err(error) => log::warn!("Bundled tools unavailable: {error}"),
+                }
+                spec
+            };
             self.tabs[self.active_tab].label = tabs::label(&spec);
             self.shell_spec = Some(spec.clone());
             self.runtime = Some(

@@ -226,3 +226,21 @@ navigation evidence. No user Git configuration was changed.
 ![Theme favourites](docs/acceptance/theme-favourites.png)
 ![Close tab confirmation](docs/acceptance/close-tab-confirmation.png)
 ![Terminal row numbers](docs/acceptance/line-numbers.png)
+
+## 2026-10-13 — dev2 publication and bundled-tool acceptance
+
+Verified dev2: hosted Linux CI and Windows release workflow passed. Downloaded ZIP SHA-256
+b4c340ca2ea68d448ab9eba987f3a3b346f1325a82ccc81c69fa820e6a2578d7 matches its manifest;
+source 7172df647fff607c79ffc079339c62bd1b10646f, native version and all seven icon images match.
+
+Verified bundled utility tests: cached frontend corruption is repaired; both aliases execute
+through production ConPTY with only system/tool PATH and a Unicode cache directory, without
+installed Fastfetch. The frontend constructs eight safe JSON fields and omits personal/network
+identifiers. These checks do not establish terminal-wide masking or hover reveal.
+
+Dev3 validation in this session: cargo check, strict all-target Clippy and all 202 standard
+Juna tests passed, including byte-exact ConPTY/shell transport. The separate frontend check,
+strict Clippy and one report regression passed. Pinned payload/source verification passed.
+The real-window bundled_fetch test passed: system-only PATH, both aliases, eight-field JSON,
+rendered acceptance marker, presented GPU frames and normal shell/window cleanup. This is
+controlled runtime evidence; artwork aesthetics and other-machine acceptance remain human checks.

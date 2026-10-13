@@ -43,6 +43,13 @@ jobs:
           if ($env:GITHUB_REF_NAME -ne "v$version" -or -not (Test-Path "releases/$version.md")) { throw 'Version/tag/release-note mismatch' }
       - name: Required Windows checks
         run: |
+          ./scripts/verify-tools.ps1
+          cargo check --locked --manifest-path tools/junafetch/Cargo.toml --target x86_64-pc-windows-gnu
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo clippy --locked --manifest-path tools/junafetch/Cargo.toml --all-targets --target x86_64-pc-windows-gnu -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --manifest-path tools/junafetch/Cargo.toml --target x86_64-pc-windows-gnu
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo check --locked --target x86_64-pc-windows-gnu
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo clippy --locked --all-targets --target x86_64-pc-windows-gnu -- -D warnings

@@ -1,5 +1,45 @@
 #![cfg(windows)]
 #[test]
+#[ignore = "interactive Windows desktop; bundled tool startup and presentation"]
+fn bundled_fetch_runs_in_a_real_window() {
+    use std::process::{Command, Stdio};
+    let folder =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target/acceptance/bundled-fetch");
+    std::fs::create_dir_all(&folder).unwrap();
+    let system = std::path::PathBuf::from(std::env::var_os("WINDIR").unwrap()).join("System32");
+    let shell = system.join("WindowsPowerShell/v1.0/powershell.exe");
+    let script = "$a=junafetch --json | ConvertFrom-Json; if ($LASTEXITCODE -ne 0 -or $a.fields.Count -ne 8) { exit 21 }; fetch; if ($LASTEXITCODE -ne 0) { exit 22 }; Write-Output 'BUNDLED_FETCH_OK'; Start-Sleep -Seconds 2";
+    let mut child = Command::new(env!("CARGO_BIN_EXE_juna"))
+        .arg("--shell")
+        .arg(shell)
+        .args(["--", "-NoProfile", "-Command", script])
+        .env("PATH", &system)
+        .env("LOCALAPPDATA", &folder)
+        .env("RUST_LOG", "info")
+        .env("JUNA_ACCEPT_MARKER", "BUNDLED_FETCH_OK")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let start = std::time::Instant::now();
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        if start.elapsed() > std::time::Duration::from_secs(45) {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("bundled fetch window did not exit");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    let log = std::fs::read_to_string(folder.join("Juna/juna.log")).unwrap();
+    assert!(log.contains("Acceptance marker present=true"), "{log}");
+    assert!(log.contains("ExitStatus(0)"), "{log}");
+    assert!(!log.contains("frames=0"), "{log}");
+}
+#[test]
 #[ignore = "interactive Windows desktop; concurrent tabs keep independent byte streams"]
 fn inactive_tabs_drain_output_and_reap_without_closing_other_tabs() {
     use std::process::{Command, Stdio};

@@ -119,7 +119,11 @@ Full bidi/contextual text layout, image protocols and a Unix process backend rem
 - [Changelog](CHANGELOG.md)
 - [Contribution rules](AGENTS.md)
 
-Junafetch and further bundled terminal tools are being designed; they are not included yet.
+Juna bundles Junafetch: run `junafetch` or its shorter alias `fetch` without installing
+Fastfetch. The compact report shows eight local hardware/session statistics and omits
+personal and network identifiers. Use `fetch --plain`, `fetch --json`, or
+`fetch --logo full` for other presentations. Terminal-wide privacy and deliberate
+hover reveal remain planned work.
 
 See the [roadmap](ROADMAP.md) for tiled terminals, privacy and bundled tools.
 

@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "detector_version": "2.69.0",
+  "detector_source": "https://github.com/LeakTechnologies/junafetch",
+  "detector_commit": "c38ad3e6feed61e92c0a72c14453a255bf4b212d",
+  "upstream_commit": "0c3b852bf7bad2837a814c7a31bf332092048a2b",
+  "target": "x86_64-pc-windows-gnu",
+  "detector_sha256": "b83449bcf22d57970ef6509063ff79ce044534445e578f34a8ebd22f897e969d",
+  "frontend_version": "0.1.0",
+  "frontend_sha256": "7c60d66602d4930f801174adc48f96b3a62fc2bcd64feb0ed511f23083abe722",
+  "source_hashes": {
+    "tools/junafetch/Cargo.toml": "2290b77bcd17cf200333ab23f2f75dc1b0e39aacddd17fbb3a9f59623c0eb221",
+    "tools/junafetch/Cargo.lock": "cfa7c8cd96aa42af2307925f5f50cddfbecd6ca0af4f2fc8a234ab2766a0e2ec",
+    "tools/junafetch/src/main.rs": "3c7c1854539cb80c07f18c3b8bb9b76a9a57f07f1782376b749f41a9b8b125e9",
+    "tools/junafetch/assets/logo-compact.txt": "f8da196c13df738d4334e4e5c0696053614c212b8cdc54fd25f41b4a4d454dae",
+    "tools/junafetch/assets/logo-full.txt": "7104c0d5246d12e121c0f9a826847e34b7df39a5919ae73cb04abe00e1eddf8e"
+  },
+  "native_features": {
+    "image_protocols": false,
+    "lua": false,
+    "quickjs": false,
+    "video_codec_detection": false
+  },
+  "text_hash_normalization": "LF, except raw original logo-full.txt"
+}

@@ -1,0 +1,4 @@
+assets/junafetch-ascii.txt -text
+tools/junafetch/assets/logo-full.txt -text
+assets/tools/*.bin -text
+tools/junafetch/assets/*.bin -text

@@ -1,5 +1,12 @@
 # Juna Terminal Engine — Architecture & Interface Specification
 
+Bundled utilities are app-owned console executables, separate from the VT engine. Juna
+verifies/extracts the embedded Junafetch frontend into a per-user version directory and
+prepends it only to child-session PATH. The frontend verifies its pinned native detector,
+uses bounded JSON output and a finite process deadline, and constructs a safe local report.
+Neither utility receives engine state. Cache failure reports a warning without preventing
+terminal startup. See tools/junafetch/README.md and assets/tools/manifest.json for provenance.
+
 Status: **Implemented Windows terminal, with readiness repairs approved 2026-10-12.
 The acceptance record distinguishes verified behavior from pending human testing.**
 

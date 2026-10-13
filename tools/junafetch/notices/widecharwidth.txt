@@ -1,0 +1,4 @@
+The detector's Unicode 17 widecharwidth standards-data table is identified by upstream as Public domain.
+Author: ridiculousfish. Source: https://github.com/ridiculousfish/widecharwidth/
+The upstream generated header records its generator and Unicode-data source hashes.
+No widecharwidth implementation is used as Juna's terminal engine; this is the separate detector utility.

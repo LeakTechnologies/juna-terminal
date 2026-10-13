@@ -1351,3 +1351,13 @@ archive SHA-256, source f4f8bfbe26f97074146cccdea80e01482bed3999, native version
 match. Linux CI then exposed Unix rename semantics: replacing an existing read-only file can
 succeed despite the file's write bits. write_json now refuses that replacement before staging
 on every platform. Dev2 records this small correction; published dev1 assets are not replaced.
+
+Junafetch delivery uses an independently compiled console Rust frontend so PowerShell waits for
+its exit/status and GUI-subsystem launching cannot return the prompt early. Its serde_json 1.0.151
+dependency serves bounded detector-report parsing; windows 0.61.3 serves native SHA-256 cache
+verification and console-width detection. These reuse the project's existing pinned versions;
+no async runtime or terminal engine is introduced. Root windows enables Security_Cryptography
+for the same pinned launcher-payload hash check. Native Fastfetch 2.69.0 detector source remains
+the separately maintained fork; script/image/codec capabilities excluded by the lean build are
+not claimed. This cycle delivers eight safe local stats, width-aware art and JSON/plain output;
+interactive protected-value reveal and terminal-wide privacy remain a separate unshipped cycle.
