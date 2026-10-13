@@ -150,3 +150,18 @@ The test refreshed its process PATH from registered Windows machine/user values 
 the parent session had an older PATH. Launch Juna from a fresh Windows session if
 fastfetch is not found; Fastfetch is installed on this host, not bundled with Juna.
 Verified title regression: both real shell windows presented frames, retained Juna Terminal after explicit shell title changes, and closed on shell exit. Check/clippy, all 176 standard tests and both explicit real-window tests passed in this iteration.
+
+## Bundled fonts and sizing — 2026-10-13
+
+Verified: 180 standard tests, check/clippy, four explicit GPU tests and two explicit real-window
+tests pass. All fifteen faces resolve in an empty font database; the GPU samples exercise regular
+weight, ASCII disambiguation, box drawing/CJK fallback and row clipping. Sizes 8/16/40 render.
+Font/setting cancellation, saved selection, zoom bounds, AltGr exclusion, pixel-wheel accumulation
+and stored sizing are covered. The real window keeps output flowing with a font picker open.
+
+![Fifteen bundled font samples](docs/acceptance/font-samples.png)
+![Font picker](docs/acceptance/font-menu.png)
+
+Verified taskbar evidence: embedded ICO images match the approved source; native small/big icon
+handles exist; Windows accepts the dedicated application ID. The observed user window started
+before that identity build. Explorer's displayed icon after relaunch still needs human confirmation.

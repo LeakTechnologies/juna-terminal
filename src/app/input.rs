@@ -2,6 +2,32 @@
 use crate::vt::InputModes;
 use winit::keyboard::{Key, ModifiersState, NamedKey};
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Zoom {
+    Step(i8),
+    Reset,
+}
+pub fn zoom(
+    key: &Key,
+    physical: winit::keyboard::PhysicalKey,
+    modifiers: ModifiersState,
+) -> Option<Zoom> {
+    use winit::keyboard::{KeyCode, PhysicalKey};
+    if !modifiers.control_key() || modifiers.alt_key() || modifiers.super_key() {
+        return None;
+    }
+    match key {
+        Key::Character(s) if s == "+" || s == "=" => Some(Zoom::Step(1)),
+        Key::Character(s) if s == "-" => Some(Zoom::Step(-1)),
+        Key::Character(s) if s == "0" => Some(Zoom::Reset),
+        _ => match physical {
+            PhysicalKey::Code(KeyCode::NumpadAdd) => Some(Zoom::Step(1)),
+            PhysicalKey::Code(KeyCode::NumpadSubtract) => Some(Zoom::Step(-1)),
+            _ => None,
+        },
+    }
+}
+
 pub fn encode(
     key: &Key,
     text: Option<&str>,
@@ -220,6 +246,41 @@ pub fn mouse(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn zoom_shortcuts_respect_altgr_and_keypad() {
+        use super::*;
+        use winit::keyboard::{KeyCode, PhysicalKey};
+        let physical = PhysicalKey::Code(KeyCode::Equal);
+        for (key, expected) in [
+            ("+", Zoom::Step(1)),
+            ("=", Zoom::Step(1)),
+            ("-", Zoom::Step(-1)),
+            ("0", Zoom::Reset),
+        ] {
+            let key = Key::Character(key.into());
+            assert_eq!(
+                zoom(&key, physical, ModifiersState::CONTROL),
+                Some(expected)
+            );
+            assert_eq!(zoom(&key, physical, ModifiersState::empty()), None);
+            assert_eq!(
+                zoom(
+                    &key,
+                    physical,
+                    ModifiersState::CONTROL | ModifiersState::ALT
+                ),
+                None
+            );
+        }
+        assert_eq!(
+            zoom(
+                &Key::Unidentified(winit::keyboard::NativeKey::Unidentified),
+                PhysicalKey::Code(KeyCode::NumpadAdd),
+                ModifiersState::CONTROL
+            ),
+            Some(Zoom::Step(1))
+        );
+    }
     use super::*;
     #[test]
     fn spaces_controls_and_composition() {

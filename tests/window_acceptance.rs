@@ -55,6 +55,7 @@ fn real_window_presents_then_closes_on_shell_exit() {
         }
         let log = std::fs::read_to_string(folder.join("Juna/juna.log")).unwrap();
         assert!(log.contains("Shell exited:"), "{log}");
+        assert!(log.contains("Taskbar application ID: LeakTechnologies.Juna.Terminal"), "{log}");
         assert!(log.contains("Window icons verified: small and taskbar"), "{log}");
         assert!(
             log.contains("Window title: \"Juna Terminal\""),
@@ -79,7 +80,7 @@ fn options_overlays_keep_shell_output_flowing() {
         process::{Command, Stdio},
         time::{Duration, Instant},
     };
-    for panel in ["themes", "settings"] {
+    for panel in ["themes", "settings", "fonts"] {
         let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("target/acceptance")
             .join(format!("menu-{panel}"));

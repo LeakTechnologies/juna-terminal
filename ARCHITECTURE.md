@@ -896,3 +896,11 @@ to update engine metadata without changing the application window title.
 Application artwork is presentation infrastructure: GNU windres embeds assets/juna.ico into
 the Juna executable; winit loads that owned native icon for the window and taskbar.
 
+
+Bundled font assets are renderer infrastructure, loaded into fontdb before system discovery.
+The selected embedded face takes precedence over installed versions. Shaping, rasterization and
+metrics use regular weight 400 for variable fonts. The engine never sees font bytes or settings I/O.
+Settings/font previews hold a restorable app-owned preference snapshot; committing writes through
+Store and cancellation restores it. Local zoom is intercepted before shell input and TUI mouse
+reporting, then uses the existing checked PTY/grid resize path. Each Juna process declares its
+Windows taskbar application identity before presenting a window.

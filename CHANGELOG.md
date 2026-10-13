@@ -38,3 +38,12 @@
 - Embed the approved seven-size icon into the executable and set window/taskbar icons.
 - Verify native icon handles in real-window acceptance and source-scan the resource input.
 
+
+## 2026-10-13 — fonts, sizing and README
+
+- Bundle 15 licensed monospace font choices, original notices, pinned sources and hashes.
+- Add searchable live font previews, installed monospace choices and a license viewer.
+- Add Left/Right size adjustment, Ctrl+wheel, Ctrl++/Ctrl+- and Ctrl+0 with persisted sizing.
+- Give settings previews Save/Cancel behavior and render variable fonts at regular weight.
+- Set a dedicated Windows taskbar application identity before window creation.
+- Add a GitHub README with the approved Juna logo, features, build instructions and controls.

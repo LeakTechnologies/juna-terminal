@@ -1,0 +1,123 @@
+[
+  {
+    "family": "IBM Plex Mono",
+    "path": "ibmplexmono/font.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/ibmplexmono/IBMPlexMono-Regular.ttf",
+    "sha256": "6a3412f058c7d8dfd9170c41e85ade48e5156ecb89356110ca57a0a27734af46",
+    "license": "SIL OFL 1.1",
+    "family_query": "IBM Plex Mono"
+  },
+  {
+    "family": "JetBrains Mono",
+    "path": "jetbrainsmono/font.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/jetbrainsmono/JetBrainsMono%5Bwght%5D.ttf",
+    "sha256": "48715a42ec242c21e9f02692891e147d022299a52e48d5e413e1a942193ffeda",
+    "license": "SIL OFL 1.1",
+    "family_query": "JetBrains Mono"
+  },
+  {
+    "family": "Fira Code",
+    "path": "firacode/font.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/firacode/FiraCode%5Bwght%5D.ttf",
+    "sha256": "9335b082b3c7850d98a64b584f3417f65355f3471278bb5eeb8c6c0e8657aeeb",
+    "license": "SIL OFL 1.1",
+    "family_query": "Fira Code"
+  },
+  {
+    "family": "Cascadia Code",
+    "path": "cascadiacode/font.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/cascadiacode/CascadiaCode%5Bwght%5D.ttf",
+    "sha256": "30f2e14a5c389b346b1fce110c4ddcf0dc5ce8265faf5eca2ab7323f49dba590",
+    "license": "SIL OFL 1.1",
+    "family_query": "Cascadia Code"
+  },
+  {
+    "family": "Cascadia Mono",
+    "path": "cascadiamono/font.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/cascadiamono/CascadiaMono%5Bwght%5D.ttf",
+    "sha256": "78864a1b4d03767a44731454a6f24c6b7d6e93fb5f62932860eb02e409cd50cb",
+    "license": "SIL OFL 1.1",
+    "family_query": "Cascadia Mono"
+  },
+  {
+    "family": "Source Code Pro",
+    "path": "sourcecodepro/font.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/sourcecodepro/SourceCodePro%5Bwght%5D.ttf",
+    "sha256": "b400fc584e10aff25d0e775ce181b4fc1c5ea1b5dc37b81aeb2084375b945790",
+    "license": "SIL OFL 1.1",
+    "family_query": "Source Code Pro"
+  },
+  {
+    "family": "Inconsolata",
+    "path": "inconsolata/font.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/inconsolata/Inconsolata%5Bwdth%2Cwght%5D.ttf",
+    "sha256": "23ded25b447074d00659392bf9b1123d89df55cb07b0ad9bfef3366d199b5fcb",
+    "license": "SIL OFL 1.1",
+    "family_query": "Inconsolata"
+  },
+  {
+    "family": "Roboto Mono",
+    "path": "robotomono/font.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/robotomono/RobotoMono%5Bwght%5D.ttf",
+    "sha256": "66a80e79d17e4c7cabd162e2916578a4cc08fd19eef6e2a643305eae9c567b2b",
+    "license": "SIL OFL 1.1",
+    "family_query": "Roboto Mono"
+  },
+  {
+    "family": "Space Mono",
+    "path": "spacemono/font.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/spacemono/SpaceMono-Regular.ttf",
+    "sha256": "95837e182baeeada83368f7748db28357f0a1b75c6b84ff7065b5edf933c8e18",
+    "license": "SIL OFL 1.1",
+    "family_query": "Space Mono"
+  },
+  {
+    "family": "PT Mono",
+    "path": "ptmono/font.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/ptmono/PTM55FT.ttf",
+    "sha256": "cbe732b3b8fd211fd986ebdfc9b870ddeca4faab0bb5425fc509b37f9b4ac804",
+    "license": "SIL OFL 1.1",
+    "family_query": "PT Mono"
+  },
+  {
+    "family": "DM Mono",
+    "path": "dmmono/font.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/dmmono/DMMono-Regular.ttf",
+    "sha256": "55b4c98f123daebb3ed27947ba47b2af00554fc6284d639a540bcef5e6258ad2",
+    "license": "SIL OFL 1.1",
+    "family_query": "DM Mono"
+  },
+  {
+    "family": "Victor Mono",
+    "path": "victormono/font.ttf",
+    "source": "https://raw.githubusercontent.com/google/fonts/66928797f271fed5ee428544e7229685e2d90127/ofl/victormono/VictorMono%5Bwght%5D.ttf",
+    "sha256": "6fab3abe37b456f56d180987e04a3a0c326bace2cb825bc638b6be1eb03edf8f",
+    "license": "SIL OFL 1.1",
+    "family_query": "Victor Mono"
+  },
+  {
+    "family": "Ubuntu Sans Mono",
+    "path": "ubuntusansmono/font.ttf",
+    "source": "https://raw.githubusercontent.com/canonical/Ubuntu-Sans-Mono-fonts/c57353c1772eb8aaab9c539e3d42c971a03a5fcd/fonts/ttf/UbuntuSansMono-Regular.ttf",
+    "sha256": "535bee02748d1e396eb22766f6443d450b65b3413b9bd8217cc386d885548103",
+    "license": "Ubuntu Font Licence 1.0",
+    "family_query": "Ubuntu Sans Mono"
+  },
+  {
+    "family": "Monaspace Neon",
+    "path": "monaspaceneon/font.ttf",
+    "source": "https://raw.githubusercontent.com/githubnext/monaspace/f31794b6e9e65698a062262e2f826f679dcb7070/fonts/Static%20Fonts/Monaspace%20Neon/MonaspaceNeon-Regular.otf",
+    "sha256": "0daf2cd6cbd780b1a9426cb25c17e80f22844051f988a5133ad54b2751b0b8af",
+    "license": "SIL OFL 1.1",
+    "family_query": "Monaspace Neon"
+  },
+  {
+    "family": "Iosevka",
+    "path": "iosevka/font.ttf",
+    "source": "https://github.com/be5invis/Iosevka/releases/download/v34.9.0/PkgTTF-Iosevka-34.9.0.zip",
+    "archive_entry": "Iosevka-Regular.ttf",
+    "sha256": "c7e1ddc73aa7efd9353f86be61df834784d1a9d17d6f8eeac5ad2bca9b3ef53a",
+    "license": "SIL OFL 1.1",
+    "family_query": "Iosevka"
+  }
+]

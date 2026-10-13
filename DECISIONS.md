@@ -1229,3 +1229,28 @@ GNU remains the working toolchain; Windows MSVC resource compilation needs a fut
 Verified: required check/clippy/test gates, both real-window tests, and release build passed.
 All seven release resource images match assets/juna.ico byte for byte (16–256 pixels).
 
+## 2026-10-13 — approved bundled fonts and live sizing
+
+Implemented FONT_DESIGN.md and its explicitly approved live-sizing extension. Fifteen original
+font assets are embedded and resolve without system installation; source URLs and SHA-256 hashes
+are recorded in assets/fonts/manifest.json. No Rust dependency was added. Fourteen assets use
+SIL OFL 1.1; Ubuntu Sans Mono uses Ubuntu Font Licence 1.0 (correction to the initial all-OFL
+assumption). Original notices ship in the assets and an embedded Settings license view.
+
+The font picker includes installed monospace fonts, search and live preview. Settings previews
+are transactional: Save/Ctrl+S persists and Cancel/Esc restores the original preferences.
+Ctrl+Plus/Equals, Ctrl+Minus, Ctrl+0 and Ctrl+wheel reserve local resizing before shell/TUI input;
+Left/Right adjusts the size row. Sizes clamp to 8–40 px and successful external shortcuts persist.
+AltGr is excluded. Pixel wheel deltas accumulate, and PTY/grid resize uses the existing checked path.
+Measured variable defaults included Fira Code 300, Source Code Pro 200 and Victor Mono 100;
+measurement/shaping/rasterization explicitly select regular weight 400 instead.
+
+Windows taskbar grouping now receives LeakTechnologies.Juna.Terminal before UI creation.
+The existing windows infrastructure enables Win32_UI_Shell for that concrete requirement.
+Native icon handles and API success are verified; actual Explorer taskbar appearance remains human
+review. A user-reported missing taskbar logo was traced to a window started before this build,
+not proof that the new identity has fixed the displayed taskbar button.
+
+Verified: warning-free check/clippy, 180 standard tests, four GPU acceptance tests (15 fonts,
+clipping/fallback and size limits), two live-window tests (output with fonts/settings/themes open),
+release build, and byte-for-byte approved icon resources. Recorded captures were visually reviewed.

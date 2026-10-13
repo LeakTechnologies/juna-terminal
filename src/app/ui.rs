@@ -12,6 +12,11 @@ pub enum Action {
     SelectAll,
     Themes,
     Settings,
+    Fonts,
+    PickFont(String),
+    SaveSettings,
+    Resize(i8),
+    FontLicense,
     Pick(String),
     Duplicate,
     Edit,
@@ -27,6 +32,8 @@ pub enum Kind {
     Context,
     Themes,
     Settings,
+    Fonts,
+    FontLicense,
     Editor,
 }
 pub struct Ui {
@@ -121,11 +128,61 @@ impl Ui {
                 ));
                 rows
             }
+            Kind::Fonts => {
+                let mut rows = vec![row(
+                    format!("Search: {}", self.query),
+                    Action::Search,
+                    Some(self.query.clone()),
+                )];
+                rows.extend(
+                    crate::fonts::choices()
+                        .iter()
+                        .filter(|name| name.to_lowercase().contains(&self.query.to_lowercase()))
+                        .map(|name| {
+                            row(
+                                format!(
+                                    "{} {}",
+                                    if name == &settings.font_family {
+                                        "[*]"
+                                    } else {
+                                        "[ ]"
+                                    },
+                                    name
+                                ),
+                                Action::PickFont(name.clone()),
+                                None,
+                            )
+                        }),
+                );
+                rows.push(row("Back to settings".into(), Action::Settings, None));
+                rows
+            }
+            Kind::FontLicense => {
+                let mut rows = vec![row("Back to fonts".into(), Action::Fonts, None)];
+                if let Some(font) = crate::fonts::BUNDLED
+                    .iter()
+                    .find(|f| f.name == settings.font_family)
+                {
+                    for line in font.license.lines() {
+                        let chars: Vec<char> = line.chars().collect();
+                        for part in chars.chunks(56) {
+                            rows.push(row(part.iter().collect(), Action::Search, None));
+                        }
+                    }
+                } else {
+                    rows.push(row(
+                        "Installed font: consult its original license.".into(),
+                        Action::Search,
+                        None,
+                    ));
+                }
+                rows
+            }
             Kind::Settings => vec![
                 row(
                     format!("Font: {}", settings.font_family),
-                    Action::Setting(0),
-                    Some(settings.font_family.clone()),
+                    Action::Fonts,
+                    None,
                 ),
                 row(
                     format!("Font size: {} px", settings.font_size),
@@ -143,6 +200,9 @@ impl Ui {
                     None,
                 ),
                 row("Theme selector...".into(), Action::Themes, None),
+                row("Font license...".into(), Action::FontLicense, None),
+                row("Save settings  Ctrl+S".into(), Action::SaveSettings, None),
+                row("Cancel".into(), Action::Cancel, None),
             ],
             Kind::Editor => {
                 let t = self.draft.as_ref().expect("editor draft");
@@ -231,7 +291,7 @@ impl Ui {
             }
             self.buffer.push(c);
         }
-        if self.kind == Kind::Themes {
+        if matches!(self.kind, Kind::Themes | Kind::Fonts) {
             self.query = self.buffer.clone();
             self.focus = 0;
             self.scroll = 0;
@@ -246,6 +306,20 @@ impl Ui {
         rows: &[Row],
     ) -> Option<Action> {
         match key {
+            Key::Named(NamedKey::ArrowLeft | NamedKey::ArrowRight)
+                if self.kind == Kind::Settings
+                    && rows
+                        .get(self.focus)
+                        .is_some_and(|r| r.action == Action::Setting(1)) =>
+            {
+                return Some(Action::Resize(
+                    if matches!(key, Key::Named(NamedKey::ArrowRight)) {
+                        1
+                    } else {
+                        -1
+                    },
+                ));
+            }
             Key::Named(NamedKey::Escape) => return Some(Action::Cancel),
             Key::Named(NamedKey::ArrowDown | NamedKey::Tab) => {
                 self.focus_row((self.focus + 1) % rows.len().max(1), rows);
@@ -257,6 +331,13 @@ impl Ui {
             }
             Key::Named(NamedKey::Enter) => return rows.get(self.focus).map(|r| r.action.clone()),
             Key::Character(s)
+                if control
+                    && s.eq_ignore_ascii_case("s")
+                    && matches!(self.kind, Kind::Settings | Kind::Fonts) =>
+            {
+                return Some(Action::SaveSettings);
+            }
+            Key::Character(s)
                 if control && s.eq_ignore_ascii_case("s") && self.kind == Kind::Editor =>
             {
                 return Some(Action::Save)
@@ -267,8 +348,8 @@ impl Ui {
             }
             _ => {}
         }
-        let editable =
-            self.kind == Kind::Themes || rows.get(self.focus).is_some_and(|r| r.value.is_some());
+        let editable = matches!(self.kind, Kind::Themes | Kind::Fonts)
+            || rows.get(self.focus).is_some_and(|r| r.value.is_some());
         if !editable || control {
             return None;
         }
@@ -292,7 +373,7 @@ impl Ui {
                 self.buffer.extend(text.chars().filter(|c| !c.is_control()));
             }
         }
-        if self.kind == Kind::Themes {
+        if matches!(self.kind, Kind::Themes | Kind::Fonts) {
             self.query = self.buffer.clone();
             self.focus = 0;
             self.scroll = 0;
@@ -313,7 +394,9 @@ impl Ui {
         let title = match self.kind {
             Kind::Context => "Juna",
             Kind::Themes => "Themes - live preview",
-            Kind::Settings => "Settings - Enter applies",
+            Kind::Fonts => "Fonts - live preview",
+            Kind::FontLicense => "Font license and copyright",
+            Kind::Settings => "Settings - live preview",
             Kind::Editor => "Custom theme - live preview",
         };
         out.text.push(Text {
@@ -355,7 +438,9 @@ impl Ui {
             match self.kind {
                 Kind::Context => "Enter selects | Esc closes",
                 Kind::Themes => "Type to search | Enter selects",
-                Kind::Settings => "Enter saves | Esc closes",
+                Kind::Settings => "Left/Right size | Ctrl+S saves | Esc cancels",
+                Kind::Fonts => "Search | Enter picks | Esc cancels",
+                Kind::FontLicense => "Up/Down scroll | Enter returns | Esc cancels",
                 Kind::Editor => "Ctrl+S saves | Esc cancels",
             }
         } else {
@@ -372,6 +457,31 @@ impl Ui {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn font_search_and_size_arrow_actions() {
+        use super::*;
+        let settings = Settings::default();
+        let mut ui = Ui::new(Kind::Fonts, [0., 0.]);
+        ui.paste_text("JetBrains");
+        let rows = ui.rows(&[], &settings);
+        assert!(rows
+            .iter()
+            .any(|r| r.action == Action::PickFont("JetBrains Mono".into())));
+        assert!(!rows
+            .iter()
+            .any(|r| r.action == Action::PickFont("Fira Code".into())));
+        let mut ui = Ui::new(Kind::Settings, [0., 0.]);
+        let rows = ui.rows(&[], &settings);
+        ui.focus_row(1, &rows);
+        assert_eq!(
+            ui.key(&Key::Named(NamedKey::ArrowRight), None, false, &rows),
+            Some(Action::Resize(1))
+        );
+        assert_eq!(
+            ui.key(&Key::Named(NamedKey::ArrowLeft), None, false, &rows),
+            Some(Action::Resize(-1))
+        );
+    }
     use super::*;
     #[test]
     fn geometry_hit_testing_and_keyboard_never_touch_a_terminal() {

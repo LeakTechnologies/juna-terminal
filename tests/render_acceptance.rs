@@ -1,5 +1,117 @@
 //! Requires a real GPU/backend and installed monospace fonts. Run explicitly for visual evidence.
 use juna::{gpu::block_on, render::Renderer, vt::TerminalState};
+
+#[test]
+#[ignore = "real GPU; captures all bundled fonts and checks clipping/fallback"]
+fn bundled_fonts_render_and_resize_without_row_bleed() {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter =
+        block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).unwrap();
+    let (device, queue) =
+        block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
+    std::fs::create_dir_all("target/acceptance/fonts").unwrap();
+    for font in juna::fonts::BUNDLED {
+        let mut renderer = Renderer::new_with_family(
+            &device,
+            &queue,
+            wgpu::TextureFormat::Rgba8Unorm,
+            2048,
+            (12., 24.),
+            8.,
+            16.,
+            font.name,
+        )
+        .unwrap();
+        let mut term = TerminalState::new(40, 8);
+        term.advance(
+            format!(
+                "{}\r\n0O1Il {{}} [] () -> != ===\r\n┌──┐│ e\u{301} 漢 😀\r\nrow below\x1b[?25l",
+                font.name
+            )
+            .as_bytes(),
+        );
+        let cells = term.snapshot(0).cells;
+        let first = render(
+            &device,
+            &queue,
+            &mut renderer,
+            &term,
+            wgpu::TextureFormat::Rgba8Unorm,
+        );
+        assert_eq!(term.snapshot(0).cells, cells);
+        term.advance(b"\x1b[2;1H\x1b[2Kchanged font sample");
+        let second = render(
+            &device,
+            &queue,
+            &mut renderer,
+            &term,
+            wgpu::TextureFormat::Rgba8Unorm,
+        );
+        assert_eq!(
+            &first[..512 * 4 * 32],
+            &second[..512 * 4 * 32],
+            "{} row bleed",
+            font.name
+        );
+        assert_ne!(
+            &first[512 * 4 * 32..512 * 4 * 56],
+            &second[512 * 4 * 32..512 * 4 * 56],
+            "{} has no rendered text",
+            font.name
+        );
+        assert!(
+            renderer.atlas.get('漢' as u32).is_some(),
+            "{} CJK fallback",
+            font.name
+        );
+        assert!(
+            renderer.atlas.get('─' as u32).is_some(),
+            "{} box drawing fallback",
+            font.name
+        );
+        let mut ppm = b"P6\n512 256\n255\n".to_vec();
+        for pixel in first.chunks_exact(4) {
+            ppm.extend_from_slice(&pixel[..3]);
+        }
+        std::fs::write(
+            format!(
+                "target/acceptance/fonts/{}.ppm",
+                font.name.replace(' ', "-")
+            ),
+            ppm,
+        )
+        .unwrap();
+    }
+    for px in [8., 16., 40.] {
+        let mut renderer = Renderer::new_with_family(
+            &device,
+            &queue,
+            wgpu::TextureFormat::Rgba8Unorm,
+            2048,
+            (px * 0.625, px * 1.375),
+            8.,
+            px,
+            "IBM Plex Mono",
+        )
+        .unwrap();
+        let mut term = TerminalState::new(16, 3);
+        term.advance(b"sizing 0O1Il\r\nnext row\x1b[?25l");
+        let frame = render(
+            &device,
+            &queue,
+            &mut renderer,
+            &term,
+            wgpu::TextureFormat::Rgba8Unorm,
+        );
+        assert!(
+            frame
+                .chunks_exact(4)
+                .filter(|p| p[..3] != frame[..3])
+                .count()
+                > 40
+        );
+    }
+}
 fn render_scene(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -241,7 +353,14 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
     }
     let settings = juna::settings::Settings::default();
     renderer.apply_theme(&themes[0], 4.5).unwrap();
-    for kind in [Kind::Context, Kind::Themes, Kind::Settings, Kind::Editor] {
+    for kind in [
+        Kind::Context,
+        Kind::Themes,
+        Kind::Settings,
+        Kind::Fonts,
+        Kind::FontLicense,
+        Kind::Editor,
+    ] {
         let mut ui = Ui::new(kind, [8., 8.]);
         if kind == Kind::Editor {
             ui.draft = Some(juna::theme::default_theme());
@@ -268,6 +387,8 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
             Kind::Context => "context-menu",
             Kind::Themes => "theme-menu",
             Kind::Settings => "settings-menu",
+            Kind::Fonts => "font-menu",
+            Kind::FontLicense => "font-license",
             Kind::Editor => "theme-editor",
         };
         std::fs::write(format!("target/acceptance/{name}.ppm"), ppm).unwrap();

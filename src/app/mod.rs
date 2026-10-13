@@ -54,6 +54,8 @@ pub struct App {
     ui: Option<ui::Ui>,
     pointer_px: [f32; 2],
     ui_mouse_latch: Vec<MouseButton>,
+    settings_before: Option<crate::settings::Settings>,
+    zoom_wheel: f32,
 }
 impl App {
     pub fn new(cols: u16, rows: u16) -> Self {
@@ -91,6 +93,8 @@ impl App {
             ui: None,
             pointer_px: [0., 0.],
             ui_mouse_latch: Vec::new(),
+            settings_before: None,
+            zoom_wheel: 0.,
         }
     }
     fn fail(&mut self, message: String) {
@@ -326,7 +330,79 @@ impl App {
         self.fit(size.width, size.height);
         self.dirty = true;
     }
+    fn resize_font(&mut self, zoom: input::Zoom) {
+        let size = match zoom {
+            input::Zoom::Step(step) => (self.settings.font_size + f32::from(step)).clamp(8., 40.),
+            input::Zoom::Reset => FONT_PX,
+        };
+        if size == self.settings.font_size {
+            return;
+        }
+        let mut settings = self.settings.clone();
+        settings.font_size = size;
+        if self.settings_before.is_none() {
+            if let Err(error) = self.store.save_settings(&settings) {
+                log::warn!("Font size: {error}");
+                if let Some(ui) = self.ui.as_mut() {
+                    ui.message = error;
+                }
+                return;
+            }
+        }
+        self.settings = settings;
+        self.rebuild_renderer();
+        log::info!("Font size: {size} px");
+        if let Some(ui) = self.ui.as_mut() {
+            if ui.kind == ui::Kind::Settings && ui.focus == 1 {
+                ui.buffer = size.to_string();
+            }
+        }
+    }
+    fn handle_zoom(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::KeyboardInput { event, .. }
+                if event.state == ElementState::Pressed && !self.ime =>
+            {
+                if let Some(zoom) =
+                    input::zoom(&event.logical_key, event.physical_key, self.modifiers)
+                {
+                    self.resize_font(zoom);
+                    return true;
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. }
+                if self.modifiers.control_key()
+                    && !self.modifiers.alt_key()
+                    && !self.modifiers.super_key() =>
+            {
+                self.zoom_wheel += match delta {
+                    MouseScrollDelta::LineDelta(_, y) => *y,
+                    MouseScrollDelta::PixelDelta(p) => p.y as f32 / 40.,
+                };
+                let steps = self.zoom_wheel.trunc().clamp(-32., 32.) as i8;
+                if steps != 0 {
+                    self.zoom_wheel -= f32::from(steps);
+                    self.resize_font(input::Zoom::Step(steps));
+                }
+                return true;
+            }
+            WindowEvent::ModifiersChanged(m) if !m.state().control_key() => self.zoom_wheel = 0.,
+            _ => {}
+        }
+        false
+    }
     fn open_ui(&mut self, kind: ui::Kind) {
+        if matches!(
+            kind,
+            ui::Kind::Settings | ui::Kind::Fonts | ui::Kind::FontLicense
+        ) {
+            if self.settings_before.is_none() {
+                self.settings_before = Some(self.settings.clone());
+            }
+        } else if let Some(before) = self.settings_before.take() {
+            self.settings = before;
+            self.rebuild_renderer();
+        }
         log::info!("Options panel: {kind:?}");
         let anchor = if kind == ui::Kind::Context {
             self.pointer_px
@@ -342,6 +418,13 @@ impl App {
                 .unwrap_or(0)
                 + 1;
         }
+        if kind == ui::Kind::Fonts {
+            ui.focus = crate::fonts::choices()
+                .iter()
+                .position(|name| name == &self.settings.font_family)
+                .unwrap_or(0)
+                + 1;
+        }
         let rows = ui.rows(&self.themes, &self.settings);
         ui.focus_row(ui.focus, &rows);
         self.ui = Some(ui);
@@ -350,8 +433,14 @@ impl App {
     }
     fn preview_ui(&mut self) {
         let mut preview = None;
+        let mut font = None;
         if let Some(ui) = self.ui.as_mut() {
             let rows = ui.rows(&self.themes, &self.settings);
+            if ui.kind == ui::Kind::Fonts {
+                if let Some(ui::Action::PickFont(name)) = rows.get(ui.focus).map(|r| &r.action) {
+                    font = Some(name.clone());
+                }
+            }
             if ui.kind == ui::Kind::Themes {
                 if let Some(ui::Action::Pick(id)) = rows.get(ui.focus).map(|r| &r.action) {
                     preview = self.themes.iter().find(|t| &t.id == id).cloned();
@@ -375,6 +464,12 @@ impl App {
                 }
             }
         }
+        if let Some(font) = font {
+            if self.settings.font_family != font {
+                self.settings.font_family = font;
+                self.rebuild_renderer();
+            }
+        }
         if let (Some(theme), Some(renderer)) = (preview, self.renderer.as_mut()) {
             let _ = renderer.apply_theme(&theme, self.settings.minimum_contrast);
         }
@@ -382,6 +477,10 @@ impl App {
     }
     fn close_ui(&mut self) {
         self.ui = None;
+        if let Some(before) = self.settings_before.take() {
+            self.settings = before;
+            self.rebuild_renderer();
+        }
         let theme = self.active_theme();
         if let Some(r) = self.renderer.as_mut() {
             let _ = r.apply_theme(&theme, self.settings.minimum_contrast);
@@ -417,6 +516,24 @@ impl App {
                 }
                 Action::Themes => self.open_ui(Kind::Themes),
                 Action::Settings => self.open_ui(Kind::Settings),
+                Action::Fonts => self.open_ui(Kind::Fonts),
+                Action::FontLicense => self.open_ui(Kind::FontLicense),
+                Action::PickFont(name) => {
+                    self.settings.font_family = name;
+                    self.rebuild_renderer();
+                    self.open_ui(Kind::Settings);
+                }
+                Action::SaveSettings => {
+                    self.store.save_settings(&self.settings)?;
+                    self.settings_before = None;
+                    self.close_ui();
+                }
+                Action::Resize(step) => {
+                    self.resize_font(input::Zoom::Step(step));
+                    if let Some(ui) = self.ui.as_mut() {
+                        ui.buffer = self.settings.font_size.to_string();
+                    }
+                }
                 Action::Cancel => self.close_ui(),
                 Action::Pick(id) => {
                     let mut settings = self.settings.clone();
@@ -426,6 +543,10 @@ impl App {
                     self.close_ui();
                 }
                 Action::Duplicate | Action::Edit => {
+                    if let Some(before) = self.settings_before.take() {
+                        self.settings = before;
+                        self.rebuild_renderer();
+                    }
                     let mut theme = self.active_theme();
                     if action == Action::Duplicate || !theme.id.starts_with("custom-") {
                         theme.id = crate::settings::new_id();
@@ -477,7 +598,7 @@ impl App {
                         }
                         _ => return Err("Unknown setting".into()),
                     };
-                    self.store.save_settings(&settings)?;
+                    settings.validate()?;
                     self.settings = settings;
                     self.rebuild_renderer();
                 }
@@ -564,7 +685,7 @@ impl App {
                     if self.modifiers.control_key()
                         && matches!(&event.logical_key,Key::Character(s)if s.eq_ignore_ascii_case("v"))
                     {
-                        if ui.kind == ui::Kind::Themes
+                        if matches!(ui.kind, ui::Kind::Themes | ui::Kind::Fonts)
                             || rows.get(ui.focus).is_some_and(|r| r.value.is_some())
                         {
                             match clipboard::read() {
@@ -738,6 +859,7 @@ impl ApplicationHandler for App {
                 match panel.as_str() {
                     "themes" => self.open_ui(ui::Kind::Themes),
                     "settings" => self.open_ui(ui::Kind::Settings),
+                    "fonts" => self.open_ui(ui::Kind::Fonts),
                     _ => {}
                 }
             }
@@ -750,6 +872,9 @@ impl ApplicationHandler for App {
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + FRAME));
     }
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        if self.handle_zoom(&event) {
+            return;
+        }
         if self.handle_ui(&event) {
             return;
         }
@@ -1011,6 +1136,15 @@ impl ApplicationHandler for App {
     }
 }
 pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(windows)]
+    {
+        // SAFETY: the static UTF-16 application ID is NUL-terminated and is set before any UI is created.
+        unsafe {
+            windows::Win32::UI::Shell::SetCurrentProcessExplicitAppUserModelID(windows::core::w!(
+                "LeakTechnologies.Juna.Terminal"
+            ))?;
+        }
+    }
     let path = std::env::var_os("LOCALAPPDATA")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(std::env::temp_dir)
@@ -1026,6 +1160,8 @@ pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
     builder
         .target(env_logger::Target::Pipe(Box::new(log)))
         .try_init()?;
+    #[cfg(windows)]
+    log::info!("Taskbar application ID: LeakTechnologies.Juna.Terminal");
     let event_loop = EventLoop::new()?;
     let mut app = App::new(cols, rows);
     event_loop.run_app(&mut app)?;
@@ -1039,6 +1175,48 @@ pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 mod option_tests {
     use super::*;
+    #[test]
+    fn font_previews_cancel_save_and_zoom_persist_without_touching_cells() {
+        let dir = std::env::temp_dir().join(crate::settings::new_id());
+        let mut app = App::new(20, 3);
+        app.store = crate::settings::Store::new(dir.clone());
+        app.settings = crate::settings::Settings::default();
+        app.terminal.advance(b"font preview preserves bytes");
+        let cells = app.terminal.snapshot(0).cells;
+        app.open_ui(ui::Kind::Settings);
+        app.ui_action(ui::Action::Fonts);
+        app.ui_action(ui::Action::PickFont("Fira Code".into()));
+        app.ui_action(ui::Action::Resize(1));
+        assert_eq!(app.settings.font_size, 17.);
+        app.ui_action(ui::Action::Cancel);
+        assert_eq!(app.settings.font_family, "IBM Plex Mono");
+        assert_eq!(app.settings.font_size, 16.);
+        assert!(!dir.join("settings.json").exists());
+        app.open_ui(ui::Kind::Fonts);
+        app.ui_action(ui::Action::PickFont("JetBrains Mono".into()));
+        app.ui_action(ui::Action::SaveSettings);
+        assert_eq!(app.store.load().0.font_family, "JetBrains Mono");
+        app.resize_font(input::Zoom::Step(100));
+        assert_eq!(app.settings.font_size, 40.);
+        app.resize_font(input::Zoom::Step(-100));
+        assert_eq!(app.settings.font_size, 8.);
+        app.resize_font(input::Zoom::Reset);
+        assert_eq!(app.store.load().0.font_size, 16.);
+        app.modifiers = ModifiersState::CONTROL;
+        let wheel = |y| WindowEvent::MouseWheel {
+            device_id: winit::event::DeviceId::dummy(),
+            delta: MouseScrollDelta::PixelDelta(winit::dpi::PhysicalPosition::new(0., y)),
+            phase: winit::event::TouchPhase::Moved,
+        };
+        assert!(app.handle_zoom(&wheel(20.)));
+        assert_eq!(app.settings.font_size, 16.);
+        assert!(app.handle_zoom(&wheel(20.)));
+        assert_eq!(app.store.load().0.font_size, 17.);
+        app.modifiers = ModifiersState::empty();
+        assert!(!app.handle_zoom(&wheel(40.)));
+        assert_eq!(app.terminal.snapshot(0).cells, cells);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
     #[test]
     fn previews_cancel_and_custom_saves_preserve_engine_cells() {
         let dir = std::env::temp_dir().join(crate::settings::new_id());

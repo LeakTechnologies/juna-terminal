@@ -43,6 +43,8 @@ features = [
     "Win32_System_DataExchange",
     "Win32_System_Memory",
     "Win32_UI_WindowsAndMessaging",
+    # Give Juna its own taskbar group rather than inheriting launcher identity.
+    "Win32_UI_Shell",
 ]
 
 # Windows-only. conpty-oxide carries `compile_error!` under `cfg(not(windows))`,

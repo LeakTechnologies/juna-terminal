@@ -7,3 +7,4 @@ pub mod session;
 pub mod vt;
 pub mod theme;
 pub mod settings;
+pub mod fonts;

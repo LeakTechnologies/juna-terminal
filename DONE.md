@@ -38,3 +38,12 @@ mixed-DPI and editor/pager review remain explicit in the testing matrix.
 Verified all 176 standard tests, check/clippy, both live-window tests and release build.
 Seven embedded icon images match the approved ICO byte for byte; native small/taskbar handles exist.
 
+
+## 2026-10-13 — fonts and live sizing complete
+
+Verified 180 standard tests, warning-free check/clippy, four real GPU tests, two real-window
+tests and a rebuilt release. Fifteen font faces resolve without system fonts; search, Save/Cancel,
+zoom/AltGr routing, wheel accumulation, persistence and bounds have focused regression coverage.
+GPU captures cover all fifteen, fallback, row isolation and minimum/default/maximum sizes.
+README now displays the approved logo and documents current features and controls.
+Taskbar API/icon handles are verified; user confirmation of the updated Explorer button is pending.

@@ -78,15 +78,18 @@ impl Atlas {
     }
     pub fn new_with_family(device: &wgpu::Device, px: f32, preferred: &str) -> Option<Self> {
         let mut db = fontdb::Database::new();
+        let bundled = crate::fonts::load_primary(&mut db, preferred);
         db.load_system_fonts();
-        let primary = std::iter::once(preferred)
-            .chain(PRIMARY.iter().copied())
-            .find_map(|family| {
-                db.query(&fontdb::Query {
-                    families: &[fontdb::Family::Name(family)],
-                    ..Default::default()
+        let primary = bundled.or_else(|| {
+            std::iter::once(preferred)
+                .chain(PRIMARY.iter().copied())
+                .find_map(|family| {
+                    db.query(&fontdb::Query {
+                        families: &[fontdb::Family::Name(family)],
+                        ..Default::default()
+                    })
                 })
-            })?;
+        })?;
         log::info!("Terminal font: {:?}", db.face(primary)?.families);
         let mut ids = vec![primary];
         for family in FALLBACK {
@@ -110,7 +113,12 @@ impl Atlas {
                 });
             }
         }
-        let m = faces.first()?.font()?.metrics(&[]);
+        let font = faces.first()?.font()?;
+        let coordinates: Vec<_> = font
+            .variations()
+            .normalized_coords(&[("wght", 400.)])
+            .collect();
+        let m = font.metrics(&coordinates);
         let k = px / m.units_per_em.max(1) as f32;
         let ascent = m.ascent * k;
         let descent = m.descent.abs() * k;
@@ -212,6 +220,7 @@ impl Atlas {
             .builder(font)
             .script(script)
             .size(self.px)
+            .variations(&[("wght", 400.)])
             .features(&[("liga", 0), ("dlig", 0)])
             .build();
         shaper.add_str(text);
@@ -242,7 +251,13 @@ impl Atlas {
             return *hit;
         }
         let font = self.faces[face].font()?;
-        let mut scaler = self.scale.builder(font).size(self.px).hint(true).build();
+        let mut scaler = self
+            .scale
+            .builder(font)
+            .size(self.px)
+            .variations(&[("wght", 400.)])
+            .hint(true)
+            .build();
         let image = Render::new(&[
             Source::ColorOutline(0),
             Source::ColorBitmap(StrikeWith::BestFit),
