@@ -1345,3 +1345,9 @@ original Rust verifier reads Microsoft PE resource structures to check architect
 presence and every icon image without executing an untrusted image. Publishing uses pinned
 checkout/MSYS2 actions, Rust 1.97 GNU, original notices, checksums and source/build provenance.
 No dependency was added for packaging or verification. Checksums are not publisher signatures.
+
+Dev1 Windows release workflow succeeded and its three assets were downloaded independently;
+archive SHA-256, source f4f8bfbe26f97074146cccdea80e01482bed3999, native version and all seven icons
+match. Linux CI then exposed Unix rename semantics: replacing an existing read-only file can
+succeed despite the file's write bits. write_json now refuses that replacement before staging
+on every platform. Dev2 records this small correction; published dev1 assets are not replaced.

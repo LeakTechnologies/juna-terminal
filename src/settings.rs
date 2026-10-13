@@ -135,6 +135,13 @@ fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
     serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", path.display()))
 }
 pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    match std::fs::metadata(path) {
+        Ok(metadata) if metadata.permissions().readonly() => {
+            return Err("Target file is read-only".into())
+        }
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => return Err(error.to_string()),
+        _ => {}
+    }
     let directory = path.parent().ok_or("Missing settings directory")?;
     std::fs::create_dir_all(directory).map_err(|e| e.to_string())?;
     let temp = directory.join(format!(".{}.tmp", new_id()));
@@ -217,7 +224,6 @@ mod tests {
         assert!(bad.exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
-    #[cfg(windows)]
     #[test]
     fn a_read_only_settings_file_is_not_destroyed() {
         let dir = std::env::temp_dir().join(new_id());

@@ -87,3 +87,14 @@ three actual-window tests, reviewed captures, native x64/version/seven-icon reso
 Detailed counts and limitations are recorded in TERMINAL_TESTING.md. Native file-dialog interaction,
 physical input/mixed-DPI and other-machine acceptance remain human checks. Publication is not yet
 claimed: the tag workflow and asset download/hash verification must finish first.
+## 2026-10-13 — dev1 publication verified; dev2 CI correction
+
+Dev1 Windows workflow passed and published a prerelease. Downloaded archive/manifest/checksum
+verification confirms its exact source commit, native version and approved icon resources.
+The separate Linux run failed the import rollback test because Unix rename replaced a read-only
+file. Dev2 adds an explicit portable read-only guard and enables its preservation test on Linux.
+This is a fresh version; no published dev1 tag/binary was changed. Hosted dev2 evidence is pending.
+
+Verified locally for dev2: check, strict Clippy and all 200 standard cases pass. The Windows
+interface is unchanged; its recorded dev1 GPU/window evidence still applies. Hosted Linux and
+new-version artifact checks must verify the correction before publication is reported.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1-dev2 — read-only JSON preservation
+
+- Refuse replacing read-only preference/export files consistently across platforms.
+- Enable the preservation regression on Linux and retain import staging rollback coverage.
+- Record the verified dev1 Windows release and publish this CI correction under a fresh tag.
+
 ## 2026-10-13 — context menus, row numbers and theme favourites
 
 - Separate tab actions from terminal options; rename tabs and reanchor repeated right-clicks.
