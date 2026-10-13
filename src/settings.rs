@@ -69,7 +69,6 @@ impl Store {
     pub fn load(&self) -> (Settings, Vec<Theme>, Vec<String>) {
         let mut errors = Vec::new();
         let mut settings = Settings::default();
-        let mut themes = theme::builtins();
         let file = self.directory.join("settings.json");
         if file.exists() {
             match read_json::<Settings>(&file).and_then(|v| {
@@ -80,24 +79,9 @@ impl Store {
                 Err(e) => errors.push(e),
             }
         }
-        if let Ok(entries) = std::fs::read_dir(self.directory.join("themes")) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().is_some_and(|e| e == "json") {
-                    match read_json::<Theme>(&path).and_then(|t| {
-                        t.validate()?;
-                        if !t.id.starts_with("custom-") {
-                            return Err("Custom theme ID must start with custom-".into());
-                        }
-                        Ok(t)
-                    }) {
-                        Ok(t) if themes.iter().all(|v| v.id != t.id) => themes.push(t),
-                        Ok(_) => errors.push(format!("Duplicate theme ID in {}", path.display())),
-                        Err(e) => errors.push(e),
-                    }
-                }
-            }
-        }
+        let library = crate::theme_library::scan(&self.directory);
+        let themes = library.themes;
+        errors.extend(library.errors);
         if themes.iter().all(|t| t.id != settings.active_theme_id) {
             errors.push("Selected theme is unavailable; using Catppuccin Mocha".into());
             settings.active_theme_id = "catppuccin-mocha".into();
@@ -117,6 +101,7 @@ impl Store {
             &self
                 .directory
                 .join("themes")
+                .join(crate::theme_library::folder_name(&theme.family_name()))
                 .join(format!("{}.json", theme.id)),
             theme,
         )
@@ -133,7 +118,7 @@ fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, String> {
     }
     serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", path.display()))
 }
-fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
     let directory = path.parent().ok_or("Missing settings directory")?;
     std::fs::create_dir_all(directory).map_err(|e| e.to_string())?;
     let temp = directory.join(format!(".{}.tmp", new_id()));
@@ -203,10 +188,10 @@ mod tests {
         let mut theme = theme::default_theme();
         theme.id = new_id();
         store.save_theme(&theme).unwrap();
-        let path = dir.join("themes").join(format!("{}.json", theme.id));
+        let path = crate::theme_library::scan(&dir).sources[&theme.id].clone();
         std::fs::copy(path, dir.join("themes/duplicate.json")).unwrap();
         let (_, themes, errors) = store.load();
-        assert_eq!(themes.len(), 21);
+        assert_eq!(themes.len(), 61);
         assert!(!errors.is_empty());
         let bad = dir.join("themes/future.json");
         theme.schema_version = 2;

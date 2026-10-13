@@ -364,18 +364,37 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
     }
     let settings = juna::settings::Settings::default();
     renderer.apply_theme(&themes[0], 4.5).unwrap();
+    let mut menu_themes = themes.clone();
+    let mut custom = themes[0].clone();
+    custom.id = "custom-capture".into();
+    custom.name = "My Mocha".into();
+    custom.source = None;
+    menu_themes.push(custom);
     for kind in [
         Kind::Context,
         Kind::Themes,
         Kind::Settings,
         Kind::Fonts,
         Kind::Editor,
+        Kind::Number,
+        Kind::Custom,
+        Kind::Manage,
     ] {
-        let mut ui = Ui::new(kind, [8., 8.]);
+        let mut ui = if kind == Kind::Number {
+            Ui::number(1, &settings, [8., 8.])
+        } else {
+            Ui::new(kind, [8., 8.])
+        };
         if kind == Kind::Editor {
             ui.draft = Some(juna::theme::default_theme());
         }
-        let rows = ui.rows(&themes, &settings);
+        if matches!(kind, Kind::Themes | Kind::Custom) {
+            ui.expanded.insert("Catppuccin".into());
+        }
+        if kind == Kind::Manage {
+            ui.preview_id = Some("custom-capture".into());
+        }
+        let rows = ui.rows(&menu_themes, &settings);
         ui.focus_row(0, &rows);
         let (_, visible, _) = ui.geometry(512., 256., 1., rows.len());
         ui.ensure_visible(visible, rows.len());
@@ -399,6 +418,9 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
             Kind::Settings => "settings-menu",
             Kind::Fonts => "font-menu",
             Kind::Editor => "theme-editor",
+            Kind::Number => "number-prompt",
+            Kind::Custom => "custom-menu",
+            Kind::Manage => "manage-theme",
         };
         std::fs::write(format!("target/acceptance/{name}.ppm"), ppm).unwrap();
         if kind != Kind::Context {
@@ -436,5 +458,26 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
             std::fs::write(format!("target/acceptance/{name}-right.ppm"), ppm).unwrap();
         }
     }
+    renderer.set_top_inset(juna::app::ui::TAB_HEIGHT);
+    let labels = vec![
+        "PowerShell".into(),
+        "Command Prompt".into(),
+        "PowerShell 7".into(),
+    ];
+    let scene = juna::app::ui::tab_scene(&labels, 1, 1024., 1.);
+    let pixels = render_scene_at(
+        &device,
+        &queue,
+        &mut renderer,
+        &term,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        Some(&scene),
+        (1024, 512),
+    );
+    let mut ppm = b"P6\n1024 512\n255\n".to_vec();
+    for pixel in pixels.chunks_exact(4) {
+        ppm.extend_from_slice(&pixel[..3]);
+    }
+    std::fs::write("target/acceptance/tabs.ppm", ppm).unwrap();
     assert_eq!(term.snapshot(0).cells, before);
 }

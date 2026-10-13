@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-10-13 — tabs and clearer theme/settings controls
+
+- Add independent tabs, right-click New/Close Tab, tab-strip mouse controls and keyboard switching.
+- Keep inactive sessions consuming output and reap each session before closing the last window.
+- Accept exact font sizes in px or pt through mouse/Space/Enter prompts with live preview.
+- Group 60 starter themes into families and add a dedicated Custom create/manage submenu.
+- Discover downloaded JSON in custom family folders; preserve invalid/imported files and recover removals.
+
 ## 2026-10-12 — application title
 
 - Keep the window named Juna Terminal when shells send title changes.

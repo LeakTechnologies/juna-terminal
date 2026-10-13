@@ -28,7 +28,8 @@
         "#94E2D5",
         "#A6ADC8"
       ]
-    }
+    },
+    "family": "Catppuccin"
   },
   {
     "schema_version": 1,
@@ -59,7 +60,8 @@
         "#a4ffff",
         "#ffffff"
       ]
-    }
+    },
+    "family": "Dracula"
   },
   {
     "schema_version": 1,
@@ -90,7 +92,8 @@
         "#7dcfff",
         "#c0caf5"
       ]
-    }
+    },
+    "family": "Tokyo Night"
   },
   {
     "schema_version": 1,
@@ -121,7 +124,8 @@
         "#8ec07c",
         "#ebdbb2"
       ]
-    }
+    },
+    "family": "Gruvbox"
   },
   {
     "schema_version": 1,
@@ -152,7 +156,8 @@
         "#8fbcbb",
         "#eceff4"
       ]
-    }
+    },
+    "family": "Nord"
   },
   {
     "schema_version": 1,
@@ -183,7 +188,8 @@
         "#56b6c2",
         "#abb2bf"
       ]
-    }
+    },
+    "family": "One"
   },
   {
     "schema_version": 1,
@@ -214,7 +220,8 @@
         "#93a1a1",
         "#fdf6e3"
       ]
-    }
+    },
+    "family": "Solarized"
   },
   {
     "schema_version": 1,
@@ -245,7 +252,8 @@
         "#ebbcba",
         "#e0def4"
       ]
-    }
+    },
+    "family": "Rose Pine"
   },
   {
     "schema_version": 1,
@@ -276,7 +284,8 @@
         "#7aa89f",
         "#dcd7ba"
       ]
-    }
+    },
+    "family": "Kanagawa"
   },
   {
     "schema_version": 1,
@@ -307,7 +316,8 @@
         "#35a77c",
         "#fffbef"
       ]
-    }
+    },
+    "family": "Everforest"
   },
   {
     "schema_version": 1,
@@ -338,7 +348,8 @@
         "#7ad5d6",
         "#e4e4e5"
       ]
-    }
+    },
+    "family": "Nightfox"
   },
   {
     "schema_version": 1,
@@ -369,7 +380,8 @@
         "#95e6cb",
         "#ffffff"
       ]
-    }
+    },
+    "family": "Ayu"
   },
   {
     "schema_version": 1,
@@ -400,7 +412,8 @@
         "#66d9ef",
         "#fdfff1"
       ]
-    }
+    },
+    "family": "Monokai Classic"
   },
   {
     "schema_version": 1,
@@ -431,7 +444,8 @@
         "#26bbd1",
         "#d9d9d9"
       ]
-    }
+    },
+    "family": "Material"
   },
   {
     "schema_version": 1,
@@ -462,7 +476,8 @@
         "#56d4dd",
         "#ffffff"
       ]
-    }
+    },
+    "family": "GitHub"
   },
   {
     "schema_version": 1,
@@ -493,7 +508,8 @@
         "#8abeb7",
         "#ffffff"
       ]
-    }
+    },
+    "family": "Tomorrow"
   },
   {
     "schema_version": 1,
@@ -524,7 +540,8 @@
         "#f39660",
         "#e2e2e3"
       ]
-    }
+    },
+    "family": "Sonokai"
   },
   {
     "schema_version": 1,
@@ -555,7 +572,8 @@
         "#ff74b8",
         "#f2f4f8"
       ]
-    }
+    },
+    "family": "Oxocarbon Dark"
   },
   {
     "schema_version": 1,
@@ -586,7 +604,8 @@
         "#7fdbca",
         "#ffffff"
       ]
-    }
+    },
+    "family": "Night Owl"
   },
   {
     "schema_version": 1,
@@ -616,6 +635,1287 @@
         "#c594c5",
         "#5fb3b3",
         "#ffffff"
+      ]
+    },
+    "family": "Oceanic Next"
+  },
+  {
+    "schema_version": 1,
+    "id": "catppuccin-frappe",
+    "name": "Catppuccin Frappe",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Catppuccin%20Frappe.json",
+    "family": "Catppuccin",
+    "colors": {
+      "foreground": "#c6d0f5",
+      "background": "#303446",
+      "cursor": "#f2d5cf",
+      "selection_background": "#f2d5cf",
+      "selection_foreground": "#c6d0f5",
+      "ansi": [
+        "#51576d",
+        "#e78284",
+        "#a6d189",
+        "#e5c890",
+        "#8caaee",
+        "#f4b8e4",
+        "#81c8be",
+        "#b5bfe2",
+        "#626880",
+        "#eda0a2",
+        "#b9dba2",
+        "#ecd7ae",
+        "#adc2f3",
+        "#f38ed8",
+        "#98d2ca",
+        "#a5adce"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "catppuccin-latte",
+    "name": "Catppuccin Latte",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Catppuccin%20Latte.json",
+    "family": "Catppuccin",
+    "colors": {
+      "foreground": "#4c4f69",
+      "background": "#eff1f5",
+      "cursor": "#dc8a78",
+      "selection_background": "#dc8a78",
+      "selection_foreground": "#4c4f69",
+      "ansi": [
+        "#bcc0cc",
+        "#d20f39",
+        "#40a02b",
+        "#df8e1d",
+        "#1e66f5",
+        "#ea76cb",
+        "#179299",
+        "#5c5f77",
+        "#acb0be",
+        "#e7103f",
+        "#46b02f",
+        "#e49931",
+        "#3878f6",
+        "#ef95d7",
+        "#19a1a8",
+        "#6c6f85"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "catppuccin-macchiato",
+    "name": "Catppuccin Macchiato",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Catppuccin%20Macchiato.json",
+    "family": "Catppuccin",
+    "colors": {
+      "foreground": "#cad3f5",
+      "background": "#24273a",
+      "cursor": "#f4dbd6",
+      "selection_background": "#f4dbd6",
+      "selection_foreground": "#cad3f5",
+      "ansi": [
+        "#494d64",
+        "#ed8796",
+        "#a6da95",
+        "#eed49f",
+        "#8aadf4",
+        "#f5bde6",
+        "#8bd5ca",
+        "#b8c0e0",
+        "#5b6078",
+        "#f2a7b2",
+        "#bde3b0",
+        "#f4e3c1",
+        "#adc5f7",
+        "#f493da",
+        "#a5ded6",
+        "#a5adcb"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "tokyonight-day",
+    "name": "TokyoNight Day",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/TokyoNight%20Day.json",
+    "family": "Tokyo Night",
+    "colors": {
+      "foreground": "#3760bf",
+      "background": "#e1e2e7",
+      "cursor": "#3760bf",
+      "selection_background": "#99a7df",
+      "selection_foreground": "#3760bf",
+      "ansi": [
+        "#e9e9ed",
+        "#f52a65",
+        "#587539",
+        "#8c6c3e",
+        "#2e7de9",
+        "#9854f1",
+        "#007197",
+        "#6172b0",
+        "#a1a6c5",
+        "#f52a65",
+        "#587539",
+        "#8c6c3e",
+        "#2e7de9",
+        "#9854f1",
+        "#007197",
+        "#3760bf"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "tokyonight-storm",
+    "name": "TokyoNight Storm",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/TokyoNight%20Storm.json",
+    "family": "Tokyo Night",
+    "colors": {
+      "foreground": "#c0caf5",
+      "background": "#24283b",
+      "cursor": "#c0caf5",
+      "selection_background": "#364a82",
+      "selection_foreground": "#c0caf5",
+      "ansi": [
+        "#1d202f",
+        "#f7768e",
+        "#9ece6a",
+        "#e0af68",
+        "#7aa2f7",
+        "#bb9af7",
+        "#7dcfff",
+        "#a9b1d6",
+        "#4e5575",
+        "#f7768e",
+        "#9ece6a",
+        "#e0af68",
+        "#7aa2f7",
+        "#bb9af7",
+        "#7dcfff",
+        "#c0caf5"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "tokyonight-moon",
+    "name": "TokyoNight Moon",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/TokyoNight%20Moon.json",
+    "family": "Tokyo Night",
+    "colors": {
+      "foreground": "#c8d3f5",
+      "background": "#222436",
+      "cursor": "#c8d3f5",
+      "selection_background": "#2d3f76",
+      "selection_foreground": "#c8d3f5",
+      "ansi": [
+        "#1b1d2b",
+        "#ff757f",
+        "#c3e88d",
+        "#ffc777",
+        "#82aaff",
+        "#c099ff",
+        "#86e1fc",
+        "#828bb8",
+        "#444a73",
+        "#ff757f",
+        "#c3e88d",
+        "#ffc777",
+        "#82aaff",
+        "#c099ff",
+        "#86e1fc",
+        "#c8d3f5"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "rose-pine-moon",
+    "name": "Rose Pine Moon",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Rose%20Pine%20Moon.json",
+    "family": "Rose Pine",
+    "colors": {
+      "foreground": "#e0def4",
+      "background": "#232136",
+      "cursor": "#e0def4",
+      "selection_background": "#44415a",
+      "selection_foreground": "#e0def4",
+      "ansi": [
+        "#393552",
+        "#eb6f92",
+        "#3e8fb0",
+        "#f6c177",
+        "#9ccfd8",
+        "#c4a7e7",
+        "#ea9a97",
+        "#e0def4",
+        "#6e6a86",
+        "#eb6f92",
+        "#3e8fb0",
+        "#f6c177",
+        "#9ccfd8",
+        "#c4a7e7",
+        "#ea9a97",
+        "#e0def4"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "rose-pine-dawn",
+    "name": "Rose Pine Dawn",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Rose%20Pine%20Dawn.json",
+    "family": "Rose Pine",
+    "colors": {
+      "foreground": "#575279",
+      "background": "#faf4ed",
+      "cursor": "#575279",
+      "selection_background": "#dfdad9",
+      "selection_foreground": "#575279",
+      "ansi": [
+        "#f2e9e1",
+        "#b4637a",
+        "#286983",
+        "#ea9d34",
+        "#56949f",
+        "#907aa9",
+        "#d7827e",
+        "#575279",
+        "#9893a5",
+        "#b4637a",
+        "#286983",
+        "#ea9d34",
+        "#56949f",
+        "#907aa9",
+        "#d7827e",
+        "#575279"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "kanagawa-dragon",
+    "name": "Kanagawa Dragon",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Kanagawa%20Dragon.json",
+    "family": "Kanagawa",
+    "colors": {
+      "foreground": "#c5c9c5",
+      "background": "#181616",
+      "cursor": "#c8c093",
+      "selection_background": "#c5c9c5",
+      "selection_foreground": "#c5c9c5",
+      "ansi": [
+        "#0d0c0c",
+        "#c4746e",
+        "#8a9a7b",
+        "#c4b28a",
+        "#8ba4b0",
+        "#a292a3",
+        "#8ea4a2",
+        "#c8c093",
+        "#a6a69c",
+        "#e46876",
+        "#87a987",
+        "#e6c384",
+        "#7fb4ca",
+        "#938aa9",
+        "#7aa89f",
+        "#c5c9c5"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "kanagawa-lotus",
+    "name": "Kanagawa Lotus",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Kanagawa%20Lotus.json",
+    "family": "Kanagawa",
+    "colors": {
+      "foreground": "#545464",
+      "background": "#f2ecbc",
+      "cursor": "#43436c",
+      "selection_background": "#545464",
+      "selection_foreground": "#545464",
+      "ansi": [
+        "#1f1f28",
+        "#c84053",
+        "#6f894e",
+        "#77713f",
+        "#4d699b",
+        "#b35b79",
+        "#597b75",
+        "#545464",
+        "#8a8980",
+        "#d7474b",
+        "#6e915f",
+        "#836f4a",
+        "#6693bf",
+        "#624c83",
+        "#5e857a",
+        "#43436c"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "everforest-dark-hard",
+    "name": "Everforest Dark Hard",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Everforest%20Dark%20Hard.json",
+    "family": "Everforest",
+    "colors": {
+      "foreground": "#d3c6aa",
+      "background": "#1e2326",
+      "cursor": "#e69875",
+      "selection_background": "#4c3743",
+      "selection_foreground": "#d3c6aa",
+      "ansi": [
+        "#7a8478",
+        "#e67e80",
+        "#a7c080",
+        "#dbbc7f",
+        "#7fbbb3",
+        "#d699b6",
+        "#83c092",
+        "#f2efdf",
+        "#a6b0a0",
+        "#f85552",
+        "#8da101",
+        "#dfa000",
+        "#3a94c5",
+        "#df69ba",
+        "#35a77c",
+        "#fffbef"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "everforest-dark-soft",
+    "name": "Everforest Dark Soft",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Everforest%20Dark%20Soft.json",
+    "family": "Everforest",
+    "colors": {
+      "foreground": "#d3c6aa",
+      "background": "#293136",
+      "cursor": "#e69875",
+      "selection_background": "#5c3f4f",
+      "selection_foreground": "#d3c6aa",
+      "ansi": [
+        "#7a8478",
+        "#e67e80",
+        "#a7c080",
+        "#dbbc7f",
+        "#7fbbb3",
+        "#d699b6",
+        "#83c092",
+        "#f2efdf",
+        "#a6b0a0",
+        "#f85552",
+        "#8da101",
+        "#dfa000",
+        "#3a94c5",
+        "#df69ba",
+        "#35a77c",
+        "#fffbef"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "everforest-light-hard",
+    "name": "Everforest Light Hard",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Everforest%20Light%20Hard.json",
+    "family": "Everforest",
+    "colors": {
+      "foreground": "#5c6a72",
+      "background": "#f2efdf",
+      "cursor": "#f57d26",
+      "selection_background": "#f0f2d4",
+      "selection_foreground": "#5c6a72",
+      "ansi": [
+        "#7a8478",
+        "#e67e80",
+        "#9ab373",
+        "#ceaf72",
+        "#7fbbb3",
+        "#d699b6",
+        "#83c092",
+        "#b2af9f",
+        "#a6b0a0",
+        "#f85552",
+        "#8da101",
+        "#dfa000",
+        "#3a94c5",
+        "#df69ba",
+        "#35a77c",
+        "#fffbef"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "everforest-light-med",
+    "name": "Everforest Light Med",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Everforest%20Light%20Med.json",
+    "family": "Everforest",
+    "colors": {
+      "foreground": "#5c6a72",
+      "background": "#efebd4",
+      "cursor": "#f57d26",
+      "selection_background": "#eaedc8",
+      "selection_foreground": "#5c6a72",
+      "ansi": [
+        "#7a8478",
+        "#e67e80",
+        "#9ab373",
+        "#c1a266",
+        "#7fbbb3",
+        "#d699b6",
+        "#83c092",
+        "#b2af9f",
+        "#a6b0a0",
+        "#f85552",
+        "#8da101",
+        "#dfa000",
+        "#3a94c5",
+        "#df69ba",
+        "#35a77c",
+        "#fffbef"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "everforest-light-soft",
+    "name": "Everforest Light Soft",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Everforest%20Light%20Soft.json",
+    "family": "Everforest",
+    "colors": {
+      "foreground": "#5c6a72",
+      "background": "#e5dfc5",
+      "cursor": "#f57d26",
+      "selection_background": "#e1e4bd",
+      "selection_foreground": "#5c6a72",
+      "ansi": [
+        "#7a8478",
+        "#e67e80",
+        "#8da666",
+        "#c1a266",
+        "#72aea6",
+        "#c98ca9",
+        "#76b385",
+        "#a5a292",
+        "#99a393",
+        "#f85552",
+        "#8da101",
+        "#d29300",
+        "#3a94c5",
+        "#df69ba",
+        "#35a77c",
+        "#fffbef"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "carbonfox",
+    "name": "Carbonfox",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Carbonfox.json",
+    "family": "Nightfox",
+    "colors": {
+      "foreground": "#f2f4f8",
+      "background": "#161616",
+      "cursor": "#f2f4f8",
+      "selection_background": "#2a2a2a",
+      "selection_foreground": "#f2f4f8",
+      "ansi": [
+        "#282828",
+        "#ee5396",
+        "#25be6a",
+        "#08bdba",
+        "#78a9ff",
+        "#be95ff",
+        "#33b1ff",
+        "#dfdfe0",
+        "#484848",
+        "#f16da6",
+        "#46c880",
+        "#2dc7c4",
+        "#8cb6ff",
+        "#c8a5ff",
+        "#52bdff",
+        "#e4e4e5"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "dawnfox",
+    "name": "Dawnfox",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Dawnfox.json",
+    "family": "Nightfox",
+    "colors": {
+      "foreground": "#575279",
+      "background": "#faf4ed",
+      "cursor": "#575279",
+      "selection_background": "#d0d8d8",
+      "selection_foreground": "#575279",
+      "ansi": [
+        "#575279",
+        "#b4637a",
+        "#618774",
+        "#ea9d34",
+        "#286983",
+        "#907aa9",
+        "#56949f",
+        "#b2b6bd",
+        "#5f5695",
+        "#c26d85",
+        "#629f81",
+        "#eea846",
+        "#2d81a3",
+        "#9a80b9",
+        "#5ca7b4",
+        "#e6ebf3"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "dayfox",
+    "name": "Dayfox",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Dayfox.json",
+    "family": "Nightfox",
+    "colors": {
+      "foreground": "#3d2b5a",
+      "background": "#f6f2ee",
+      "cursor": "#3d2b5a",
+      "selection_background": "#e7d2be",
+      "selection_foreground": "#3d2b5a",
+      "ansi": [
+        "#352c24",
+        "#a5222f",
+        "#396847",
+        "#ac5402",
+        "#2848a9",
+        "#6e33ce",
+        "#287980",
+        "#bfb6ae",
+        "#534c45",
+        "#b3434e",
+        "#577f63",
+        "#b86e28",
+        "#4863b6",
+        "#8452d5",
+        "#488d93",
+        "#f4ece6"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "duskfox",
+    "name": "Duskfox",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Duskfox.json",
+    "family": "Nightfox",
+    "colors": {
+      "foreground": "#e0def4",
+      "background": "#232136",
+      "cursor": "#e0def4",
+      "selection_background": "#433c59",
+      "selection_foreground": "#e0def4",
+      "ansi": [
+        "#393552",
+        "#eb6f92",
+        "#a3be8c",
+        "#f6c177",
+        "#569fba",
+        "#c4a7e7",
+        "#9ccfd8",
+        "#e0def4",
+        "#544d8a",
+        "#f083a2",
+        "#b1d196",
+        "#f9cb8c",
+        "#65b1cd",
+        "#ccb1ed",
+        "#a6dae3",
+        "#e2e0f7"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "nordfox",
+    "name": "Nordfox",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Nordfox.json",
+    "family": "Nightfox",
+    "colors": {
+      "foreground": "#cdcecf",
+      "background": "#2e3440",
+      "cursor": "#cdcecf",
+      "selection_background": "#3e4a5b",
+      "selection_foreground": "#cdcecf",
+      "ansi": [
+        "#3b4252",
+        "#bf616a",
+        "#a3be8c",
+        "#ebcb8b",
+        "#81a1c1",
+        "#b48ead",
+        "#88c0d0",
+        "#e5e9f0",
+        "#53648d",
+        "#d06f79",
+        "#b1d196",
+        "#f0d399",
+        "#8cafd2",
+        "#c895bf",
+        "#93ccdc",
+        "#e7ecf4"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "terafox",
+    "name": "Terafox",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Terafox.json",
+    "family": "Nightfox",
+    "colors": {
+      "foreground": "#e6eaea",
+      "background": "#152528",
+      "cursor": "#e6eaea",
+      "selection_background": "#293e40",
+      "selection_foreground": "#e6eaea",
+      "ansi": [
+        "#2f3239",
+        "#e85c51",
+        "#7aa4a1",
+        "#fda47f",
+        "#5a93aa",
+        "#ad5c7c",
+        "#a1cdd8",
+        "#ebebeb",
+        "#4e5157",
+        "#eb746b",
+        "#8eb2af",
+        "#fdb292",
+        "#73a3b7",
+        "#b97490",
+        "#afd4de",
+        "#eeeeee"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "ayu-light",
+    "name": "Ayu Light",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Ayu%20Light.json",
+    "family": "Ayu",
+    "colors": {
+      "foreground": "#5c6166",
+      "background": "#f8f9fa",
+      "cursor": "#ffaa33",
+      "selection_background": "#035bd6",
+      "selection_foreground": "#5c6166",
+      "ansi": [
+        "#000000",
+        "#ea6c6d",
+        "#6cbf43",
+        "#eca944",
+        "#3199e1",
+        "#9e75c7",
+        "#46ba94",
+        "#bababa",
+        "#686868",
+        "#f07171",
+        "#86b300",
+        "#f2ae49",
+        "#399ee6",
+        "#a37acc",
+        "#4cbf99",
+        "#d1d1d1"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "ayu-mirage",
+    "name": "Ayu Mirage",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Ayu%20Mirage.json",
+    "family": "Ayu",
+    "colors": {
+      "foreground": "#cccac2",
+      "background": "#1f2430",
+      "cursor": "#ffcc66",
+      "selection_background": "#409fff",
+      "selection_foreground": "#cccac2",
+      "ansi": [
+        "#171b24",
+        "#ed8274",
+        "#87d96c",
+        "#facc6e",
+        "#6dcbfa",
+        "#dabafa",
+        "#90e1c6",
+        "#c7c7c7",
+        "#686868",
+        "#f28779",
+        "#d5ff80",
+        "#ffd173",
+        "#73d0ff",
+        "#dfbfff",
+        "#95e6cb",
+        "#ffffff"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "material-darker",
+    "name": "Material Darker",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Material%20Darker.json",
+    "family": "Material",
+    "colors": {
+      "foreground": "#eeffff",
+      "background": "#212121",
+      "cursor": "#ffffff",
+      "selection_background": "#eeffff",
+      "selection_foreground": "#eeffff",
+      "ansi": [
+        "#000000",
+        "#ff5370",
+        "#c3e88d",
+        "#ffcb6b",
+        "#82aaff",
+        "#c792ea",
+        "#89ddff",
+        "#ffffff",
+        "#545454",
+        "#ff5370",
+        "#c3e88d",
+        "#ffcb6b",
+        "#82aaff",
+        "#c792ea",
+        "#89ddff",
+        "#ffffff"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "material-ocean",
+    "name": "Material Ocean",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Material%20Ocean.json",
+    "family": "Material",
+    "colors": {
+      "foreground": "#8f93a2",
+      "background": "#0f111a",
+      "cursor": "#ffcc00",
+      "selection_background": "#1f2233",
+      "selection_foreground": "#8f93a2",
+      "ansi": [
+        "#546e7a",
+        "#ff5370",
+        "#c3e88d",
+        "#ffcb6b",
+        "#82aaff",
+        "#c792ea",
+        "#89ddff",
+        "#ffffff",
+        "#546e7a",
+        "#ff5370",
+        "#c3e88d",
+        "#ffcb6b",
+        "#82aaff",
+        "#c792ea",
+        "#89ddff",
+        "#ffffff"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "material",
+    "name": "Material",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Material.json",
+    "family": "Material",
+    "colors": {
+      "foreground": "#232322",
+      "background": "#eaeaea",
+      "cursor": "#16afca",
+      "selection_background": "#c2c2c2",
+      "selection_foreground": "#232322",
+      "ansi": [
+        "#212121",
+        "#b7141f",
+        "#457b24",
+        "#f6981e",
+        "#134eb2",
+        "#560088",
+        "#0e717c",
+        "#afafaf",
+        "#424242",
+        "#e83b3f",
+        "#7aba3a",
+        "#bfaa00",
+        "#54a4f3",
+        "#aa4dbc",
+        "#26bbd1",
+        "#d9d9d9"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "gruvbox-light",
+    "name": "Gruvbox Light",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Gruvbox%20Light.json",
+    "family": "Gruvbox",
+    "colors": {
+      "foreground": "#3c3836",
+      "background": "#fbf1c7",
+      "cursor": "#3c3836",
+      "selection_background": "#3c3836",
+      "selection_foreground": "#3c3836",
+      "ansi": [
+        "#fbf1c7",
+        "#cc241d",
+        "#98971a",
+        "#d79921",
+        "#458588",
+        "#b16286",
+        "#689d6a",
+        "#7c6f64",
+        "#928374",
+        "#9d0006",
+        "#79740e",
+        "#b57614",
+        "#076678",
+        "#8f3f71",
+        "#427b58",
+        "#3c3836"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "gruvbox-dark-hard",
+    "name": "Gruvbox Dark Hard",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Gruvbox%20Dark%20Hard.json",
+    "family": "Gruvbox",
+    "colors": {
+      "foreground": "#ebdbb2",
+      "background": "#1d2021",
+      "cursor": "#ebdbb2",
+      "selection_background": "#665c54",
+      "selection_foreground": "#ebdbb2",
+      "ansi": [
+        "#1d2021",
+        "#cc241d",
+        "#98971a",
+        "#d79921",
+        "#458588",
+        "#b16286",
+        "#689d6a",
+        "#a89984",
+        "#928374",
+        "#fb4934",
+        "#b8bb26",
+        "#fabd2f",
+        "#83a598",
+        "#d3869b",
+        "#8ec07c",
+        "#ebdbb2"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "gruvbox-light-hard",
+    "name": "Gruvbox Light Hard",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Gruvbox%20Light%20Hard.json",
+    "family": "Gruvbox",
+    "colors": {
+      "foreground": "#3c3836",
+      "background": "#f9f5d7",
+      "cursor": "#3c3836",
+      "selection_background": "#3c3836",
+      "selection_foreground": "#3c3836",
+      "ansi": [
+        "#f9f5d7",
+        "#cc241d",
+        "#98971a",
+        "#d79921",
+        "#458588",
+        "#b16286",
+        "#689d6a",
+        "#7c6f64",
+        "#928374",
+        "#9d0006",
+        "#79740e",
+        "#b57614",
+        "#076678",
+        "#8f3f71",
+        "#427b58",
+        "#3c3836"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "gruvbox-material-dark",
+    "name": "Gruvbox Material Dark",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Gruvbox%20Material%20Dark.json",
+    "family": "Gruvbox Material",
+    "colors": {
+      "foreground": "#d4be98",
+      "background": "#282828",
+      "cursor": "#d4be98",
+      "selection_background": "#d4be98",
+      "selection_foreground": "#d4be98",
+      "ansi": [
+        "#282828",
+        "#ea6962",
+        "#a9b665",
+        "#d8a657",
+        "#7daea3",
+        "#d3869b",
+        "#89b482",
+        "#d4be98",
+        "#7c6f64",
+        "#ea6962",
+        "#a9b665",
+        "#d8a657",
+        "#7daea3",
+        "#d3869b",
+        "#89b482",
+        "#ddc7a1"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "gruvbox-material-light",
+    "name": "Gruvbox Material Light",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Gruvbox%20Material%20Light.json",
+    "family": "Gruvbox Material",
+    "colors": {
+      "foreground": "#654735",
+      "background": "#fbf1c7",
+      "cursor": "#654735",
+      "selection_background": "#654735",
+      "selection_foreground": "#654735",
+      "ansi": [
+        "#fbf1c7",
+        "#c14a4a",
+        "#6c782e",
+        "#b47109",
+        "#45707a",
+        "#945e80",
+        "#4c7a5d",
+        "#654735",
+        "#a89984",
+        "#c14a4a",
+        "#6c782e",
+        "#b47109",
+        "#45707a",
+        "#945e80",
+        "#4c7a5d",
+        "#4f3829"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "github-light-default",
+    "name": "GitHub Light Default",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/GitHub%20Light%20Default.json",
+    "family": "GitHub",
+    "colors": {
+      "foreground": "#1f2328",
+      "background": "#ffffff",
+      "cursor": "#0969da",
+      "selection_background": "#1f2328",
+      "selection_foreground": "#1f2328",
+      "ansi": [
+        "#24292f",
+        "#cf222e",
+        "#116329",
+        "#4d2d00",
+        "#0969da",
+        "#8250df",
+        "#1b7c83",
+        "#6e7781",
+        "#57606a",
+        "#a40e26",
+        "#1a7f37",
+        "#633c01",
+        "#218bff",
+        "#a475f9",
+        "#3192aa",
+        "#8c959f"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "github-dark-dimmed",
+    "name": "GitHub Dark Dimmed",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/GitHub%20Dark%20Dimmed.json",
+    "family": "GitHub",
+    "colors": {
+      "foreground": "#adbac7",
+      "background": "#22272e",
+      "cursor": "#539bf5",
+      "selection_background": "#adbac7",
+      "selection_foreground": "#adbac7",
+      "ansi": [
+        "#545d68",
+        "#f47067",
+        "#57ab5a",
+        "#c69026",
+        "#539bf5",
+        "#b083f0",
+        "#39c5cf",
+        "#909dab",
+        "#636e7b",
+        "#ff938a",
+        "#6bc46d",
+        "#daaa3f",
+        "#6cb6ff",
+        "#dcbdfb",
+        "#56d4dd",
+        "#cdd9e5"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "github-dark-high-contrast",
+    "name": "GitHub Dark High Contrast",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/GitHub%20Dark%20High%20Contrast.json",
+    "family": "GitHub",
+    "colors": {
+      "foreground": "#f0f3f6",
+      "background": "#0a0c10",
+      "cursor": "#71b7ff",
+      "selection_background": "#f0f3f6",
+      "selection_foreground": "#f0f3f6",
+      "ansi": [
+        "#7a828e",
+        "#ff9492",
+        "#26cd4d",
+        "#f0b72f",
+        "#71b7ff",
+        "#cb9eff",
+        "#39c5cf",
+        "#d9dee3",
+        "#9ea7b3",
+        "#ffb1af",
+        "#4ae168",
+        "#f7c843",
+        "#91cbff",
+        "#dbb7ff",
+        "#56d4dd",
+        "#ffffff"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "github-light-high-contrast",
+    "name": "GitHub Light High Contrast",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/GitHub%20Light%20High%20Contrast.json",
+    "family": "GitHub",
+    "colors": {
+      "foreground": "#0e1116",
+      "background": "#ffffff",
+      "cursor": "#0349b4",
+      "selection_background": "#0e1116",
+      "selection_foreground": "#0e1116",
+      "ansi": [
+        "#0e1116",
+        "#a0111f",
+        "#024c1a",
+        "#3f2200",
+        "#0349b4",
+        "#622cbc",
+        "#1b7c83",
+        "#66707b",
+        "#4b535d",
+        "#86061d",
+        "#055d20",
+        "#4e2c00",
+        "#1168e3",
+        "#844ae7",
+        "#3192aa",
+        "#88929d"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "tomorrow",
+    "name": "Tomorrow",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Tomorrow.json",
+    "family": "Tomorrow",
+    "colors": {
+      "foreground": "#4d4d4c",
+      "background": "#ffffff",
+      "cursor": "#4d4d4c",
+      "selection_background": "#d6d6d6",
+      "selection_foreground": "#4d4d4c",
+      "ansi": [
+        "#000000",
+        "#c82829",
+        "#718c00",
+        "#eab700",
+        "#4271ae",
+        "#8959a8",
+        "#3e999f",
+        "#bfbfbf",
+        "#000000",
+        "#c82829",
+        "#718c00",
+        "#eab700",
+        "#4271ae",
+        "#8959a8",
+        "#3e999f",
+        "#ffffff"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "tomorrow-night-eighties",
+    "name": "Tomorrow Night Eighties",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Tomorrow%20Night%20Eighties.json",
+    "family": "Tomorrow",
+    "colors": {
+      "foreground": "#cccccc",
+      "background": "#2d2d2d",
+      "cursor": "#cccccc",
+      "selection_background": "#515151",
+      "selection_foreground": "#cccccc",
+      "ansi": [
+        "#000000",
+        "#f2777a",
+        "#99cc99",
+        "#ffcc66",
+        "#6699cc",
+        "#cc99cc",
+        "#66cccc",
+        "#ffffff",
+        "#595959",
+        "#f2777a",
+        "#99cc99",
+        "#ffcc66",
+        "#6699cc",
+        "#cc99cc",
+        "#66cccc",
+        "#ffffff"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "tomorrow-night-blue",
+    "name": "Tomorrow Night Blue",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Tomorrow%20Night%20Blue.json",
+    "family": "Tomorrow",
+    "colors": {
+      "foreground": "#ffffff",
+      "background": "#002451",
+      "cursor": "#ffffff",
+      "selection_background": "#003f8e",
+      "selection_foreground": "#ffffff",
+      "ansi": [
+        "#000000",
+        "#ff9da4",
+        "#d1f1a9",
+        "#ffeead",
+        "#bbdaff",
+        "#ebbbff",
+        "#99ffff",
+        "#ffffff",
+        "#4c4c4c",
+        "#ff9da4",
+        "#d1f1a9",
+        "#ffeead",
+        "#bbdaff",
+        "#ebbbff",
+        "#99ffff",
+        "#ffffff"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "atom-one-light",
+    "name": "Atom One Light",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/Atom%20One%20Light.json",
+    "family": "One",
+    "colors": {
+      "foreground": "#2a2c33",
+      "background": "#f9f9f9",
+      "cursor": "#bbbbbb",
+      "selection_background": "#d0dffc",
+      "selection_foreground": "#2a2c33",
+      "ansi": [
+        "#000000",
+        "#de3e35",
+        "#3f953a",
+        "#d2b67c",
+        "#2f5af3",
+        "#950095",
+        "#3f953a",
+        "#bbbbbb",
+        "#000000",
+        "#de3e35",
+        "#3f953a",
+        "#d2b67c",
+        "#2f5af3",
+        "#a00095",
+        "#3f953a",
+        "#ffffff"
+      ]
+    }
+  },
+  {
+    "schema_version": 1,
+    "id": "iterm2-solarized-light",
+    "name": "iTerm2 Solarized Light",
+    "source": "https://raw.githubusercontent.com/mbadolato/iTerm2-Color-Schemes/d3e95e4f7140c980988781f21534cf51e327af2c/windowsterminal/iTerm2%20Solarized%20Light.json",
+    "family": "Solarized",
+    "colors": {
+      "foreground": "#657b83",
+      "background": "#fdf6e3",
+      "cursor": "#657b83",
+      "selection_background": "#eee8d5",
+      "selection_foreground": "#657b83",
+      "ansi": [
+        "#073642",
+        "#dc322f",
+        "#859900",
+        "#b58900",
+        "#268bd2",
+        "#d33682",
+        "#2aa198",
+        "#bbb5a2",
+        "#002b36",
+        "#cb4b16",
+        "#586e75",
+        "#657b83",
+        "#839496",
+        "#6c71c4",
+        "#93a1a1",
+        "#fdf6e3"
       ]
     }
   }

@@ -1,5 +1,31 @@
 #![cfg(windows)]
-//! Opens the actual winit window and presents GPU frames; no UI automation or prompt matching.
+#[test]
+#[ignore = "interactive Windows desktop; concurrent tabs keep independent byte streams"]
+fn inactive_tabs_drain_output_and_reap_without_closing_other_tabs() {
+    use std::process::{Command, Stdio};
+    let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target/acceptance/tabs");
+    std::fs::create_dir_all(&folder).unwrap();
+    let mut child=Command::new(env!("CARGO_BIN_EXE_juna")).args(["--shell","cmd.exe","--","/Q","/C","(for /L %i in (1,1,300) do @echo TAB_ROW%i) & echo TAB_OUTPUT_END & ping -n 5 127.0.0.1 >nul & exit /b 0"])
+        .env("LOCALAPPDATA",&folder).env("RUST_LOG","info").env("JUNA_STARTUP_TABS","3").env("JUNA_ACCEPT_MARKER","TAB_OUTPUT_END").stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
+    let start = std::time::Instant::now();
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        if start.elapsed() > std::time::Duration::from_secs(40) {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("tabs did not reap");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    let log = std::fs::read_to_string(folder.join("Juna/juna.log")).unwrap();
+    assert!(log.contains("count=3"), "{log}");
+    assert_eq!(log.matches("marker present=true").count(), 3, "{log}");
+    assert_eq!(log.matches("exited").count(), 3, "{log}");
+}
+// Opens the actual winit window and presents GPU frames; no UI automation or prompt matching.
 #[test]
 #[ignore = "requires an interactive Windows desktop; run explicitly"]
 fn real_window_presents_then_closes_on_shell_exit() {

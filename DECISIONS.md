@@ -1279,3 +1279,17 @@ window tests, updated release build, direct release exit 0, all seven embedded s
 matching byte-for-byte, and visual taskbar inspection. No terminal-engine boundary changed.
 
 The next UI, Junafetch and update proposals received explicit approval on 2026-10-13, in that order.
+
+## 2026-10-13 — approved tabs and grouped custom themes
+
+Implemented UI_NEXT_DESIGN.md with at most 16 independent sessions. Active/inactive engines move
+between App and owned tab records on the same thread; no shared mutable engine or dependency was added.
+Inactive output continues with bounded fair drains. New/close/switch controls reserve Ctrl+Shift+T,
+Ctrl+Shift+W and Ctrl+Tab; header and right-click actions provide mouse access.
+Numeric settings accept explicit px/pt entry with live preview and transactional cancellation.
+
+Sixty starter palettes use the previously pinned published color-data source; no terminal-engine
+source was used. Families collapse by default and search exposes matches. Custom JSON discovery
+uses a bounded worker, family subfolders, native Juna records or single Windows Terminal schemes.
+Imported files are preserved; edits duplicate them, and removal moves files to recoverable trash.
+Read-only, oversized, malformed and duplicate sources are reported. No new dependency was added.

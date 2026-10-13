@@ -14,7 +14,8 @@ foundation for a future developer workspace. It is currently ready for interacti
 - Windows PowerShell and Command Prompt sessions through ConPTY, with clean shell-exit handling.
 - An original VT parser and screen engine, scrollback, alternate screen, Unicode clusters and font fallback.
 - GPU rendering, local selection, copy/paste, keyboard input and terminal mouse reporting.
-- Catppuccin Mocha by default, 20 starter themes, and custom themes saved locally.
+- Catppuccin Mocha by default, 60 starter themes grouped into families, and custom themes saved locally.
+- Independent terminal tabs with mouse controls, keyboard switching and per-session shutdown.
 - Right-click options with searchable theme and font previews, settings, and Save/Cancel.
 - 15 bundled monospace fonts; IBM Plex Mono remains the default. Windows font installation is not required.
 - An embedded application icon and a dedicated Windows taskbar application identity.
@@ -45,6 +46,9 @@ Pass shell arguments after `--`; they retain their individual argument boundarie
 | Action | Control |
 |---|---|
 | Options | Right-click |
+| New tab | Ctrl+Shift+T or right-click New Tab |
+| Close tab | Ctrl+Shift+W |
+| Switch tabs | Ctrl+Tab / Ctrl+Shift+Tab or click a tab |
 | Options while a terminal app owns the mouse | Shift+right-click |
 | Copy selection | Ctrl+Shift+C |
 | Paste | Ctrl+Shift+V or Shift+Insert |
@@ -54,6 +58,7 @@ Pass shell arguments after `--`; they retain their individual argument boundarie
 | Reset font size to 16 px | Ctrl+0 |
 | Resize with the mouse | Ctrl+mouse wheel |
 | Adjust the font-size setting | Left/Right arrows on its row |
+| Enter an exact font size | Click its row or press Space/Enter; accepts px or pt |
 | Save settings | Save settings or Ctrl+S |
 | Cancel a settings/font preview | Esc or Cancel |
 
@@ -70,8 +75,13 @@ Original font licenses and pinned sources are retained in [assets/fonts](assets/
 Bundled notices are also written to `%LOCALAPPDATA%\Juna\font-licenses.txt`. Fourteen families
 use SIL OFL 1.1; Ubuntu Sans Mono uses Ubuntu Font Licence 1.0.
 
-Theme choices include Catppuccin, Dracula, Tokyo Night, Gruvbox and Nord. Custom themes and
-preferences use versioned JSON under `%LOCALAPPDATA%\Juna`. Theme export is planned.
+Theme families include Catppuccin (all four variants), Dracula, Tokyo Night, Gruvbox and Nord.
+Custom → Open themes folder opens `%LOCALAPPDATA%\Juna\themes`. Add native Juna theme JSON
+or a single Windows Terminal scheme object; family subfolders group downloaded themes.
+The Custom menu discovers changes while open, and offers create, edit, duplicate and recoverable
+removal. Invalid files are preserved and reported. Preferences use versioned JSON. Theme export is planned.
+
+![Grouped theme choices](docs/acceptance/theme-families.png)
 
 ## Testing and project documents
 
@@ -94,5 +104,5 @@ Full bidi/contextual text layout, image protocols and a Unix process backend rem
 
 Junafetch and further bundled terminal tools are being designed; they are not included yet.
 
-See the [roadmap](ROADMAP.md) for tabs, tiled terminals, grouped themes and bundled tools.
+See the [roadmap](ROADMAP.md) for tiled terminals, privacy and bundled tools.
 

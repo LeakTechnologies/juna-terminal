@@ -1,3 +1,14 @@
+## 2026-10-13 — tabs and theme families complete
+
+Implemented the approved interface stage: independent tabs, keyboard/mouse controls, exact
+numeric settings entry, 60 grouped themes, and a Custom submenu with family-folder discovery
+and recoverable removal. Verified check/clippy, 185 standard tests, four explicit GPU tests,
+three real-window tests, release build, embedded icon bytes and direct release exit 0.
+Reviewed captures show right-side panels leave terminal text visible. Cargo emitted incremental
+hard-link fallback warnings after a restricted filesystem run; no source Clippy findings remained.
+The restricted run failed seven filesystem-dependent tests; the normal-access rerun passed.
+Physical mouse/IME/mixed-DPI review remains outstanding. Junafetch and updater are subsequent stages.
+
 ## 2026-10-12 — fixed application title
 
 Keep Juna Terminal as the visible window title while preserving shell OSC title metadata.

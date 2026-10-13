@@ -909,3 +909,13 @@ Live-preview panel geometry is derived from the current viewport's right edge, i
 terminal cells; pointer-anchored context menus keep their existing behavior. Font notices are
 app-owned file I/O. Native Windows relaunch properties are set before the window becomes visible;
 they do not enter terminal state or the byte transport.
+
+Tabs keep active engine/session values in App and park inactive values in owned tab records.
+The UI thread alone mutates every engine. Each output stream receives a bounded 64 KiB drain
+per event-loop turn, including inactive tabs; bytes remain ordered and backpressure remains intact.
+Each tab reaps its process independently, and the window closes only after its final session ends.
+The tab header is a presentation inset; the renderer still consumes owned snapshots and UI scenes.
+
+Theme discovery uses a bounded standard-library worker with generation-tagged owned results.
+It reads validated JSON only, skips linked folders, limits depth/files/bytes, and never sees engines.
+Family folders group custom themes; edits preserve imported sources and removal uses recoverable trash.

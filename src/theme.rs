@@ -19,6 +19,8 @@ pub struct Theme {
     pub colors: Colors,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub family: Option<String>,
 }
 pub fn rgb(text: &str) -> Result<[f32; 3], String> {
     if text.len() != 7
@@ -37,7 +39,26 @@ pub fn valid_id(id: &str) -> bool {
     !id.is_empty() && id.len() <= 64 && id.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
 }
 impl Theme {
+    pub fn family_name(&self) -> String {
+        self.family
+            .clone()
+            .filter(|f| !f.trim().is_empty())
+            .unwrap_or_else(|| {
+                if self.name.to_ascii_lowercase().contains("catppuccin") {
+                    "Catppuccin".into()
+                } else if self.id.starts_with("custom-") {
+                    "Personal".into()
+                } else {
+                    self.name.clone()
+                }
+            })
+    }
     pub fn validate(&self) -> Result<(), String> {
+        if self.family.as_ref().is_some_and(|f| {
+            f.trim().is_empty() || f.chars().count() > 64 || f.chars().any(char::is_control)
+        }) {
+            return Err("Family name must contain 1–64 printable characters".into());
+        }
         if self
             .source
             .as_ref()
@@ -127,11 +148,18 @@ pub const FIELD_NAMES: [&str; 21] = [
 mod tests {
     use super::*;
     #[test]
-    fn twenty_valid_unique_presets_and_dark_mocha() {
+    fn sixty_valid_unique_presets_and_dark_mocha() {
         let themes = builtins();
-        assert_eq!(themes.len(), 20);
+        assert_eq!(themes.len(), 60);
+        assert_eq!(
+            themes
+                .iter()
+                .filter(|t| t.family_name() == "Catppuccin")
+                .count(),
+            4
+        );
         let ids: std::collections::HashSet<_> = themes.iter().map(|t| &t.id).collect();
-        assert_eq!(ids.len(), 20);
+        assert_eq!(ids.len(), 60);
         assert_eq!(themes[0].id, "catppuccin-mocha");
         assert_eq!(themes[0].colors.background.to_lowercase(), "#1e1e2e");
     }

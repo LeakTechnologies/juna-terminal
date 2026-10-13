@@ -5,7 +5,7 @@
 Native Windows terminal, original VT engine, ordered ConPTY transport, dark theme choices,
 15 bundled fonts, live sizing, a right-click options menu and application icon.
 
-## Next interface iteration (approved design)
+## Completed interface iteration
 
 - Tabs: right-click New Tab, Ctrl+Shift+T, keyboard switching and per-session shutdown.
 - Explicit mouse/keyboard settings prompts and font sizes entered in px or pt.
@@ -37,3 +37,5 @@ See JUNAFETCH_DESIGN.md. Additional terminal tools can use the same packaging re
 Versioned Windows x64 GitHub Releases, distinct Stable/Preview channels, verified downloads,
 explicit installation, rollback and an external helper for replacing the locked executable.
 See UPDATE_DESIGN.md. Do not use Actions artifacts as production update assets.
+
+Terminal-wide privacy and intentional Shift+hover now have a separate proposal in TERMINAL_PRIVACY_DESIGN.md, awaiting approval.

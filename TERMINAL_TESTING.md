@@ -177,3 +177,24 @@ shows the Juna dog, confirmed by the user. The permanent release setup was visua
 The unsuccessful Rust borrowed-variant attempt is recorded in DECISIONS.md, including its repair.
 
 ![Right-side settings leave terminal text visible](docs/acceptance/right-side-settings.png)
+
+## Tabs, numeric prompts and theme families — 2026-10-13
+
+Verified: check/clippy, 185 standard tests, four GPU cases, three real-window cases and release
+build pass. The byte-exact ConPTY coverage remains passing. Concurrent startup tabs consume their
+independent output markers and reap without closing surviving sessions. Overlays leave shell
+output flowing, and the final session closes the window. The actual release presents and exits 0;
+all seven embedded icon images match the approved source. Reviewed captures cover grouped families,
+Custom management, numeric entry and tab presentation. UI tests cover Space, Escape, caret editing,
+point conversion and saved/cancelled previews. Theme worker tests cover discovery, mapping,
+bounded input, generation results and byte-preserving trash/restore.
+
+Retraction/limits: the first restricted filesystem run failed Clippy configuration access and seven
+filesystem-dependent tests. Normal-access rerun passed. Incremental hard-link fallback warnings
+were emitted; they are build-cache warnings, not source lints. These automated UI/window checks
+do not replace hands-on keyboard/mouse/IME and mixed-DPI review. No Junafetch privacy or updater
+acceptance is claimed at this milestone.
+
+![Custom family menu](docs/acceptance/custom-themes.png)
+![Exact font-size prompt](docs/acceptance/numeric-prompt.png)
+![Terminal tabs](docs/acceptance/tabs.png)

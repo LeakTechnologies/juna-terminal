@@ -107,6 +107,7 @@ pub struct Renderer {
     pub cell_w: f32,
     pub cell_h: f32,
     pad: f32,
+    top_inset: f32,
     debug_frame: u32,
     srgb_target: bool,
     minimum_contrast: f32,
@@ -289,6 +290,7 @@ impl Renderer {
             cell_w: cell.0,
             cell_h: cell.1,
             pad,
+            top_inset: 0.,
             debug_frame: 0,
             srgb_target: format.is_srgb(),
             minimum_contrast: std::env::var("JUNA_MIN_CONTRAST")
@@ -302,6 +304,9 @@ impl Renderer {
     }
 
     /// Consume only owned screen values; backgrounds precede all glyphs.
+    pub fn set_top_inset(&mut self, inset: f32) {
+        self.top_inset = inset.max(0.);
+    }
     pub fn build(&mut self, screen: &RenderSnapshot, width: u32, height: u32) {
         self.debug_frame += 1;
         self.staging.clear();
@@ -315,7 +320,7 @@ impl Renderer {
         for row in 0..screen.rows {
             for (col, cell) in screen.row(row).iter().enumerate() {
                 let x = self.pad + col as f32 * self.cell_w;
-                let y = self.pad + row as f32 * self.cell_h;
+                let y = self.pad + self.top_inset + row as f32 * self.cell_h;
                 let mut fg = themed_color(cell.fg, default_fg, &self.palette);
                 let mut bg = themed_color(cell.bg, default_bg, &self.palette);
                 if cell.attrs.is(crate::vt::Attrs::INVERSE) {
@@ -398,7 +403,7 @@ impl Renderer {
         let cur = screen.cursor;
         if cur.visible {
             let x = self.pad + cur.col as f32 * self.cell_w;
-            let y = self.pad + cur.row as f32 * self.cell_h;
+            let y = self.pad + self.top_inset + cur.row as f32 * self.cell_h;
             let (pos, size) = match screen.cursor_style {
                 3 | 4 => ([x, y + self.cell_h - 2.], [self.cell_w, 2.]),
                 5 | 6 => ([x, y], [2., self.cell_h]),

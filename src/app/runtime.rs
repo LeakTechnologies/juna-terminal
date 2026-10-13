@@ -118,6 +118,9 @@ impl Runtime {
             self.writer.take();
         }
     }
+    pub fn is_closing(&self) -> bool {
+        self.closing.is_some()
+    }
     /// Called after each bounded output drain. Returns true only after the reader is joined.
     pub fn tick(&mut self) -> io::Result<bool> {
         if let Ok(fault) = self.faults.try_recv() {

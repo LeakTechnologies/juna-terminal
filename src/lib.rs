@@ -8,3 +8,4 @@ pub mod vt;
 pub mod theme;
 pub mod settings;
 pub mod fonts;
+pub mod theme_library;
