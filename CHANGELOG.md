@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1-dev5 — legacy Windows roadmap
+
+- Record low-priority investigation of a legacy console backend for pre-1809 Windows.
+- No Windows compatibility or terminal behaviour changes are included.
+
 ## 0.1.1-dev4 — graphics roadmap
 
 - Record future Kitty graphics protocol support, with original implementation, bounded

@@ -122,3 +122,8 @@ Added Kitty graphics protocol support as future work at the user's request. No t
 semantics, renderer boundary or dependencies changed. Implementation requires its own
 approved design and acceptance evidence. This documentation cycle uses a fresh dev tag.
 Verified for this documentation/version cycle: cargo check, strict all-target Clippy and all 202 standard tests passed. Graphics runtime acceptance does not apply because no graphics implementation changed.
+
+## 0.1.1-dev5 — legacy Windows roadmap
+
+Recorded the user's low-priority older-Windows investigation. No backend, dependency or runtime behaviour changed; compatibility is not claimed.
+Verified in this session: cargo check, strict all-target Clippy and all 202 standard tests passed. Older-Windows runtime support remains unverified and unimplemented.

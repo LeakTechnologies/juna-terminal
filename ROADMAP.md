@@ -45,6 +45,14 @@ No translations or Language tab are claimed as implemented at this stage.
 
 ## Further terminal work
 
+- Low-priority investigation: Windows versions older than 10 1809, including 1803.
+  Assess a separate legacy console backend without replacing the primary ConPTY path
+  or borrowing terminal-engine semantics. Review dependency provenance, platform/API
+  compatibility and graphics requirements before proposing implementation. Require real
+  older-Windows testing of interactive programs, resizing, byte transport and process
+  cleanup. Feasibility is unverified; no compatibility guarantee or delivery date is set.
+  This stays behind core terminal, local Git status, privacy and updater work.
+
 - Kitty graphics protocol support, after the current terminal, privacy and distribution
   priorities. Implement it within Juna's original engine from the published protocol
   [specification](https://sw.kovidgoyal.net/kitty/graphics-protocol/), with a design proposal

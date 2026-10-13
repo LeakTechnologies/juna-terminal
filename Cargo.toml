@@ -1,6 +1,6 @@
 [package]
 name = "juna"
-version = "0.1.1-dev4"
+version = "0.1.1-dev5"
 edition = "2021"
 rust-version = "1.97"
 description = "A terminal emulator with an original VT engine"
