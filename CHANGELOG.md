@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1-dev4 — graphics roadmap
+
+- Record future Kitty graphics protocol support, with original implementation, bounded
+  resource handling and compatibility acceptance to be designed before implementation.
+- No graphics protocol support is added in this development build.
+
 ## 0.1.1-dev3 — bundled Junafetch
 
 - Embed the pinned console utility and provide `junafetch` and `fetch` in Juna sessions.

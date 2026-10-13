@@ -116,3 +116,9 @@ strict Clippy and one report regression passed. Pinned payload/source verificati
 The real-window bundled_fetch test passed: system-only PATH, both aliases, eight-field JSON,
 rendered acceptance marker, presented GPU frames and normal shell/window cleanup. This is
 controlled runtime evidence; artwork aesthetics and other-machine acceptance remain human checks.
+## 0.1.1-dev4 — graphics roadmap
+
+Added Kitty graphics protocol support as future work at the user's request. No terminal
+semantics, renderer boundary or dependencies changed. Implementation requires its own
+approved design and acceptance evidence. This documentation cycle uses a fresh dev tag.
+Verified for this documentation/version cycle: cargo check, strict all-target Clippy and all 202 standard tests passed. Graphics runtime acceptance does not apply because no graphics implementation changed.

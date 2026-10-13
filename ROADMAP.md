@@ -45,6 +45,14 @@ No translations or Language tab are claimed as implemented at this stage.
 
 ## Further terminal work
 
+- Kitty graphics protocol support, after the current terminal, privacy and distribution
+  priorities. Implement it within Juna's original engine from the published protocol
+  [specification](https://sw.kovidgoyal.net/kitty/graphics-protocol/), with a design proposal
+  before implementation. Define bounded image memory,
+  decoding limits, placement/scrolling/alternate-screen behaviour and renderer snapshot
+  ownership, then test malformed input and compatibility. This is roadmap work only;
+  no graphics handling or borrowed Kitty engine code is included in current builds.
+
 - Explore Juna for Android after the primary Windows features mature. Reuse the original pure
   VT engine where feasible, with an Android-specific UI/process backend and explicit assessment
   of local shell capabilities under Android's application sandbox.
