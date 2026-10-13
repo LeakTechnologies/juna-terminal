@@ -633,18 +633,59 @@ impl ApplicationHandler for App {
             return;
         }
         let result = (|| -> Result<(), String> {
+            let attributes = Window::default_attributes()
+                .with_title("Juna Terminal")
+                .with_inner_size(winit::dpi::LogicalSize::new(
+                    self.cols as f32 * CELL_W + PAD * 2.,
+                    self.rows as f32 * CELL_H + PAD * 2.,
+                ));
+            #[cfg(windows)]
+            let attributes = {
+                use winit::platform::windows::{IconExtWindows, WindowAttributesExtWindows};
+                let small = winit::window::Icon::from_resource(
+                    1,
+                    Some(winit::dpi::PhysicalSize::new(32, 32)),
+                )
+                .map_err(|e| format!("Juna window icon: {e}"))?;
+                let large = winit::window::Icon::from_resource(
+                    1,
+                    Some(winit::dpi::PhysicalSize::new(256, 256)),
+                )
+                .map_err(|e| format!("Juna taskbar icon: {e}"))?;
+                attributes
+                    .with_window_icon(Some(small))
+                    .with_taskbar_icon(Some(large))
+            };
             let window = Arc::new(
                 event_loop
-                    .create_window(
-                        Window::default_attributes()
-                            .with_title("Juna Terminal")
-                            .with_inner_size(winit::dpi::LogicalSize::new(
-                                self.cols as f32 * CELL_W + PAD * 2.,
-                                self.rows as f32 * CELL_H + PAD * 2.,
-                            )),
-                    )
+                    .create_window(attributes)
                     .map_err(|e| e.to_string())?,
             );
+            #[cfg(windows)]
+            {
+                use windows::Win32::{
+                    Foundation::{HWND, LPARAM, WPARAM},
+                    UI::WindowsAndMessaging::{SendMessageW, WM_GETICON},
+                };
+                use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+                let RawWindowHandle::Win32(handle) =
+                    window.window_handle().map_err(|e| e.to_string())?.as_raw()
+                else {
+                    return Err("Expected a Windows window handle".into());
+                };
+                // SAFETY: winit owns this live HWND on the current UI thread; WM_GETICON has no pointer arguments.
+                let (small, large) = unsafe {
+                    let hwnd = HWND(handle.hwnd.get() as *mut _);
+                    (
+                        SendMessageW(hwnd, WM_GETICON, Some(WPARAM(0)), Some(LPARAM(0))),
+                        SendMessageW(hwnd, WM_GETICON, Some(WPARAM(1)), Some(LPARAM(0))),
+                    )
+                };
+                if small.0 == 0 || large.0 == 0 {
+                    return Err("Juna native window icon was not installed".into());
+                }
+                log::info!("Window icons verified: small and taskbar");
+            }
             window.set_ime_allowed(true);
             self.scale = window.scale_factor() as f32 * self.settings.font_size / FONT_PX;
             let size = window.inner_size();

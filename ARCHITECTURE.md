@@ -892,3 +892,7 @@ a shell prompt does.
 
 The native application window remains titled Juna Terminal. OSC title sequences continue
 to update engine metadata without changing the application window title.
+
+Application artwork is presentation infrastructure: GNU windres embeds assets/juna.ico into
+the Juna executable; winit loads that owned native icon for the window and taskbar.
+

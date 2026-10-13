@@ -55,6 +55,7 @@ fn real_window_presents_then_closes_on_shell_exit() {
         }
         let log = std::fs::read_to_string(folder.join("Juna/juna.log")).unwrap();
         assert!(log.contains("Shell exited:"), "{log}");
+        assert!(log.contains("Window icons verified: small and taskbar"), "{log}");
         assert!(
             log.contains("Window title: \"Juna Terminal\""),
             "Shell output overwrote the application title: {log}"

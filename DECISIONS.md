@@ -1219,3 +1219,13 @@ buildable throughout.
 
 Git initialized and the first commit made (`63198c9`) after reviewing staged contents: 7 files,
 no `target/`, no binaries, no secrets. B1 is resolved.
+
+## 2026-10-13 — approved application icon wiring
+
+The approved ICO is embedded as Windows resource 1 by build.rs using GNU windres.
+No Rust dependency was added. WINDRES can select the resource compiler explicitly.
+The native window loads small/taskbar icons from that resource and verifies both handles.
+GNU remains the working toolchain; Windows MSVC resource compilation needs a future reviewed path.
+Verified: required check/clippy/test gates, both real-window tests, and release build passed.
+All seven release resource images match assets/juna.ico byte for byte (16–256 pixels).
+

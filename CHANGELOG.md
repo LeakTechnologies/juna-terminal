@@ -32,3 +32,9 @@
 - Add local history navigation, selection/copy/paste, quoted shell arguments and persistent diagnostics.
 - Pin Unicode 17 standards-data crates; remove inactive winres/build inputs; keep ConPTY pinned.
 - Add GPU pixel evidence, actual-window lifecycle acceptance, and an explicit human testing matrix.
+
+## 2026-10-13 — application icon
+
+- Embed the approved seven-size icon into the executable and set window/taskbar icons.
+- Verify native icon handles in real-window acceptance and source-scan the resource input.
+

@@ -59,7 +59,7 @@ fn rust_sources() -> Vec<PathBuf> {
 
 /// Build inputs that can influence what is linked into the binary.
 fn build_inputs() -> Vec<PathBuf> {
-    ["Cargo.toml", "build.rs", "juna.rc", "juna.manifest"]
+    ["Cargo.toml", "build.rs", "juna.rc", "assets/juna.rc", "juna.manifest"]
         .iter()
         .map(PathBuf::from)
         .filter(|p| Path::new(ROOT).join(p).exists())

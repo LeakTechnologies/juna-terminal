@@ -32,3 +32,9 @@ silently rewritten. This milestone supports interactive testing, not a full Tier
 Verified: warning-free check/clippy; 165 standard tests pass; GPU row-isolation/capture and actual
 window/exit acceptance run separately; release executable built. Human physical input, clipboard,
 mixed-DPI and editor/pager review remain explicit in the testing matrix.
+
+## 2026-10-13 — icon installed
+
+Verified all 176 standard tests, check/clippy, both live-window tests and release build.
+Seven embedded icon images match the approved ICO byte for byte; native small/taskbar handles exist.
+
