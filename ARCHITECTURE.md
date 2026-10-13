@@ -923,3 +923,11 @@ Family folders group custom themes; edits preserve imported sources and removal 
 SessionSpec carries owned child-only environment overrides. Only the process backend passes them
 to ConPTY; app/tool packaging may prepend a tools directory for each session without global PATH
 or profile mutation. Environment plumbing does not change engine ownership or byte transport.
+
+The line-number gutter is app-owned presentation geometry. Its reserved left inset feeds PTY/grid
+width, glyph/cursor origin and mouse hit-testing together; labels come from retained-buffer row
+indices, not extra VT cells. The renderer consumes only snapshots and owned label overlays.
+Tab menus hold stable session IDs so inactive actions and exit races cannot target another tab.
+Middle-click close uses a Cancel-first confirmation; process shutdown follows the existing path.
+Theme favourites are independent saved preferences and update the appearance rollback snapshot
+without committing previewed fonts/themes. The confirmation UI shares the pure contrast policy.

@@ -5,6 +5,12 @@ fn inactive_tabs_drain_output_and_reap_without_closing_other_tabs() {
     use std::process::{Command, Stdio};
     let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target/acceptance/tabs");
     std::fs::create_dir_all(&folder).unwrap();
+    juna::settings::Store::new(folder.join("Juna"))
+        .save_settings(&juna::settings::Settings {
+            show_line_numbers: true,
+            ..Default::default()
+        })
+        .unwrap();
     let mut child=Command::new(env!("CARGO_BIN_EXE_juna")).args(["--shell","cmd.exe","--","/Q","/C","(for /L %i in (1,1,300) do @echo TAB_ROW%i) & echo TAB_OUTPUT_END & ping -n 5 127.0.0.1 >nul & exit /b 0"])
         .env("LOCALAPPDATA",&folder).env("RUST_LOG","info").env("JUNA_STARTUP_TABS","3").env("JUNA_ACCEPT_MARKER","TAB_OUTPUT_END").stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap();
     let start = std::time::Instant::now();

@@ -6,7 +6,7 @@
 //! Font and GPU resources carry no mutable terminal state.
 
 mod atlas;
-mod contrast;
+pub(crate) mod contrast;
 pub mod overlay;
 
 pub use atlas::Atlas;
@@ -108,6 +108,7 @@ pub struct Renderer {
     pub cell_h: f32,
     pad: f32,
     top_inset: f32,
+    left_inset: f32,
     debug_frame: u32,
     srgb_target: bool,
     minimum_contrast: f32,
@@ -291,6 +292,7 @@ impl Renderer {
             cell_h: cell.1,
             pad,
             top_inset: 0.,
+            left_inset: 0.,
             debug_frame: 0,
             srgb_target: format.is_srgb(),
             minimum_contrast: std::env::var("JUNA_MIN_CONTRAST")
@@ -307,6 +309,9 @@ impl Renderer {
     pub fn set_top_inset(&mut self, inset: f32) {
         self.top_inset = inset.max(0.);
     }
+    pub fn set_left_inset(&mut self, inset: f32) {
+        self.left_inset = inset.max(0.);
+    }
     pub fn build(&mut self, screen: &RenderSnapshot, width: u32, height: u32) {
         self.debug_frame += 1;
         self.staging.clear();
@@ -319,7 +324,7 @@ impl Renderer {
         let baseline = ((self.cell_h - text_h) * 0.5).max(0.0) + self.atlas.ascent();
         for row in 0..screen.rows {
             for (col, cell) in screen.row(row).iter().enumerate() {
-                let x = self.pad + col as f32 * self.cell_w;
+                let x = self.pad + self.left_inset + col as f32 * self.cell_w;
                 let y = self.pad + self.top_inset + row as f32 * self.cell_h;
                 let mut fg = themed_color(cell.fg, default_fg, &self.palette);
                 let mut bg = themed_color(cell.bg, default_bg, &self.palette);
@@ -402,7 +407,7 @@ impl Renderer {
         self.staging.extend(foreground);
         let cur = screen.cursor;
         if cur.visible {
-            let x = self.pad + cur.col as f32 * self.cell_w;
+            let x = self.pad + self.left_inset + cur.col as f32 * self.cell_w;
             let y = self.pad + self.top_inset + cur.row as f32 * self.cell_h;
             let (pos, size) = match screen.cursor_style {
                 3 | 4 => ([x, y + self.cell_h - 2.], [self.cell_w, 2.]),

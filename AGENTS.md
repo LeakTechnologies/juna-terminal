@@ -113,6 +113,15 @@ changed) and `DECISIONS.md` (if a decision changed) **in the same commit**.
 
 No AI attribution of any kind in code, comments, or commit messages.
 
+### Development release cadence
+
+Every completed change cycle pushed to GitHub CI must increment Juna's development version,
+commit matching release notes/tracker updates, and push a fresh `v<major>.<minor>.<patch>-dev<number>`
+tag. Do not accumulate unrelated completed cycles into one release or reuse a published tag.
+Stable tags omit the suffix. Verify the tag workflow and downloadable Release assets before
+reporting publication; a pushed tag alone is not a release. Distinguish build/runtime evidence
+from human/stable acceptance. VideoTools' version/milestone reservations do not apply to Juna.
+
 ## 12. Pinned dependencies requiring manual review
 
 `conpty-oxide` is pinned and must be upgraded **manually**. Before any version change:

@@ -105,6 +105,16 @@ pub fn tab_scene(labels: &[String], active: usize, width: f32, scale: f32) -> Ov
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
+    ImportSettings,
+    ExportSettings,
+    ApplyImport,
+    ExpandAll,
+    CollapseAll,
+    ToggleFavourite(String),
+    ToggleLineNumbers,
+    CloseTargetTab,
+    RenameTab,
+    SaveTabName,
     ApplySetting,
     CancelSetting,
     Custom,
@@ -137,6 +147,10 @@ pub enum Action {
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
+    ImportReview,
+    ConfirmClose,
+    TabContext,
+    Rename,
     Context,
     Themes,
     Settings,
@@ -147,6 +161,11 @@ pub enum Kind {
     Manage,
 }
 pub struct Ui {
+    pub summary: Vec<String>,
+    wheel_remainder: f32,
+    pub theme: Option<Theme>,
+    pub star_focused: bool,
+    pub target_tab: Option<u64>,
     pub kind: Kind,
     pub focus: usize,
     pub scroll: usize,
@@ -164,9 +183,16 @@ pub struct Ui {
     pub preview_id: Option<String>,
 }
 pub struct Row {
+    pub favourite: bool,
     pub label: String,
     pub action: Action,
     pub value: Option<String>,
+}
+pub fn theme_id(row: &Row) -> Option<&str> {
+    match &row.action {
+        Action::Pick(id) | Action::ManageTheme(id) => Some(id),
+        _ => None,
+    }
 }
 impl Ui {
     pub fn set_number_value(&mut self, value: String) {
@@ -179,6 +205,11 @@ impl Ui {
     }
     pub fn new(kind: Kind, anchor: [f32; 2]) -> Self {
         Self {
+            summary: Vec::new(),
+            wheel_remainder: 0.,
+            theme: None,
+            star_focused: false,
+            target_tab: None,
             kind,
             focus: 0,
             scroll: 0,
@@ -198,11 +229,47 @@ impl Ui {
     }
     pub fn rows(&self, themes: &[Theme], settings: &Settings) -> Vec<Row> {
         let row = |label: String, action: Action, value: Option<String>| Row {
+            favourite: false,
             label,
             action,
             value,
         };
-        match self.kind {
+        let mut result: Vec<Row> = match self.kind {
+            Kind::ImportReview => {
+                let mut rows: Vec<_> = self
+                    .summary
+                    .iter()
+                    .map(|text| row(text.clone(), Action::Search, None))
+                    .collect();
+                rows.push(row(
+                    "Apply imported settings".into(),
+                    Action::ApplyImport,
+                    None,
+                ));
+                rows.push(row("Cancel".into(), Action::Cancel, None));
+                rows
+            }
+            Kind::ConfirmClose => vec![
+                row("✓ Close tab".into(), Action::CloseTargetTab, None),
+                row("✕ Cancel".into(), Action::Cancel, None),
+            ],
+            Kind::TabContext => {
+                let mut rows = vec![row("New tab   Ctrl+Shift+T".into(), Action::NewTab, None)];
+                if self.target_tab.is_some() {
+                    rows.push(row("Rename tab...".into(), Action::RenameTab, None));
+                    rows.push(row("Close tab".into(), Action::CloseTargetTab, None));
+                }
+                rows
+            }
+            Kind::Rename => vec![
+                row(
+                    "Tab name".into(),
+                    Action::SaveTabName,
+                    Some(self.draft_value.clone()),
+                ),
+                row("Save".into(), Action::SaveTabName, None),
+                row("Cancel".into(), Action::Cancel, None),
+            ],
             Kind::Manage => {
                 let id = self
                     .preview_id
@@ -230,8 +297,6 @@ impl Ui {
                 row("Cancel".into(), Action::CancelSetting, None),
             ],
             Kind::Context => [
-                Action::NewTab,
-                Action::CloseTab,
                 Action::Copy,
                 Action::Paste,
                 Action::SelectAll,
@@ -240,8 +305,6 @@ impl Ui {
             ]
             .into_iter()
             .zip([
-                "New tab   Ctrl+Shift+T",
-                "Close tab Ctrl+Shift+W",
                 "Copy   Ctrl+Shift+C",
                 "Paste  Ctrl+Shift+V",
                 "Select all",
@@ -282,8 +345,28 @@ impl Ui {
                         None,
                     ));
                 }
+                rows.push(row("Expand all families".into(), Action::ExpandAll, None));
+                rows.push(row(
+                    "Collapse all families".into(),
+                    Action::CollapseAll,
+                    None,
+                ));
                 let mut groups: std::collections::BTreeMap<String, Vec<&Theme>> =
                     std::collections::BTreeMap::new();
+                if !custom {
+                    let favourites: Vec<_> = themes
+                        .iter()
+                        .filter(|t| settings.favourite_theme_ids.contains(&t.id))
+                        .filter(|t| {
+                            self.query.is_empty()
+                                || t.name.to_lowercase().contains(&self.query.to_lowercase())
+                                || t.family_name()
+                                    .to_lowercase()
+                                    .contains(&self.query.to_lowercase())
+                        })
+                        .collect();
+                    groups.insert("\0favourites".into(), favourites);
+                }
                 for theme in themes
                     .iter()
                     .filter(|t| t.id.starts_with("custom-") == custom)
@@ -303,7 +386,11 @@ impl Ui {
                         format!(
                             "{} {} ({})",
                             if expanded { "[-]" } else { "[+]" },
-                            family,
+                            if family == "\0favourites" {
+                                "Favourites"
+                            } else {
+                                &family
+                            },
                             variants.len()
                         ),
                         Action::ToggleFamily(family.clone()),
@@ -321,7 +408,7 @@ impl Ui {
                                 format!(
                                     "  {} {}",
                                     if theme.id == settings.active_theme_id {
-                                        "*"
+                                        ">"
                                     } else {
                                         " "
                                     },
@@ -394,8 +481,19 @@ impl Ui {
                 ),
                 row("Edit theme...".into(), Action::Edit, None),
                 row("Theme selector...".into(), Action::Themes, None),
-                row("Save settings  Ctrl+S".into(), Action::SaveSettings, None),
-                row("Cancel".into(), Action::Cancel, None),
+                row(
+                    if settings.show_line_numbers {
+                        "[x] Show line numbers"
+                    } else {
+                        "[ ] Show line numbers"
+                    }
+                    .into(),
+                    Action::ToggleLineNumbers,
+                    None,
+                ),
+                row("Close".into(), Action::Cancel, None),
+                row("Import settings...".into(), Action::ImportSettings, None),
+                row("Export settings...".into(), Action::ExportSettings, None),
             ],
             Kind::Editor => {
                 let t = self.draft.as_ref().expect("editor draft");
@@ -422,7 +520,12 @@ impl Ui {
                 rows.push(row("Cancel".into(), Action::Cancel, None));
                 rows
             }
+        };
+        for row in &mut result {
+            row.favourite = theme_id(row)
+                .is_some_and(|id| settings.favourite_theme_ids.iter().any(|saved| saved == id));
         }
+        result
     }
     pub fn geometry(
         &self,
@@ -437,13 +540,13 @@ impl Ui {
             .max(1)
             .min(len.max(1));
         let h = (visible as f32 * step + 78. * scale).min(height.max(1.));
-        let anchor_x = if self.kind == Kind::Context {
+        let anchor_x = if matches!(self.kind, Kind::Context | Kind::TabContext) {
             self.anchor[0]
         } else {
             width - w - 16. * scale
         };
         let x = anchor_x.clamp(0., (width - w).max(0.));
-        let anchor_y = if self.kind == Kind::Context {
+        let anchor_y = if matches!(self.kind, Kind::Context | Kind::TabContext) {
             self.anchor[1]
         } else {
             (TAB_HEIGHT + 16.) * scale
@@ -481,6 +584,7 @@ impl Ui {
         (index < len).then_some(index)
     }
     pub fn focus_row(&mut self, index: usize, rows: &[Row]) {
+        self.star_focused = false;
         self.focus = index.min(rows.len().saturating_sub(1));
         self.buffer = rows
             .get(self.focus)
@@ -488,6 +592,37 @@ impl Ui {
             .unwrap_or_default();
         self.select_all = true;
         self.caret = self.buffer.len();
+    }
+    pub fn scroll_rows(&mut self, amount: f32, visible: usize, rows: &[Row]) {
+        if !amount.is_finite() {
+            return;
+        }
+        self.wheel_remainder += amount;
+        let steps = self.wheel_remainder.trunc().clamp(-128., 128.) as isize;
+        self.wheel_remainder -= steps as f32;
+        let limit = rows.len().saturating_sub(visible);
+        self.scroll = self.scroll.saturating_add_signed(steps).min(limit);
+        if self.scroll == 0 && amount < 0. || self.scroll == limit && amount > 0. {
+            self.wheel_remainder = 0.;
+        }
+        let last = (self.scroll + visible.saturating_sub(1)).min(rows.len().saturating_sub(1));
+        if self.focus < self.scroll || self.focus > last {
+            self.focus_row(self.focus.clamp(self.scroll, last.max(self.scroll)), rows);
+        }
+    }
+    pub fn star_hit(
+        &self,
+        point: [f32; 2],
+        width: f32,
+        height: f32,
+        scale: f32,
+        rows: &[Row],
+    ) -> Option<String> {
+        let index = self.hit(point, width, height, scale, rows.len())?;
+        let (rect, _, _) = self.geometry(width, height, scale, rows.len());
+        (point[0] >= rect[0] + rect[2] - 40. * scale)
+            .then(|| theme_id(&rows[index]).map(str::to_string))
+            .flatten()
     }
     pub fn paste_text(&mut self, text: &str) {
         if self.select_all {
@@ -505,10 +640,11 @@ impl Ui {
         self.sync_text();
     }
     fn sync_text(&mut self) {
-        if self.kind == Kind::Number && self.focus == 0 {
+        if matches!(self.kind, Kind::Number | Kind::Rename) && self.focus == 0 {
             self.draft_value = self.buffer.clone();
         }
         if matches!(self.kind, Kind::Themes | Kind::Custom | Kind::Fonts) {
+            self.star_focused = false;
             self.query = self.buffer.clone();
             self.focus = 0;
             self.scroll = 0;
@@ -536,6 +672,24 @@ impl Ui {
         rows: &[Row],
     ) -> Option<Action> {
         match key {
+            Key::Named(NamedKey::ArrowRight | NamedKey::ArrowLeft)
+                if rows.get(self.focus).and_then(theme_id).is_some() =>
+            {
+                self.star_focused = matches!(key, Key::Named(NamedKey::ArrowRight));
+                return None;
+            }
+            Key::Named(NamedKey::Enter | NamedKey::Space) if self.star_focused => {
+                return rows
+                    .get(self.focus)
+                    .and_then(theme_id)
+                    .map(|id| Action::ToggleFavourite(id.into()));
+            }
+            Key::Character(value) if value == " " && self.star_focused => {
+                return rows
+                    .get(self.focus)
+                    .and_then(theme_id)
+                    .map(|id| Action::ToggleFavourite(id.into()));
+            }
             Key::Named(NamedKey::ArrowLeft | NamedKey::ArrowRight)
                 if rows
                     .get(self.focus)
@@ -676,6 +830,25 @@ impl Ui {
         None
     }
     pub fn scene(&self, rows: &[Row], width: f32, height: f32, scale: f32) -> Overlay {
+        let theme = self
+            .theme
+            .clone()
+            .unwrap_or_else(crate::theme::default_theme);
+        let confirmation = self.kind == Kind::ConfirmClose;
+        let bg = if confirmation {
+            crate::theme::rgb(&theme.colors.background).unwrap()
+        } else {
+            [0.075, 0.075, 0.115]
+        };
+        let highlight = if confirmation {
+            crate::theme::rgb(&theme.colors.selection_background).unwrap()
+        } else {
+            [0.20, 0.22, 0.34]
+        };
+        let readable = |fg, bg| {
+            let c = crate::render::contrast::foreground(fg, bg, 4.5);
+            [c[0], c[1], c[2], 1.]
+        };
         let (r, n, step) = self.geometry(width, height, scale, rows.len());
         let mut out = Overlay::default();
         out.rectangles.push(Rectangle {
@@ -684,14 +857,18 @@ impl Ui {
         });
         out.rectangles.push(Rectangle {
             rect: r,
-            color: [0.075, 0.075, 0.115, 1.],
+            color: [bg[0], bg[1], bg[2], 1.],
         });
         let title = match self.kind {
+            Kind::ImportReview => "Review settings import",
+            Kind::ConfirmClose => "Close tab?",
+            Kind::TabContext => "Tabs",
+            Kind::Rename => "Rename tab",
             Kind::Context => "Juna",
             Kind::Themes => "Theme families - live preview",
             Kind::Custom => "Custom themes - live preview",
             Kind::Fonts => "Fonts - live preview",
-            Kind::Settings => "Settings - live preview",
+            Kind::Settings => "Settings - saved automatically",
             Kind::Editor => "Custom theme - live preview",
             Kind::Number => {
                 if self.number == Some(1) {
@@ -706,7 +883,14 @@ impl Ui {
             pos: [r[0] + 12. * scale, r[1] + 8. * scale],
             width: r[2] - 24. * scale,
             value: title.into(),
-            color: [0.9, 0.9, 0.98, 1.],
+            color: readable(
+                if confirmation {
+                    crate::theme::rgb(&theme.colors.foreground).unwrap()
+                } else {
+                    [0.9, 0.9, 0.98]
+                },
+                bg,
+            ),
         });
         for (i, row) in rows.iter().enumerate().skip(self.scroll).take(n) {
             let y = r[1] + 36. * scale + (i - self.scroll) as f32 * step;
@@ -714,7 +898,7 @@ impl Ui {
             if selected {
                 out.rectangles.push(Rectangle {
                     rect: [r[0] + 6. * scale, y, r[2] - 12. * scale, step],
-                    color: [0.20, 0.22, 0.34, 1.],
+                    color: [highlight[0], highlight[1], highlight[2], 1.],
                 });
             }
             let value = if selected && row.value.is_some() && self.kind != Kind::Themes {
@@ -729,21 +913,60 @@ impl Ui {
             };
             out.text.push(Text {
                 pos: [r[0] + 12. * scale, y + 2. * scale],
-                width: r[2] - 24. * scale,
+                width: r[2]
+                    - if theme_id(row).is_some() {
+                        60. * scale
+                    } else {
+                        24. * scale
+                    },
                 value,
-                color: if selected {
+                color: if confirmation {
+                    let index = if row.action == Action::CloseTargetTab {
+                        2
+                    } else {
+                        1
+                    };
+                    readable(
+                        crate::theme::rgb(&theme.colors.ansi[index]).unwrap(),
+                        if selected { highlight } else { bg },
+                    )
+                } else if selected {
                     [1., 1., 1., 1.]
                 } else {
                     [0.78, 0.8, 0.9, 1.]
                 },
             });
+            if theme_id(row).is_some() {
+                if selected && self.star_focused {
+                    out.rectangles.push(Rectangle {
+                        rect: [r[0] + r[2] - 38. * scale, y, 30. * scale, step],
+                        color: [0.3, 0.3, 0.4, 1.],
+                    });
+                }
+                out.text.push(Text {
+                    pos: [r[0] + r[2] - 35. * scale, y + 2. * scale],
+                    width: 26. * scale,
+                    value: if row.favourite { "★" } else { "☆" }.into(),
+                    color: [1., 0.83, 0.3, 1.],
+                });
+            }
         }
         let footer = if self.message.is_empty() {
             match self.kind {
-                Kind::Context => "Enter selects | Esc closes",
-                Kind::Themes | Kind::Custom => "Search | Space expands | Enter selects",
+                Kind::Context | Kind::TabContext | Kind::ConfirmClose => {
+                    "Enter selects | Esc closes"
+                }
+                Kind::Rename => "Enter saves | Esc cancels",
+                Kind::ImportReview => "Review first | Apply replaces preferences",
+                Kind::Themes | Kind::Custom => {
+                    if self.star_focused {
+                        "Favourite / Remove favourite | Space toggles"
+                    } else {
+                        "Enter selects | Right: favourite star"
+                    }
+                }
                 Kind::Manage => "Enter selects | Esc closes",
-                Kind::Settings => "Left/Right size | Ctrl+S saves | Esc cancels",
+                Kind::Settings => "Left/Right size | Enter edits | Esc closes",
                 Kind::Fonts => "Search | Enter picks | Esc cancels",
                 Kind::Editor => "Ctrl+S saves | Esc cancels",
                 Kind::Number => "Enter applies | Esc returns",
@@ -755,13 +978,116 @@ impl Ui {
             pos: [r[0] + 12. * scale, r[1] + r[3] - 28. * scale],
             width: r[2] - 24. * scale,
             value: footer.to_owned(),
-            color: [0.85, 0.82, 0.7, 1.],
+            color: readable(
+                if confirmation {
+                    crate::theme::rgb(&theme.colors.foreground).unwrap()
+                } else {
+                    [0.85, 0.82, 0.7]
+                },
+                bg,
+            ),
         });
         out
     }
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn wheel_scrolls_viewport_immediately_and_accumulates_pixels() {
+        use super::*;
+        let mut panel = Ui::new(Kind::Themes, [0.; 2]);
+        panel.expanded.insert("Catppuccin".into());
+        let rows = panel.rows(&crate::theme::builtins(), &Settings::default());
+        panel.scroll_rows(3., 8, &rows);
+        assert_eq!(panel.scroll, 3);
+        panel.scroll_rows(0.4, 8, &rows);
+        assert_eq!(panel.scroll, 3);
+        panel.scroll_rows(0.7, 8, &rows);
+        assert_eq!(panel.scroll, 4);
+        panel.scroll_rows(-128., 8, &rows);
+        assert_eq!(panel.scroll, 0);
+    }
+    #[test]
+    fn confirmation_icons_follow_theme_with_readable_contrast() {
+        use super::*;
+        for theme in crate::theme::builtins() {
+            let mut panel = Ui::new(Kind::ConfirmClose, [0.; 2]);
+            panel.theme = Some(theme.clone());
+            let rows = panel.rows(&[], &Settings::default());
+            panel.focus_row(1, &rows);
+            let scene = panel.scene(&rows, 1024., 512., 1.);
+            assert_eq!(scene.text[0].value, "Close tab?");
+            assert!(scene.text[1].value.starts_with('✓'));
+            assert!(scene.text[2].value.starts_with('✕'));
+            for (i, text) in scene.text[1..3].iter().enumerate() {
+                let bg = crate::theme::rgb(if i == 0 {
+                    &theme.colors.background
+                } else {
+                    &theme.colors.selection_background
+                })
+                .unwrap();
+                assert!(
+                    crate::render::contrast::ratio(
+                        [text.color[0], text.color[1], text.color[2]],
+                        bg
+                    ) >= 4.499
+                );
+            }
+        }
+    }
+    #[test]
+    fn favourite_star_keyboard_and_saved_section_are_distinct_from_selection() {
+        use super::*;
+        let settings = Settings {
+            favourite_theme_ids: vec!["nord".into(), "custom-missing".into()],
+            ..Default::default()
+        };
+        let mut panel = Ui::new(Kind::Themes, [0.; 2]);
+        panel.expanded.insert("\0favourites".into());
+        let rows = panel.rows(&crate::theme::builtins(), &settings);
+        let index = rows
+            .iter()
+            .position(|r| theme_id(r) == Some("nord"))
+            .unwrap();
+        assert!(rows[index].favourite);
+        panel.focus_row(index, &rows);
+        assert_eq!(
+            panel.key(&Key::Named(NamedKey::ArrowRight), None, false, &rows),
+            None
+        );
+        assert_eq!(
+            panel.key(&Key::Named(NamedKey::Space), None, false, &rows),
+            Some(Action::ToggleFavourite("nord".into()))
+        );
+        panel.key(&Key::Named(NamedKey::ArrowLeft), None, false, &rows);
+        assert_eq!(
+            panel.key(&Key::Named(NamedKey::Enter), None, false, &rows),
+            Some(Action::Pick("nord".into()))
+        );
+    }
+    #[test]
+    fn tab_menu_and_terminal_menu_have_separate_actions() {
+        use super::*;
+        let settings = Settings::default();
+        let body = Ui::new(Kind::Context, [0.; 2]).rows(&[], &settings);
+        assert!(!body.iter().any(|r| matches!(
+            r.action,
+            Action::NewTab | Action::CloseTab | Action::CloseTargetTab | Action::RenameTab
+        )));
+        assert!(!body.iter().any(|r| r.action == Action::ToggleLineNumbers));
+        assert!(Ui::new(Kind::Settings, [0.; 2])
+            .rows(&[], &settings)
+            .iter()
+            .any(|r| r.action == Action::ToggleLineNumbers));
+        let mut tabs = Ui::new(Kind::TabContext, [0.; 2]);
+        assert_eq!(tabs.rows(&[], &settings).len(), 1);
+        tabs.target_tab = Some(7);
+        let rows = tabs.rows(&[], &settings);
+        assert_eq!(rows.len(), 3);
+        assert!(!rows
+            .iter()
+            .any(|r| matches!(r.action, Action::Themes | Action::Settings | Action::Copy)));
+    }
     #[test]
     fn numeric_prompts_parse_points_edit_at_caret_and_activate_from_space() {
         let settings = Settings::default();
@@ -883,14 +1209,14 @@ mod tests {
         let rows = ui.rows(&[], &Settings::default());
         let (rect, visible, _) = ui.geometry(640., 480., 1., rows.len());
         assert!(rect[0] + rect[2] <= 640. && rect[1] + rect[3] <= 480.);
-        assert_eq!(visible, 7);
+        assert_eq!(visible, 5);
         assert_eq!(
             ui.hit([rect[0] + 20., rect[1] + 40.], 640., 480., 1., rows.len()),
             Some(0)
         );
         assert_eq!(
             ui.key(&Key::Named(NamedKey::Enter), None, false, &rows),
-            Some(Action::NewTab)
+            Some(Action::Copy)
         );
         assert_eq!(
             ui.key(&Key::Named(NamedKey::Escape), None, false, &rows),

@@ -1,7 +1,9 @@
 //! Single-owner window, input, engine and rendering integration.
 mod clipboard;
+pub mod gutter;
 mod input;
 mod runtime;
+mod settings_files;
 mod tabs;
 pub mod ui;
 use crate::{
@@ -88,6 +90,7 @@ pub struct App {
     last_report: Instant,
     failure: Option<String>,
     last_sync: Instant,
+    left_inset: f32,
     settings: crate::settings::Settings,
     themes: Vec<crate::theme::Theme>,
     store: crate::settings::Store,
@@ -95,6 +98,8 @@ pub struct App {
     pointer_px: [f32; 2],
     ui_mouse_latch: Vec<MouseButton>,
     settings_before: Option<crate::settings::Settings>,
+    settings_file_task: Option<settings_files::ResultChannel>,
+    pending_import: Option<crate::settings_transfer::ImportPlan>,
     zoom_wheel: f32,
     tabs: Vec<tabs::Tab>,
     active_tab: usize,
@@ -139,6 +144,7 @@ impl App {
             last_report: Instant::now(),
             failure: None,
             last_sync: Instant::now(),
+            left_inset: 0.,
             settings,
             themes,
             store,
@@ -146,6 +152,8 @@ impl App {
             pointer_px: [0., 0.],
             ui_mouse_latch: Vec::new(),
             settings_before: None,
+            settings_file_task: None,
+            pending_import: None,
             zoom_wheel: 0.,
             tabs: vec![tabs::Tab {
                 id: 1,
@@ -190,6 +198,10 @@ impl App {
         self.selecting = false;
         self.mouse_button = None;
         self.dirty = true;
+        if let Some(window) = self.window.as_ref() {
+            let size = window.inner_size();
+            self.fit(size.width, size.height);
+        }
     }
     fn switch_tab(&mut self, index: usize) {
         if index == self.active_tab || index >= self.tabs.len() {
@@ -250,6 +262,10 @@ impl App {
         self.mouse_button = None;
         self.dirty = true;
         log::info!("Opened tab {id}; count={}", self.tabs.len());
+        if let Some(window) = self.window.as_ref() {
+            let size = window.inner_size();
+            self.fit(size.width, size.height);
+        }
         Ok(())
     }
     fn close_tab(&mut self) {
@@ -307,6 +323,9 @@ impl App {
         }
     }
     fn tab_controls(&mut self, event: &WindowEvent) -> bool {
+        if self.ui.is_some() {
+            return false;
+        }
         if let WindowEvent::KeyboardInput { event, .. } = event {
             if event.state == ElementState::Pressed
                 && !self.ime
@@ -346,6 +365,58 @@ impl App {
             self.pointer_px = [position.x as f32, position.y as f32];
         }
         if self.pointer_px[1] < ui::TAB_HEIGHT * self.scale {
+            if let WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Middle,
+                ..
+            } = event
+            {
+                let width = self
+                    .window
+                    .as_ref()
+                    .map(|w| w.inner_size().width as f32)
+                    .unwrap_or(1024.);
+                if let Some(ui::TabHit::Select(index)) = ui::tab_hit(
+                    self.pointer_px,
+                    width,
+                    self.scale,
+                    self.tabs.len(),
+                    self.active_tab,
+                ) {
+                    let id = self.tabs[index].id;
+                    let label = self.tabs[index].label.clone();
+                    if let Some(button) = self.mouse_button.take() {
+                        let modes = self.terminal.input_modes();
+                        self.send(&input::mouse(
+                            button,
+                            self.pointer.0,
+                            self.pointer.1,
+                            true,
+                            self.modifiers,
+                            modes.mouse_sgr,
+                        ));
+                    }
+                    self.selecting = false;
+                    self.ui_mouse_latch.push(MouseButton::Middle);
+                    self.open_ui(ui::Kind::ConfirmClose);
+                    if let Some(panel) = self.ui.as_mut() {
+                        panel.target_tab = Some(id);
+                        panel.message = format!("Commands will stop. Tab: {label}");
+                        let rows = panel.rows(&self.themes, &self.settings);
+                        panel.focus_row(1, &rows);
+                    }
+                }
+                return true;
+            }
+            if let WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Right,
+                ..
+            } = event
+            {
+                self.open_context_menu();
+                return true;
+            }
             if let WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button: MouseButton::Left,
@@ -410,7 +481,14 @@ impl App {
         }
         let history = self.terminal.scrollback_len();
         let dropped = self.terminal.scrollback_dropped();
+        let alternate = self.terminal.alternate_active();
         self.terminal.advance(&batch);
+        if alternate != self.terminal.alternate_active() {
+            if let Some(window) = self.window.as_ref() {
+                let size = window.inner_size();
+                self.fit(size.width, size.height);
+            }
+        }
         if self.offset > 0 {
             self.offset = (self.offset
                 + self.terminal.scrollback_len().saturating_sub(history)
@@ -430,9 +508,15 @@ impl App {
         if self.minimized {
             return;
         }
-        let cols = (((width as f32 - 2. * PAD * self.scale) / (CELL_W * self.scale)).max(1.)
-            as u16)
-            .clamp(1, MAX_COLS);
+        let inset = gutter::width(
+            width as f32,
+            self.scale,
+            self.settings.show_line_numbers && !self.terminal.alternate_active(),
+        );
+        let cols =
+            (((width as f32 - 2. * PAD * self.scale - inset) / (CELL_W * self.scale)).max(1.)
+                as u16)
+                .clamp(1, MAX_COLS);
         let rows = (((height as f32 - (2. * PAD + ui::TAB_HEIGHT) * self.scale)
             / (CELL_H * self.scale))
             .max(1.) as u16)
@@ -465,6 +549,13 @@ impl App {
             self.selection = None;
             self.offset = self.offset.min(self.terminal.scrollback_len());
         }
+        self.left_inset = inset;
+        let col = ((self.pointer_px[0] - PAD * self.scale - inset) / (CELL_W * self.scale)).max(0.)
+            as u16;
+        let row = ((self.pointer_px[1] - (PAD + ui::TAB_HEIGHT) * self.scale)
+            / (CELL_H * self.scale))
+            .max(0.) as u16;
+        self.pointer = (row.min(self.rows - 1), col.min(self.cols - 1));
         if let Some(g) = self.gpu.as_mut() {
             g.resize(width, height);
         }
@@ -476,6 +567,7 @@ impl App {
         }
         let selection_theme = self.active_theme();
         let selection_top = self.history_start();
+        let show_numbers = !self.terminal.alternate_active();
         let Some(g) = self.gpu.as_ref() else { return };
         let Some(renderer) = self.renderer.as_mut() else {
             return;
@@ -511,7 +603,16 @@ impl App {
             }
         }
         renderer.set_top_inset(ui::TAB_HEIGHT * self.scale);
+        renderer.set_left_inset(self.left_inset);
         renderer.build(&snapshot, w, h);
+        let color = crate::theme::rgb(&selection_theme.colors.foreground).unwrap();
+        renderer.overlay(&gutter::scene(
+            if show_numbers { self.left_inset } else { 0. },
+            self.scale,
+            selection_top,
+            snapshot.rows,
+            [color[0], color[1], color[2], 1.],
+        ));
         let labels: Vec<String> = self.tabs.iter().map(|t| t.label.clone()).collect();
         renderer.overlay(&ui::tab_scene(
             &labels,
@@ -645,26 +746,26 @@ impl App {
             input::Zoom::Step(step) => (self.settings.font_size + f32::from(step)).clamp(8., 40.),
             input::Zoom::Reset => FONT_PX,
         };
-        if size == self.settings.font_size {
+        if size == self.settings.font_size && size == self.committed_preferences().font_size {
             return;
         }
-        let mut settings = self.settings.clone();
+        let mut settings = self.committed_preferences();
         settings.font_size = size;
-        if self.settings_before.is_none() {
-            if let Err(error) = self.store.save_settings(&settings) {
-                log::warn!("Font size: {error}");
-                if let Some(ui) = self.ui.as_mut() {
-                    ui.message = error;
-                }
-                return;
+        if let Err(error) = self.commit_preferences(settings) {
+            log::warn!("Font size: {error}");
+            if let Some(ui) = self.ui.as_mut() {
+                ui.message = error;
             }
+            return;
         }
-        self.settings = settings;
         self.rebuild_renderer();
         log::info!("Font size: {size} px");
         if let Some(ui) = self.ui.as_mut() {
             if ui.kind == ui::Kind::Number && ui.number == Some(1) {
                 ui.set_number_value(size.to_string());
+            }
+            if let Some(before) = ui.prior_settings.as_mut() {
+                before.font_size = size;
             }
         }
     }
@@ -711,12 +812,13 @@ impl App {
             self.rebuild_renderer();
         }
         log::info!("Options panel: {kind:?}");
-        let anchor = if kind == ui::Kind::Context {
+        let anchor = if matches!(kind, ui::Kind::Context | ui::Kind::TabContext) {
             self.pointer_px
         } else {
             [16. * self.scale, 16. * self.scale]
         };
         let mut ui = ui::Ui::new(kind, anchor);
+        ui.theme = Some(self.active_theme());
         if matches!(kind, ui::Kind::Themes | ui::Kind::Custom) {
             if let Some(theme) = self
                 .themes
@@ -748,6 +850,47 @@ impl App {
         self.ui = Some(ui);
         self.selecting = false;
         self.dirty = true;
+    }
+    fn open_context_menu(&mut self) {
+        self.close_ui();
+        if let Some(button) = self.mouse_button.take() {
+            let modes = self.terminal.input_modes();
+            self.send(&input::mouse(
+                button,
+                self.pointer.0,
+                self.pointer.1,
+                true,
+                self.modifiers,
+                modes.mouse_sgr,
+            ));
+        }
+        self.selecting = false;
+        if !self.ui_mouse_latch.contains(&MouseButton::Right) {
+            self.ui_mouse_latch.push(MouseButton::Right);
+        }
+        if self.pointer_px[1] < ui::TAB_HEIGHT * self.scale {
+            let width = self
+                .window
+                .as_ref()
+                .map(|w| w.inner_size().width as f32)
+                .unwrap_or(1024.);
+            let target = match ui::tab_hit(
+                self.pointer_px,
+                width,
+                self.scale,
+                self.tabs.len(),
+                self.active_tab,
+            ) {
+                Some(ui::TabHit::Select(index)) => Some(self.tabs[index].id),
+                _ => None,
+            };
+            self.open_ui(ui::Kind::TabContext);
+            if let Some(panel) = self.ui.as_mut() {
+                panel.target_tab = target;
+            }
+        } else {
+            self.open_ui(ui::Kind::Context);
+        }
     }
     fn refresh_themes(&mut self) {
         let watching = self
@@ -894,6 +1037,7 @@ impl App {
         self.dirty = true;
     }
     fn close_ui(&mut self) {
+        self.pending_import = None;
         self.ui = None;
         if let Some(before) = self.settings_before.take() {
             self.settings = before;
@@ -905,10 +1049,265 @@ impl App {
         }
         self.dirty = true;
     }
+    fn committed_preferences(&self) -> crate::settings::Settings {
+        self.settings_before
+            .clone()
+            .unwrap_or_else(|| self.settings.clone())
+    }
+    fn poll_settings_files(&mut self) {
+        let result = match self.settings_file_task.as_ref().map(|task| task.try_recv()) {
+            Some(Ok(result)) => result,
+            Some(Err(std::sync::mpsc::TryRecvError::Disconnected)) => {
+                Err("Settings file worker stopped".into())
+            }
+            _ => return,
+        };
+        self.settings_file_task = None;
+        let outcome = (|| -> Result<(), String> {
+            match result? {
+                Some(settings_files::Outcome::Imported(bundle)) => {
+                    let plan = bundle.prepare(&self.themes)?;
+                    let summary = vec![
+                        format!(
+                            "Theme: {}",
+                            plan.themes
+                                .iter()
+                                .chain(self.themes.iter())
+                                .find(|t| t.id == plan.settings.active_theme_id)
+                                .map(|t| t.name.as_str())
+                                .unwrap_or("Unavailable")
+                        ),
+                        format!("Font: {}", plan.settings.font_family),
+                        format!(
+                            "Size: {} px; contrast: {}:1",
+                            plan.settings.font_size, plan.settings.minimum_contrast
+                        ),
+                        format!(
+                            "Line numbers: {}; favourites: {}",
+                            plan.settings.show_line_numbers,
+                            plan.settings.favourite_theme_ids.len()
+                        ),
+                        format!(
+                            "Custom theme copies: {}; conflicts preserved: {}",
+                            plan.themes.len(),
+                            plan.conflicts
+                        ),
+                    ];
+                    self.open_ui(ui::Kind::ImportReview);
+                    self.pending_import = Some(plan);
+                    if let Some(panel) = self.ui.as_mut() {
+                        panel.summary = summary;
+                        let rows = panel.rows(&self.themes, &self.settings);
+                        panel.focus_row(rows.len() - 1, &rows);
+                    }
+                }
+                Some(settings_files::Outcome::Exported) => {
+                    if let Some(panel) = self.ui.as_mut() {
+                        panel.message = "Settings exported".into();
+                    }
+                }
+                None => {}
+            }
+            Ok(())
+        })();
+        if let Err(error) = outcome {
+            if let Some(panel) = self.ui.as_mut() {
+                panel.message = error;
+            }
+        }
+        self.dirty = true;
+    }
+    fn commit_preferences(&mut self, settings: crate::settings::Settings) -> Result<(), String> {
+        self.store.save_settings(&settings)?;
+        self.settings = settings.clone();
+        if self.settings_before.is_some() {
+            self.settings_before = Some(settings);
+        }
+        Ok(())
+    }
     fn ui_action(&mut self, action: ui::Action) {
         use ui::{Action, Kind};
         let result = (|| -> Result<(), String> {
             match action {
+                Action::ImportSettings | Action::ExportSettings => {
+                    if self.settings_file_task.is_some() {
+                        return Err("A settings file operation is already open".into());
+                    }
+                    let export = if action == Action::ExportSettings {
+                        Some(crate::settings_transfer::Bundle::capture(
+                            &self.committed_preferences(),
+                            &self.themes,
+                        ))
+                    } else {
+                        None
+                    };
+                    let window = self
+                        .window
+                        .as_ref()
+                        .ok_or("File selection requires a window")?
+                        .clone();
+                    self.close_ui();
+                    self.open_ui(Kind::Settings);
+                    self.settings_file_task = Some(settings_files::start(window, export)?);
+                }
+                Action::ApplyImport => {
+                    let plan = self
+                        .pending_import
+                        .take()
+                        .ok_or("No settings import to apply")?;
+                    if let Err(error) = plan.apply(&self.store) {
+                        self.pending_import = Some(plan);
+                        return Err(error);
+                    }
+                    self.settings = plan.settings;
+                    self.settings_before = None;
+                    let (_, themes, errors) = self.store.load();
+                    self.themes = themes;
+                    self.theme_sources = crate::theme_library::scan(&self.store.directory).sources;
+                    self.theme_generation += 1;
+                    self.rebuild_renderer();
+                    self.open_ui(Kind::Settings);
+                    if let Some(panel) = self.ui.as_mut() {
+                        panel.message = if errors.is_empty() {
+                            "Settings imported".into()
+                        } else {
+                            format!(
+                                "Settings imported; {} existing theme warnings",
+                                errors.len()
+                            )
+                        };
+                    }
+                }
+                Action::ExpandAll => {
+                    if let Some(panel) = self.ui.as_mut() {
+                        let custom = panel.kind == ui::Kind::Custom;
+                        panel.expanded.extend(
+                            self.themes
+                                .iter()
+                                .filter(|t| t.id.starts_with("custom-") == custom)
+                                .map(|t| t.family_name()),
+                        );
+                        panel.expanded.insert("\0favourites".into());
+                    }
+                    self.dirty = true;
+                }
+                Action::CollapseAll => {
+                    if let Some(panel) = self.ui.as_mut() {
+                        panel.expanded.clear();
+                        panel.query.clear();
+                        let rows = panel.rows(&self.themes, &self.settings);
+                        let index = rows
+                            .iter()
+                            .position(|row| row.action == Action::CollapseAll)
+                            .unwrap_or(0);
+                        panel.focus_row(index, &rows);
+                        panel.scroll = 0;
+                    }
+                    self.dirty = true;
+                }
+                Action::ToggleFavourite(id) => {
+                    let previous = self.ui.as_ref().and_then(|panel| {
+                        panel
+                            .rows(&self.themes, &self.settings)
+                            .get(panel.focus)
+                            .map(|row| row.action.clone())
+                    });
+                    if !self.themes.iter().any(|t| t.id == id) {
+                        return Ok(());
+                    }
+                    let mut saved = self
+                        .settings_before
+                        .as_ref()
+                        .unwrap_or(&self.settings)
+                        .clone();
+                    if saved.favourite_theme_ids.contains(&id) {
+                        saved.favourite_theme_ids.retain(|value| value != &id);
+                    } else {
+                        saved.favourite_theme_ids.push(id);
+                    }
+                    self.store.save_settings(&saved)?;
+                    self.settings.favourite_theme_ids = saved.favourite_theme_ids.clone();
+                    if let Some(before) = self.settings_before.as_mut() {
+                        before.favourite_theme_ids = saved.favourite_theme_ids;
+                    }
+                    if let Some(panel) = self.ui.as_mut() {
+                        let star = panel.star_focused;
+                        let rows = panel.rows(&self.themes, &self.settings);
+                        if let Some(index) = rows
+                            .iter()
+                            .position(|row| Some(&row.action) == previous.as_ref())
+                        {
+                            panel.focus_row(index, &rows);
+                        } else {
+                            panel.focus_row(panel.focus.min(rows.len().saturating_sub(1)), &rows);
+                        }
+                        panel.star_focused =
+                            star && rows.get(panel.focus).and_then(ui::theme_id).is_some();
+                    }
+                    self.dirty = true;
+                }
+                Action::ToggleLineNumbers => {
+                    let mut settings = self.committed_preferences();
+                    settings.show_line_numbers = !settings.show_line_numbers;
+                    self.commit_preferences(settings)?;
+                    self.rebuild_renderer();
+                    if let Some(window) = self.window.as_ref() {
+                        let size = window.inner_size();
+                        self.fit(size.width, size.height);
+                    }
+                    self.dirty = true;
+                }
+                Action::CloseTargetTab => {
+                    let target = self.ui.as_ref().and_then(|u| u.target_tab);
+                    self.close_ui();
+                    if let Some(index) =
+                        target.and_then(|id| self.tabs.iter().position(|t| t.id == id))
+                    {
+                        if index == self.active_tab {
+                            self.close_tab();
+                        } else if let Some(state) = self.tabs[index].saved.as_mut() {
+                            state.closing = true;
+                            if let Some(runtime) = state.runtime.as_mut() {
+                                runtime.request_close();
+                            }
+                            self.dirty = true;
+                        }
+                    }
+                }
+                Action::RenameTab => {
+                    let target = self.ui.as_ref().and_then(|u| u.target_tab);
+                    if let Some(index) =
+                        target.and_then(|id| self.tabs.iter().position(|t| t.id == id))
+                    {
+                        let label = self.tabs[index].label.clone();
+                        self.open_ui(Kind::Rename);
+                        if let Some(panel) = self.ui.as_mut() {
+                            panel.target_tab = target;
+                            panel.draft_value = label;
+                            let rows = panel.rows(&self.themes, &self.settings);
+                            panel.focus_row(0, &rows);
+                        }
+                    } else {
+                        self.close_ui();
+                    }
+                }
+                Action::SaveTabName => {
+                    let panel = self.ui.as_ref().ok_or("Rename prompt is closed")?;
+                    let target = panel.target_tab;
+                    let label = panel.draft_value.trim().to_string();
+                    if label.is_empty()
+                        || label.chars().count() > 64
+                        || label.chars().any(char::is_control)
+                    {
+                        return Err("Use 1–64 printable characters for the tab name".into());
+                    }
+                    if let Some(tab) =
+                        target.and_then(|id| self.tabs.iter_mut().find(|t| t.id == id))
+                    {
+                        tab.label = label;
+                    }
+                    self.close_ui();
+                }
                 Action::NewTab => {
                     let spec = self.shell_spec.clone().ok_or("Shell is not initialized")?;
                     self.add_tab(spec)?;
@@ -1007,9 +1406,14 @@ impl App {
                 Action::Settings => self.open_ui(Kind::Settings),
                 Action::Fonts => self.open_ui(Kind::Fonts),
                 Action::PickFont(name) => {
-                    self.settings.font_family = name;
+                    let mut settings = self.committed_preferences();
+                    settings.font_family = name;
+                    self.commit_preferences(settings)?;
                     self.rebuild_renderer();
                     self.open_ui(Kind::Settings);
+                    if let Some(panel) = self.ui.as_mut() {
+                        panel.message = "Font saved".into();
+                    }
                 }
                 Action::SaveSettings => {
                     self.store.save_settings(&self.settings)?;
@@ -1094,7 +1498,12 @@ impl App {
                 Action::ApplySetting => {
                     let ui = self.ui.as_ref().ok_or("No numeric prompt")?;
                     let index = ui.number.ok_or("No field selected")?;
-                    self.settings = ui::numeric_settings(&self.settings, index, &ui.draft_value)?;
+                    let settings = ui::numeric_settings(
+                        &self.committed_preferences(),
+                        index,
+                        &ui.draft_value,
+                    )?;
+                    self.commit_preferences(settings)?;
                     self.rebuild_renderer();
                     self.open_ui(Kind::Settings);
                     if let Some(ui) = self.ui.as_mut() {
@@ -1145,6 +1554,26 @@ impl App {
         let Some(mut ui) = self.ui.take() else {
             return false;
         };
+        if matches!(
+            event,
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Right,
+                ..
+            }
+        ) {
+            self.ui = Some(ui);
+            if self
+                .ui
+                .as_ref()
+                .is_some_and(|panel| matches!(panel.kind, ui::Kind::Context | ui::Kind::TabContext))
+            {
+                self.open_context_menu();
+            } else if !self.ui_mouse_latch.contains(&MouseButton::Right) {
+                self.ui_mouse_latch.push(MouseButton::Right);
+            }
+            return true;
+        }
         let rows = ui.rows(&self.themes, &self.settings);
         let size = self
             .window
@@ -1156,6 +1585,13 @@ impl App {
         let mut action = None;
         let consumed = match event {
             WindowEvent::CursorMoved { .. } => {
+                if ui
+                    .star_hit(self.pointer_px, width, height, self.scale, &rows)
+                    .is_some()
+                {
+                    self.ui = Some(ui);
+                    return true;
+                }
                 if let Some(index) = ui.hit(self.pointer_px, width, height, self.scale, rows.len())
                 {
                     if index != ui.focus {
@@ -1170,7 +1606,11 @@ impl App {
                         self.ui_mouse_latch.push(*button);
                     }
                     if *button == MouseButton::Left {
-                        if let Some(index) =
+                        if let Some(id) =
+                            ui.star_hit(self.pointer_px, width, height, self.scale, &rows)
+                        {
+                            action = Some(ui::Action::ToggleFavourite(id));
+                        } else if let Some(index) =
                             ui.hit(self.pointer_px, width, height, self.scale, rows.len())
                         {
                             ui.focus_row(index, &rows);
@@ -1245,17 +1685,15 @@ impl App {
             }
             WindowEvent::Ime(_) => true,
             WindowEvent::MouseWheel { delta, .. } => {
-                let up = match delta {
-                    MouseScrollDelta::LineDelta(_, y) => *y > 0.,
-                    MouseScrollDelta::PixelDelta(p) => p.y > 0.,
+                let (_, visible, step) = ui.geometry(width, height, self.scale, rows.len());
+                let amount = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => -*y * 3.,
+                    MouseScrollDelta::PixelDelta(p) => -p.y as f32 / step,
                 };
-                let focus = if up {
-                    ui.focus.saturating_sub(3)
-                } else {
-                    (ui.focus + 3).min(rows.len().saturating_sub(1))
-                };
-                ui.focus_row(focus, &rows);
-                true
+                ui.scroll_rows(amount, visible, &rows);
+                self.ui = Some(ui);
+                self.dirty = true;
+                return true;
             }
             _ => false,
         };
@@ -1427,6 +1865,36 @@ impl ApplicationHandler for App {
         if self.handle_ui(&event) {
             return;
         }
+        if self.left_inset > 0.
+            && self.pointer_px[0] < PAD * self.scale + self.left_inset
+            && self.pointer_px[1] >= ui::TAB_HEIGHT * self.scale
+        {
+            if matches!(event, WindowEvent::CursorMoved { .. }) {
+                if let Some(button) = self.mouse_button.take() {
+                    let modes = self.terminal.input_modes();
+                    self.send(&input::mouse(
+                        button,
+                        self.pointer.0,
+                        self.pointer.1,
+                        true,
+                        self.modifiers,
+                        modes.mouse_sgr,
+                    ));
+                }
+                self.selecting = false;
+                return;
+            }
+            if matches!(
+                event,
+                WindowEvent::MouseInput {
+                    state: ElementState::Pressed,
+                    button: MouseButton::Left | MouseButton::Middle,
+                    ..
+                }
+            ) {
+                return;
+            }
+        }
         match event {
             WindowEvent::CloseRequested => self.close_all_tabs(),
             WindowEvent::Resized(size) => self.fit(size.width, size.height),
@@ -1506,8 +1974,9 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                let col =
-                    ((position.x as f32 - PAD * self.scale) / (CELL_W * self.scale)).max(0.) as u16;
+                let col = ((position.x as f32 - PAD * self.scale - self.left_inset)
+                    / (CELL_W * self.scale))
+                    .max(0.) as u16;
                 let row = ((position.y as f32 - (PAD + ui::TAB_HEIGHT) * self.scale)
                     / (CELL_H * self.scale))
                     .max(0.) as u16;
@@ -1578,7 +2047,7 @@ impl ApplicationHandler for App {
                 if !self.ui_mouse_latch.contains(&MouseButton::Right) {
                     self.ui_mouse_latch.push(MouseButton::Right);
                 }
-                self.open_ui(ui::Kind::Context);
+                self.open_context_menu();
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let lines = match delta {
@@ -1611,6 +2080,7 @@ impl ApplicationHandler for App {
         }
     }
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.poll_settings_files();
         self.refresh_themes();
         self.drain();
         self.drain_inactive();
@@ -1729,6 +2199,14 @@ impl ApplicationHandler for App {
             self.restore_session(next);
         }
         let sync = self.terminal.input_modes().synchronized_output;
+        if self
+            .ui
+            .as_ref()
+            .and_then(|u| u.target_tab)
+            .is_some_and(|id| !self.tabs.iter().any(|t| t.id == id))
+        {
+            self.close_ui();
+        }
         if !sync {
             self.last_sync = Instant::now();
         }
@@ -1797,6 +2275,169 @@ pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
 mod option_tests {
     use super::*;
     #[test]
+    fn editing_panels_ignore_right_click_and_numeric_choices_persist() {
+        let root = std::env::temp_dir().join(crate::settings::new_id());
+        let mut app = App::new(20, 3);
+        app.store = crate::settings::Store::new(root.clone());
+        app.settings = crate::settings::Settings::default();
+        app.open_ui(ui::Kind::Settings);
+        let right = WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: ElementState::Pressed,
+            button: MouseButton::Right,
+        };
+        assert!(app.handle_ui(&right));
+        assert_eq!(app.ui.as_ref().unwrap().kind, ui::Kind::Settings);
+        app.ui_action(ui::Action::Setting(1));
+        app.ui.as_mut().unwrap().set_number_value("18".into());
+        app.ui_action(ui::Action::ApplySetting);
+        app.ui_action(ui::Action::ToggleLineNumbers);
+        app.ui_action(ui::Action::Cancel);
+        let (saved, _, errors) = app.store.load();
+        assert!(errors.is_empty());
+        assert_eq!(saved.font_size, 18.);
+        assert!(saved.show_line_numbers);
+        app.settings.show_line_numbers = true;
+        app.fit(1024, 700);
+        let primary = app.cols;
+        assert!(app.left_inset > 0.);
+        app.terminal.advance(b"\x1b[?1049h");
+        app.fit(1024, 700);
+        assert_eq!(app.left_inset, 0.);
+        assert!(app.cols > primary);
+        app.terminal.advance(b"\x1b[?1049l");
+        app.fit(1024, 700);
+        assert_eq!(app.cols, primary);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn family_bulk_controls_clear_search_without_touching_terminal() {
+        let mut app = App::new(20, 3);
+        let before = app.terminal.snapshot(0).cells;
+        app.open_ui(ui::Kind::Themes);
+        app.ui_action(ui::Action::ExpandAll);
+        let panel = app.ui.as_ref().unwrap();
+        assert_eq!(
+            panel
+                .rows(&app.themes, &app.settings)
+                .iter()
+                .filter(|row| matches!(row.action, ui::Action::Pick(_)))
+                .count(),
+            60 + app
+                .settings
+                .favourite_theme_ids
+                .iter()
+                .filter(|id| app.themes.iter().any(|t| &t.id == *id))
+                .count()
+        );
+        app.ui.as_mut().unwrap().query = "catppuccin".into();
+        app.ui_action(ui::Action::CollapseAll);
+        let panel = app.ui.as_ref().unwrap();
+        assert!(panel.query.is_empty());
+        assert!(panel.expanded.is_empty());
+        assert!(!panel
+            .rows(&app.themes, &app.settings)
+            .iter()
+            .any(|row| matches!(row.action, ui::Action::Pick(_))));
+        assert_eq!(app.terminal.snapshot(0).cells, before);
+    }
+    #[test]
+    fn middle_click_confirmation_defaults_to_cancel() {
+        let mut app = App::new(20, 3);
+        app.pointer_px = [100., 12.];
+        let middle = WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: ElementState::Pressed,
+            button: MouseButton::Middle,
+        };
+        assert!(app.tab_controls(&middle));
+        let panel = app.ui.as_ref().unwrap();
+        assert_eq!(panel.kind, ui::Kind::ConfirmClose);
+        assert_eq!(panel.target_tab, Some(1));
+        assert_eq!(panel.focus, 1);
+        app.ui_action(ui::Action::Cancel);
+        assert!(!app.active_closing);
+        app.pointer_px = [100., 100.];
+        assert!(!app.tab_controls(&middle));
+    }
+    #[test]
+    fn favourites_persist_without_committing_or_cancelling_font_preview() {
+        let root = std::env::temp_dir().join(crate::settings::new_id());
+        let mut app = App::new(20, 3);
+        app.store = crate::settings::Store::new(root.clone());
+        app.settings = crate::settings::Settings::default();
+        app.open_ui(ui::Kind::Settings);
+        app.settings.font_size = 24.;
+        app.ui_action(ui::Action::ToggleFavourite("nord".into()));
+        let (saved, _, errors) = app.store.load();
+        assert!(errors.is_empty());
+        assert_eq!(saved.font_size, 16.);
+        assert_eq!(app.settings.font_size, 24.);
+        app.ui_action(ui::Action::Cancel);
+        assert_eq!(app.settings.font_size, 16.);
+        assert_eq!(app.settings.favourite_theme_ids, vec!["nord"]);
+        app.ui_action(ui::Action::ToggleFavourite("nord".into()));
+        assert!(app.store.load().0.favourite_theme_ids.is_empty());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn right_click_reanchors_and_switches_between_body_and_tab_menu() {
+        let mut app = App::new(20, 3);
+        app.pointer_px = [100., 100.];
+        app.open_context_menu();
+        assert_eq!(app.ui.as_ref().unwrap().kind, ui::Kind::Context);
+        let right = WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: ElementState::Pressed,
+            button: MouseButton::Right,
+        };
+        app.pointer_px = [300., 200.];
+        assert!(app.handle_ui(&right));
+        assert_eq!(app.ui.as_ref().unwrap().anchor, [300., 200.]);
+        app.pointer_px = [100., 12.];
+        assert!(app.handle_ui(&right));
+        assert_eq!(app.ui.as_ref().unwrap().kind, ui::Kind::TabContext);
+        assert_eq!(app.ui.as_ref().unwrap().target_tab, Some(1));
+    }
+    #[test]
+    fn tab_menu_targets_stable_identity_and_rename_is_transactional() {
+        let mut app = App::new(20, 3);
+        app.tabs.push(tabs::Tab {
+            id: 42,
+            label: "Second".into(),
+            saved: Some(tabs::SavedSession {
+                terminal: TerminalState::new(20, 3),
+                runtime: None,
+                offset: 0,
+                selection: None,
+                failure: None,
+                closing: false,
+            }),
+        });
+        app.open_ui(ui::Kind::TabContext);
+        app.ui.as_mut().unwrap().target_tab = Some(42);
+        app.ui_action(ui::Action::RenameTab);
+        app.ui.as_mut().unwrap().paste_text("Work 日本語");
+        app.ui_action(ui::Action::Cancel);
+        assert_eq!(app.tabs[1].label, "Second");
+        app.open_ui(ui::Kind::TabContext);
+        app.ui.as_mut().unwrap().target_tab = Some(42);
+        app.ui_action(ui::Action::RenameTab);
+        app.ui.as_mut().unwrap().paste_text("Work 日本語");
+        app.ui_action(ui::Action::SaveTabName);
+        assert_eq!(app.tabs[1].label, "Work 日本語");
+        assert_eq!(app.active_tab, 0);
+        app.open_ui(ui::Kind::TabContext);
+        app.ui.as_mut().unwrap().target_tab = Some(42);
+        app.ui_action(ui::Action::CloseTargetTab);
+        assert!(app.tabs[1].saved.as_ref().unwrap().closing);
+        assert!(!app.active_closing);
+        app.open_ui(ui::Kind::TabContext);
+        app.ui.as_mut().unwrap().target_tab = Some(999);
+        app.ui_action(ui::Action::CloseTargetTab);
+        assert!(!app.active_closing);
+    }
+    #[test]
     fn switching_tabs_moves_complete_screen_and_view_state() {
         let mut app = App::new(20, 3);
         app.terminal.advance(b"first\x1b[?1h");
@@ -1842,9 +2483,9 @@ mod option_tests {
         app.ui_action(ui::Action::Resize(1));
         assert_eq!(app.settings.font_size, 17.);
         app.ui_action(ui::Action::Cancel);
-        assert_eq!(app.settings.font_family, "IBM Plex Mono");
-        assert_eq!(app.settings.font_size, 16.);
-        assert!(!dir.join("settings.json").exists());
+        assert_eq!(app.settings.font_family, "Fira Code");
+        assert_eq!(app.settings.font_size, 17.);
+        assert_eq!(app.store.load().0.font_family, "Fira Code");
         app.open_ui(ui::Kind::Fonts);
         app.ui_action(ui::Action::PickFont("JetBrains Mono".into()));
         app.ui_action(ui::Action::SaveSettings);

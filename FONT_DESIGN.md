@@ -41,3 +41,16 @@ Approved live sizing extension on 2026-10-13.
 License correction after reading upstream assets: Ubuntu Sans Mono uses Ubuntu Font Licence 1.0,
 which permits embedding/redistribution with notices. The other fourteen use SIL OFL 1.1.
 All original notices are retained, and the Settings license view makes embedded notices readable.
+## Proposed explicit font-selection persistence refinement
+
+Requested during testing on 2026-10-13; awaiting approval. Hover/navigation remains temporary,
+but explicitly clicking a font or pressing Enter saves that font family immediately. Save only
+the chosen family against the committed preference baseline, preserving saved favourites and
+without committing unrelated size/contrast previews. Update the rollback baseline so Cancel
+does not undo the saved font. Numeric settings retain Save/Cancel; external zoom retains its
+existing immediate persistence. Show an honest Saved font status and report failed writes.
+## Current persistence policy
+
+The lead approved explicit font autosave and then PERSISTENT_SETTINGS_DESIGN.md on 2026-10-13.
+Those refinements supersede the original Settings-wide Save/Cancel policy: confirmed choices
+persist automatically; only hovering and unfinished numeric entries remain temporary.

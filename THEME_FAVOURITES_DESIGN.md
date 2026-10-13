@@ -1,0 +1,7 @@
+# Theme favourites
+
+Requested and explicitly approved by the design lead on 2026-10-13 under AGENTS.md §3.
+
+- Add a distinct yellow star beside each starter/custom theme, filled for favourites and outlined when not selected. Clicking the star toggles favouriting without changing the active theme or preview. Keyboard users can focus the star action and activate it with Space/Enter; expose a clear Favourite/Remove favourite label. Keep the current-theme indicator visually distinct from the star.
+- Add a Favourites section at the top of the theme picker, listing saved favourites across starter and custom families with the same preview/select behavior. Retain existing family lists and search. Persist a bounded, deduplicated list of stable theme IDs in backwards-compatible settings. Missing imported themes retain their saved IDs but do not produce broken entries; reappearing files restore their favourites. Duplicating a theme does not automatically favourite the duplicate.
+- Keep favourites as app-owned preferences with no engine/transport involvement or dependency. Persist explicit star changes immediately, including during appearance previews, without accidentally saving an unsaved font/theme preview or losing favourites when Cancel restores appearance. Verify mouse/keyboard actions, active-theme distinction, starter/custom entries, empty/search views, restart persistence, disappearing files and Save/Cancel interactions. Run required gates and record GPU/window evidence before committing.

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-10-13 — context menus, row numbers and theme favourites
+
+- Separate tab actions from terminal options; rename tabs and reanchor repeated right-clicks.
+- Confirm middle-click closes using theme-coloured check/cross labels with Cancel selected.
+- Add optional left-side terminal row numbers without changing output or clipboard text.
+- Add saved yellow favourite stars, a Favourites section and Expand/Collapse all family controls.
+- Fix the Linux unsupported-backend test compilation failure reported by CI.
+- Record Canadian-English/Indigenous-language priorities and local-first Android exploration.
+
 ## 2026-10-13 — bundled-tool preparation
 
 - Prepare the pinned lean Junafetch detector fork and verify its 18 upstream tests.

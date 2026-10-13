@@ -73,3 +73,17 @@ standard tests, check/clippy, targeted GPU and both real-window tests pass; rele
 Direct release launch exited 0, native icon resources match the source, and the user confirmed
 the visible taskbar logo after the fresh-group property correction. Upcoming work has approved
 designs in UI_NEXT_DESIGN.md, JUNAFETCH_DESIGN.md and UPDATE_DESIGN.md.
+## 2026-10-13 — 0.1.1-dev1 interface/preferences cycle
+
+Implemented approved separated tab menus, local rename, Cancel-first middle-click confirmation,
+theme-coloured check/cross labels, context-menu reanchoring and protected editing panels.
+Line numbers live in Settings, have a two-cell gap, and hide/refit in alternate screens.
+Favourite stars, a dedicated section, bulk family controls and immediate wheel scrolling are present.
+Confirmed preferences persist automatically; JSON transfer validates portable fields/themes, reviews
+imports, preserves conflicts and rolls back staged files on failed preference writes.
+
+Verified in this session: required check/strict Clippy and standard tests; four explicit GPU tests,
+three actual-window tests, reviewed captures, native x64/version/seven-icon resource verification.
+Detailed counts and limitations are recorded in TERMINAL_TESTING.md. Native file-dialog interaction,
+physical input/mixed-DPI and other-machine acceptance remain human checks. Publication is not yet
+claimed: the tag workflow and asset download/hash verification must finish first.

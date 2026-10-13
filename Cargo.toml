@@ -1,6 +1,6 @@
 [package]
 name = "juna"
-version = "0.1.0"
+version = "0.1.1-dev1"
 edition = "2021"
 rust-version = "1.97"
 description = "A terminal emulator with an original VT engine"
@@ -49,6 +49,8 @@ features = [
     "Win32_UI_Shell_PropertiesSystem",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Variant",
+    # Approved portable-settings transfer: native file dialogs on an I/O worker.
+    "Win32_UI_Controls_Dialogs",
 ]
 
 # Windows-only. conpty-oxide carries `compile_error!` under `cfg(not(windows))`,

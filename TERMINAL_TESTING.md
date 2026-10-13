@@ -198,3 +198,31 @@ acceptance is claimed at this milestone.
 ![Custom family menu](docs/acceptance/custom-themes.png)
 ![Exact font-size prompt](docs/acceptance/numeric-prompt.png)
 ![Terminal tabs](docs/acceptance/tabs.png)
+## 0.1.1-dev1 interface/preferences acceptance — 2026-10-13
+
+Verified: standard suite passed with 199 distinct cases (184 library, one release-verifier and
+14 integration cases); the added import-failure/private-source regression passed separately with
+the transfer round-trip test. The final transfer rerun passes both cases, check and strict Clippy
+with captured original permissions. Four explicit GPU cases and three real-window cases passed,
+including concurrent sessions with line numbers enabled.
+Reviewed captures show the saved-settings controls, favourite stars, themed close confirmation,
+tab-only context and separated gutter. The release PE is x64, carries native version/source
+metadata and preserves all seven approved icon images byte for byte.
+
+The first favourites fixture loaded the user's saved 15px size while assuming 16px; the fixture
+now explicitly uses defaults. This was a test assumption failure, not evidence of a font reset.
+The import rollback test initially triggered a portability lint while restoring Windows permissions;
+it now restores the captured original permissions. Invalid/oversized JSON and conflicts preserve
+existing data. Native file-dialog interaction and all physical input/mixed-DPI/other-adapter checks
+remain human acceptance; no full desktop/TUI maturity claim is made.
+
+Git log diagnosis: the referenced eternal repository has exactly five commits, so the supplied
+five-entry output was complete. The tool environment had GIT_PAGER=cat and TERM=dumb; an initial
+pager smoke emitted a terminal warning. A repeated child-only less/xterm smoke completed after q
+was sent and returned a controlled marker with exit 0. This is a smoke test, not complete pager
+navigation evidence. No user Git configuration was changed.
+
+![Persistent Settings](docs/acceptance/persistent-settings.png)
+![Theme favourites](docs/acceptance/theme-favourites.png)
+![Close tab confirmation](docs/acceptance/close-tab-confirmation.png)
+![Terminal row numbers](docs/acceptance/line-numbers.png)

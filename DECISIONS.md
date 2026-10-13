@@ -1308,3 +1308,40 @@ SessionSpec now carries explicit child-only environment overrides to support the
 PATH. ConPTY receives owned keys/values without changing parent/global environment or profiles.
 The terminal-wide privacy extension received explicit approval; it is not implemented by this
 preparatory detector/environment milestone. No dependency version changed.
+
+## 2026-10-13 — refined tab menus, line numbers and theme favourites
+
+Implemented the approved TAB_CONTEXT_DESIGN, LINE_NUMBERS_DESIGN and THEME_FAVOURITES_DESIGN.
+Right-click menus depend on tab-strip versus terminal location; repeated clicks reanchor them.
+Tab actions use stable IDs, renaming is local, and middle-click requires a themed check/cross
+confirmation with Cancel selected. Explicit menu/keyboard closes retain their approved behavior.
+No busy-command heuristic or automatic command execution was added.
+
+Optional line numbers count retained physical buffer rows, with alternate-screen row numbering.
+Gutter width is stable for history capacity; its origin is shared with rendering and mouse input.
+Labels never enter copied text or terminal state. Favourite IDs are bounded/deduplicated, with
+defaulted JSON fields for older preferences; missing sources retain IDs for later restoration.
+Yellow stars are distinct from the current-theme marker. Saved stars survive preview cancellation.
+Expand/Collapse all reduce family-list navigation; collapsing clears a search that expands matches.
+No dependency or VT semantics changed. Future Android and language directions are roadmap only.
+
+The red Linux CI run was a test compilation error: Result::unwrap_err required Debug on the
+successful Box<dyn Session>. The unsupported-backend test now extracts its error without that
+unnecessary bound. No workflow modification was needed; the next hosted run must verify Linux.
+
+Approved persistence refinement: confirmed appearance choices save immediately, while hover and
+unfinished numeric edits retain a restorable committed baseline. Export uses a portable field
+allowlist plus only referenced custom themes. Import validates bounded JSON, preserves conflicting
+sources via fresh IDs, reviews before applying, and writes preferences last with staged-file rollback.
+Native file selection and file I/O run on one bounded worker; no engine references cross threads.
+The existing windows infrastructure enables Win32_UI_Controls_Dialogs solely for these native dialogs;
+no Rust dependency/runtime was added. File-dialog interaction still needs recorded acceptance.
+
+Development release cadence was explicitly adopted: this cohesive interface/preferences cycle
+is 0.1.1-dev1; subsequent completed cycles get fresh sequential versions/tags. The approved release
+design now permits early dev previews without claiming unshipped tool/privacy/updater milestones.
+GNU windres embeds native version/source metadata alongside the unchanged approved icon. A small
+original Rust verifier reads Microsoft PE resource structures to check architecture, version
+presence and every icon image without executing an untrusted image. Publishing uses pinned
+checkout/MSYS2 actions, Rust 1.97 GNU, original notices, checksums and source/build provenance.
+No dependency was added for packaging or verification. Checksums are not publisher signatures.

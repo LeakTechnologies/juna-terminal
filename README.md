@@ -16,7 +16,9 @@ foundation for a future developer workspace. It is currently ready for interacti
 - GPU rendering, local selection, copy/paste, keyboard input and terminal mouse reporting.
 - Catppuccin Mocha by default, 60 starter themes grouped into families, and custom themes saved locally.
 - Independent terminal tabs with mouse controls, keyboard switching and per-session shutdown.
-- Right-click options with searchable theme and font previews, settings, and Save/Cancel.
+- Separate tab/terminal context menus, named tabs and confirmation before middle-click closes.
+- Optional terminal-row numbers, theme favourites and bulk expand/collapse controls for families.
+- Right-click options with searchable theme/font previews and automatically saved preferences.
 - 15 bundled monospace fonts; IBM Plex Mono remains the default. Windows font installation is not required.
 - An embedded application icon and a dedicated Windows taskbar application identity.
 
@@ -46,8 +48,11 @@ Pass shell arguments after `--`; they retain their individual argument boundarie
 | Action | Control |
 |---|---|
 | Options | Right-click |
-| New tab | Ctrl+Shift+T or right-click New Tab |
-| Close tab | Ctrl+Shift+W |
+| New tab | Ctrl+Shift+T, plus button, or right-click the tab strip |
+| Close tab | Ctrl+Shift+W or right-click its tab |
+| Middle-click a tab | Confirm Close tab, or Cancel |
+| Rename a tab | Right-click its tab → Rename tab |
+| Line numbers | Settings → Show line numbers |
 | Switch tabs | Ctrl+Tab / Ctrl+Shift+Tab or click a tab |
 | Options while a terminal app owns the mouse | Shift+right-click |
 | Copy selection | Ctrl+Shift+C |
@@ -59,11 +64,14 @@ Pass shell arguments after `--`; they retain their individual argument boundarie
 | Resize with the mouse | Ctrl+mouse wheel |
 | Adjust the font-size setting | Left/Right arrows on its row |
 | Enter an exact font size | Click its row or press Space/Enter; accepts px or pt |
-| Save settings | Save settings or Ctrl+S |
-| Cancel a settings/font preview | Esc or Cancel |
+| Close Settings | Close or Esc |
+| Cancel an unfinished numeric/font hover preview | Esc or Cancel |
+| Transfer settings | Settings → Import settings / Export settings |
 
-Font size updates immediately and is limited to 8–40 px. Shortcuts used outside the settings
-preview save the new size automatically. Font and settings previews stay temporary until saved.
+Font size is limited to 8–40 px. Explicit choices and arrows/zoom save immediately, including
+inside Settings. Hovering a font/theme stays temporary; numeric typing previews until Enter/Apply.
+Closing Settings keeps confirmed changes and discards an unfinished preview. No separate Save
+settings step is required. Import validates JSON and reviews the changes before applying them.
 
 ## Fonts and themes
 
@@ -80,6 +88,15 @@ Custom → Open themes folder opens `%LOCALAPPDATA%\Juna\themes`. Add native Jun
 or a single Windows Terminal scheme object; family subfolders group downloaded themes.
 The Custom menu discovers changes while open, and offers create, edit, duplicate and recoverable
 removal. Invalid files are preserved and reported. Preferences use versioned JSON. Theme export is planned.
+
+Click a theme's yellow star to save it in Favourites; this does not select the theme. Keyboard
+users can focus a theme, press Right to focus its star, then Space/Enter to toggle it and Left
+to return. Favourites survive cancelled appearance previews. Expand all/Collapse all manage
+family lists at once; Collapse all also clears the search that would otherwise expand matches.
+
+Line numbers label retained terminal rows, including wrapped rows, rather than shell commands
+or source-file lines. They follow each tab's scrollback, reset with cleared/evicted history, and
+stay out of clipboard copies. Full-screen alternate buffers hide Juna's gutter and regain its width.
 
 ![Grouped theme choices](docs/acceptance/theme-families.png)
 

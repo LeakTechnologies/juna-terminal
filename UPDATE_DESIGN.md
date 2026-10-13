@@ -21,3 +21,8 @@ Primary API documentation: https://docs.github.com/en/rest/releases/releases
 
 Explicitly approved by the design lead on 2026-10-13, in interface → Junafetch → updates order.
 
+The lead's later release-cadence instruction supersedes the initial tool-milestone prerequisite
+for development previews: each completed landed cycle gets a fresh sequential Juna dev version
+and verified Release assets, including the current interface cycle. Stable acceptance remains
+separate. Earlier dev previews explicitly disclose unshipped Junafetch/privacy/updater features.
+

@@ -7,5 +7,6 @@ pub mod session;
 pub mod vt;
 pub mod theme;
 pub mod settings;
+pub mod settings_transfer;
 pub mod fonts;
 pub mod theme_library;

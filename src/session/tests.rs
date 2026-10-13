@@ -1,6 +1,4 @@
-use super::{
-    fake, Dimensions, ExitStatus, Session, SessionParts, SessionSpec,
-};
+use super::{fake, Dimensions, ExitStatus, Session, SessionParts, SessionSpec};
 use std::io;
 
 fn dims() -> Dimensions {
@@ -74,7 +72,11 @@ fn fake_preserves_queued_bytes_across_a_child_exit() {
 
     let mut buf = [0u8; 64];
     let first = s.read(&mut buf).unwrap();
-    assert_eq!(&buf[..first], b"final words", "exit must not discard queued bytes");
+    assert_eq!(
+        &buf[..first],
+        b"final words",
+        "exit must not discard queued bytes"
+    );
 
     let second = s.read(&mut buf).unwrap();
     assert_eq!(second, 0, "EOF only after the queue drains");
@@ -109,23 +111,32 @@ fn backend_faults_surface_as_errors() {
     let mut s = fake::FakeSession::new(dims());
     s.fail_resize();
     assert_eq!(
-        s.resize(Dimensions { cols: 1, rows: 1 }).unwrap_err().kind(),
+        s.resize(Dimensions { cols: 1, rows: 1 })
+            .unwrap_err()
+            .kind(),
         io::ErrorKind::InvalidInput
     );
 
     let mut w = fake::FakeSession::new(dims());
     w.fail_write();
-    assert_eq!(
-        w.write(b"x").unwrap_err().kind(),
-        io::ErrorKind::BrokenPipe
-    );
+    assert_eq!(w.write(b"x").unwrap_err().kind(), io::ErrorKind::BrokenPipe);
 }
 
 #[test]
 fn resize_updates_dimensions() {
     let mut s = fake::FakeSession::new(dims());
-    s.resize(Dimensions { cols: 120, rows: 40 }).unwrap();
-    assert_eq!(s.dimensions(), Dimensions { cols: 120, rows: 40 });
+    s.resize(Dimensions {
+        cols: 120,
+        rows: 40,
+    })
+    .unwrap();
+    assert_eq!(
+        s.dimensions(),
+        Dimensions {
+            cols: 120,
+            rows: 40
+        }
+    );
 }
 
 #[test]
@@ -229,7 +240,11 @@ fn split_survives_a_reader_that_reads_before_anything_is_written() {
     });
 
     writer.write(b"later").expect("write");
-    assert_eq!(h.join().unwrap(), 0, "nothing was queued for the reader yet");
+    assert_eq!(
+        h.join().unwrap(),
+        0,
+        "nothing was queued for the reader yet"
+    );
     assert_eq!(fake.written(), b"later");
 }
 
@@ -245,7 +260,10 @@ fn targets_without_a_backend_report_unsupported() {
         env: Vec::new(),
     };
     assert_eq!(
-        super::spawn(&spec, dims()).unwrap_err().kind(),
+        super::spawn(&spec, dims())
+            .err()
+            .expect("unsupported backend")
+            .kind(),
         io::ErrorKind::Unsupported
     );
 }
@@ -295,8 +313,11 @@ mod conpty {
     #[test]
     fn real_backend_resize_is_accepted() {
         let mut s = spawn(&shell(), Dimensions { cols: 80, rows: 24 }).unwrap();
-        s.resize(Dimensions { cols: 120, rows: 40 })
-            .expect("resize via seam");
+        s.resize(Dimensions {
+            cols: 120,
+            rows: 40,
+        })
+        .expect("resize via seam");
         let mut buf = [0u8; 4096];
         let _ = s.read(&mut buf);
     }

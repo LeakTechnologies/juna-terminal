@@ -25,6 +25,40 @@ See JUNAFETCH_DESIGN.md. Additional terminal tools can use the same packaging re
 
 ## Later
 
+- Theme favourites: yellow stars and a Favourites section, including starter and custom themes.
+  Implemented in the 0.1.1-dev1 interface/preferences cycle; see THEME_FAVOURITES_DESIGN.md.
+
+## Languages — after core feature maturity
+
+Canadian English (en-CA) is the primary interface language and spelling convention. Once the
+terminal, privacy and distribution features are mature, add a Language tab with US English
+(en-US) and British English (en-GB) where interface wording actually differs. Avoid artificial
+differences or duplicate translation work for shared wording.
+
+Prioritize Inuktitut for Indigenous-language support, then Cree and Mohawk, followed by other
+languages over time. Translation needs community/native-speaker review, an explicit choice of
+language variety and writing system, appropriate bundled font coverage, and input/layout testing.
+Do not label machine-produced strings as supported translations. Inuktitut syllabics and Latin
+orthographies need deliberate coverage; Cree likewise needs variety/orthography decisions.
+Localize Juna's interface while preserving shell commands and program output as received.
+No translations or Language tab are claimed as implemented at this stage.
+
+## Further terminal work
+
+- Explore Juna for Android after the primary Windows features mature. Reuse the original pure
+  VT engine where feasible, with an Android-specific UI/process backend and explicit assessment
+  of local shell capabilities under Android's application sandbox.
+- Keep connections local-first and user-controlled: no mandatory Juna accounts, hosted relay,
+  transcript storage, telemetry or cloud credential service. An explicitly enabled listener on
+  the user's own computer is distinct from a Juna-operated server. Prefer an established secure
+  transport with verified host identity and user-owned keys rather than inventing encryption.
+- Design remote shell creation separately from attaching to an already running Juna session.
+  Shared live sessions need explicit permission, session ownership, reconnect/termination rules,
+  paired-device revocation and protection of privacy reveals. Device discovery never authorizes
+  access. Do not expose terminals to the network by default. Assess LAN and user-managed private
+  network access; internet reachability and relay services are outside the initial exploration.
+  This is a product direction, not an approved implementation or a shipped security guarantee.
+
 - Multiple terminal tiles within one tab, with keyboard and mouse split/focus/resize controls
   inspired by Terminator's workflow. Use the existing pure BSP layout implementation; declare
   session ownership, output fairness and per-tile shutdown before implementation.

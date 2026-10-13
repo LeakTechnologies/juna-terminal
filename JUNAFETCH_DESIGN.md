@@ -35,3 +35,7 @@ failure status honest. Additional modules remain optional; no dashboards, teleme
 
 Explicitly approved by the design lead on 2026-10-13, in interface → Junafetch → updates order.
 
+The lead additionally requested `fetch` as a short alias on 2026-10-13. Bundle both command
+names using the same Rust frontend and argument/status handling in Juna's session-local tool
+directory. Do not create a separate detector or modify global shell profiles/PATH.
+

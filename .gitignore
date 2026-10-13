@@ -1,4 +1,5 @@
 /target
+/dist
 /.codex-remote-attachments
 **/*.rs.bk
 *.pdb

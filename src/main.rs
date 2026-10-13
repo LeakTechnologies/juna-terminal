@@ -37,6 +37,17 @@ fn attach_parent_console() {}
 
 fn main() {
     attach_parent_console();
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|arg| arg == "--version")
+    {
+        println!(
+            "juna {} ({})",
+            env!("CARGO_PKG_VERSION"),
+            env!("JUNA_BUILD_COMMIT")
+        );
+        return;
+    }
     if let Err(e) = juna::app::run(100, 30) {
         eprintln!("juna: {e}");
         std::process::exit(1);

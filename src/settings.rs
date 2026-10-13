@@ -13,6 +13,10 @@ pub struct Settings {
     pub font_family: String,
     pub font_size: f32,
     pub minimum_contrast: f32,
+    #[serde(default)]
+    pub show_line_numbers: bool,
+    #[serde(default)]
+    pub favourite_theme_ids: Vec<String>,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -22,11 +26,23 @@ impl Default for Settings {
             font_family: "IBM Plex Mono".into(),
             font_size: 16.,
             minimum_contrast: 4.5,
+            show_line_numbers: false,
+            favourite_theme_ids: Vec::new(),
         }
     }
 }
 impl Settings {
     pub fn validate(&self) -> Result<(), String> {
+        let unique: std::collections::BTreeSet<_> = self.favourite_theme_ids.iter().collect();
+        if self.favourite_theme_ids.len() > 128
+            || unique.len() != self.favourite_theme_ids.len()
+            || self
+                .favourite_theme_ids
+                .iter()
+                .any(|id| !theme::valid_id(id))
+        {
+            return Err("Invalid theme favourites".into());
+        }
         if self.schema_version != 1 || !theme::valid_id(&self.active_theme_id) {
             return Err("Unsupported or invalid settings".into());
         }

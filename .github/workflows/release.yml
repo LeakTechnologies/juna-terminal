@@ -1,0 +1,85 @@
+name: Development release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+env:
+  CARGO_BUILD_JOBS: 2
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e
+        id: msys
+        with:
+          msystem: UCRT64
+          update: true
+          install: mingw-w64-ucrt-x86_64-gcc
+      - name: Configure reviewed GNU toolchain
+        env:
+          MSYS_LOCATION: ${{ steps.msys.outputs.msys2-location }}
+        run: |
+          $bin = Join-Path $env:MSYS_LOCATION 'ucrt64/bin'
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "WINDRES=$(Join-Path $bin 'windres.exe')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER=$(Join-Path $bin 'gcc.exe')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "JUNA_BUILD_COMMIT=$env:GITHUB_SHA" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          rustup toolchain install 1.97.0 --profile minimal --component clippy --target x86_64-pc-windows-gnu
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup default 1.97.0
+      - name: Validate tag, version and release note
+        run: |
+          $version = ((cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages | Where-Object name -eq 'juna').version
+          if ($env:GITHUB_REF_NAME -ne "v$version" -or -not (Test-Path "releases/$version.md")) { throw 'Version/tag/release-note mismatch' }
+      - name: Required Windows checks
+        run: |
+          cargo check --locked --target x86_64-pc-windows-gnu
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo clippy --locked --all-targets --target x86_64-pc-windows-gnu -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo test --locked --target x86_64-pc-windows-gnu
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo build --locked --release --target x86_64-pc-windows-gnu --bin juna --bin release_verify
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify native executable and package
+        run: |
+          $folder = 'target/x86_64-pc-windows-gnu/release'
+          & "$folder/release_verify.exe" "$folder/juna.exe"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./scripts/package-release.ps1 -Executable "$folder/juna.exe" -Tag $env:GITHUB_REF_NAME
+      - name: Create draft and verify uploaded assets before publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $version = $tag.Substring(1)
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) { throw 'Release already exists; publish a new dev version instead' }
+          $assets = @(Get-ChildItem dist -File | ForEach-Object FullName)
+          gh release create $tag @assets --verify-tag --draft --title "Juna $version" --notes-file "releases/$version.md"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $release = (gh release view $tag --json assets | ConvertFrom-Json)
+          foreach ($file in Get-ChildItem dist -File) {
+            $asset = @($release.assets | Where-Object name -eq $file.Name)
+            if ($asset.Count -ne 1 -or $asset[0].size -ne $file.Length) { throw 'Uploaded asset verification failed' }
+          }
+          $download = Join-Path 'target/upload-verification' ([Guid]::NewGuid().ToString())
+          gh release download $tag --dir $download
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($file in Get-ChildItem dist -File) {
+            $uploaded = Join-Path $download $file.Name
+            if ((Get-FileHash -LiteralPath $uploaded -Algorithm SHA256).Hash -ne (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash) { throw 'Uploaded asset digest mismatch' }
+          }
+          gh release edit $tag --draft=false --prerelease=$($version.Contains('-dev').ToString().ToLowerInvariant()) --latest=false
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

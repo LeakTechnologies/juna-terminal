@@ -362,7 +362,10 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
         }
         std::fs::write(format!("target/acceptance/themes/{}.ppm", theme.id), ppm).unwrap();
     }
-    let settings = juna::settings::Settings::default();
+    let settings = juna::settings::Settings {
+        favourite_theme_ids: vec!["catppuccin-mocha".into(), "nord".into()],
+        ..Default::default()
+    };
     renderer.apply_theme(&themes[0], 4.5).unwrap();
     let mut menu_themes = themes.clone();
     let mut custom = themes[0].clone();
@@ -372,6 +375,9 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
     menu_themes.push(custom);
     for kind in [
         Kind::Context,
+        Kind::ConfirmClose,
+        Kind::TabContext,
+        Kind::Rename,
         Kind::Themes,
         Kind::Settings,
         Kind::Fonts,
@@ -388,6 +394,16 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
         if kind == Kind::Editor {
             ui.draft = Some(juna::theme::default_theme());
         }
+        if matches!(kind, Kind::TabContext | Kind::Rename) {
+            ui.target_tab = Some(1);
+        }
+        if kind == Kind::ConfirmClose {
+            ui.focus = 1;
+            ui.message = "Closing this tab will stop its commands".into();
+        }
+        if kind == Kind::Rename {
+            ui.draft_value = "Project shell".into();
+        }
         if matches!(kind, Kind::Themes | Kind::Custom) {
             ui.expanded.insert("Catppuccin".into());
         }
@@ -395,7 +411,7 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
             ui.preview_id = Some("custom-capture".into());
         }
         let rows = ui.rows(&menu_themes, &settings);
-        ui.focus_row(0, &rows);
+        ui.focus_row(if kind == Kind::ConfirmClose { 1 } else { 0 }, &rows);
         let (_, visible, _) = ui.geometry(512., 256., 1., rows.len());
         ui.ensure_visible(visible, rows.len());
         let scene = ui.scene(&rows, 512., 256., 1.);
@@ -413,6 +429,10 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
             ppm.extend_from_slice(&pixel[..3]);
         }
         let name = match kind {
+            Kind::ImportReview => "settings-import",
+            Kind::ConfirmClose => "confirm-close-tab",
+            Kind::TabContext => "tab-context",
+            Kind::Rename => "rename-tab",
             Kind::Context => "context-menu",
             Kind::Themes => "theme-menu",
             Kind::Settings => "settings-menu",
@@ -423,7 +443,7 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
             Kind::Manage => "manage-theme",
         };
         std::fs::write(format!("target/acceptance/{name}.ppm"), ppm).unwrap();
-        if kind != Kind::Context {
+        if !matches!(kind, Kind::Context | Kind::TabContext) {
             let scene = ui.scene(&rows, 1024., 512., 1.);
             let baseline = render_scene_at(
                 &device,
@@ -479,5 +499,36 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
         ppm.extend_from_slice(&pixel[..3]);
     }
     std::fs::write("target/acceptance/tabs.ppm", ppm).unwrap();
+    let mut numbers = Renderer::new(
+        &device,
+        &queue,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        2048,
+        (10., 22.),
+        8.,
+        16.,
+    )
+    .unwrap();
+    let inset = juna::app::gutter::width(1024., 1., true);
+    numbers.set_left_inset(inset);
+    numbers.set_top_inset(juna::app::ui::TAB_HEIGHT);
+    let mut scene = juna::app::ui::tab_scene(&labels, 1, 1024., 1.);
+    scene
+        .text
+        .extend(juna::app::gutter::scene(inset, 1., 171, 8, [0.8, 0.8, 0.9, 1.]).text);
+    let pixels = render_scene_at(
+        &device,
+        &queue,
+        &mut numbers,
+        &term,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        Some(&scene),
+        (1024, 512),
+    );
+    let mut ppm = b"P6\n1024 512\n255\n".to_vec();
+    for pixel in pixels.chunks_exact(4) {
+        ppm.extend_from_slice(&pixel[..3]);
+    }
+    std::fs::write("target/acceptance/line-numbers.ppm", ppm).unwrap();
     assert_eq!(term.snapshot(0).cells, before);
 }
