@@ -5,6 +5,35 @@ use std::time::{Duration, Instant};
 const PROBE: &str = env!("CARGO_BIN_EXE_argv_probe");
 const BOUND: Duration = Duration::from_secs(30);
 
+#[test]
+fn session_environment_overrides_are_child_only_and_unicode_safe() {
+    use juna::session::{self, Dimensions, SessionSpec};
+    let before = std::env::var_os("JUNA_ENV_PROBE");
+    let spec = SessionSpec {
+        program: PROBE.into(),
+        args: vec!["--environment".into()],
+        cwd: None,
+        env: vec![(
+            "JUNA_ENV_PROBE".into(),
+            "Juna tool path with spaces 日本語".into(),
+        )],
+    };
+    let mut child = session::spawn(&spec, Dimensions::default()).unwrap();
+    let mut bytes = Vec::new();
+    let mut buffer = [0u8; 4096];
+    let deadline = Instant::now() + BOUND;
+    loop {
+        assert!(Instant::now() < deadline);
+        let n = child.read(&mut buffer).unwrap();
+        if n == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&buffer[..n]);
+    }
+    assert!(String::from_utf8_lossy(&bytes).contains("ENV=Juna tool path with spaces 日本語"));
+    assert_eq!(std::env::var_os("JUNA_ENV_PROBE"), before);
+}
+
 fn clean(bytes: &[u8]) -> String {
     bytes
         .iter()
@@ -50,7 +79,10 @@ fn quoting_preserves_the_argument_vector_exactly() {
     );
     for (i, a) in tricky.iter().enumerate() {
         let line = format!("ARG[{i}]={}:{a}", a.len());
-        assert!(text.contains(&line), "argument {i} corrupted.\nwant: {line}\ngot: {text}");
+        assert!(
+            text.contains(&line),
+            "argument {i} corrupted.\nwant: {line}\ngot: {text}"
+        );
     }
 }
 

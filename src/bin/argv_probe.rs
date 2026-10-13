@@ -12,6 +12,14 @@ fn emit_sustained(n: usize) {
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
 
+    if args.first().map(String::as_str) == Some("--environment") {
+        println!(
+            "ENV={}",
+            std::env::var("JUNA_ENV_PROBE").unwrap_or_default()
+        );
+        return;
+    }
+
     if args.first().map(String::as_str) == Some("--spawn-grandchild") {
         let mut c = std::process::Command::new("cmd.exe");
         c.args(["/C", "ping", "-n", "60", "127.0.0.1", ">", "nul"]);

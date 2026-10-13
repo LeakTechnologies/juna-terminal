@@ -29,6 +29,8 @@ pub struct SessionSpec {
     pub program: OsString,
     pub args: Vec<OsString>,
     pub cwd: Option<PathBuf>,
+    /// Overrides apply only to this child; the parent environment is unchanged.
+    pub env: Vec<(OsString, OsString)>,
 }
 impl SessionSpec {
     pub fn from_environment() -> io::Result<Self> {
@@ -36,6 +38,7 @@ impl SessionSpec {
             program: std::env::var_os("JUNA_SHELL").unwrap_or_else(|| "powershell.exe".into()),
             args: Vec::new(),
             cwd: None,
+            env: Vec::new(),
         };
         let mut command = std::env::args_os().skip(1);
         while let Some(arg) = command.next() {

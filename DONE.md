@@ -1,3 +1,10 @@
+## 2026-10-13 — bundled-tool environment preparation
+
+Verified child-only SessionSpec environment overrides with spaces/Unicode and unchanged parent
+environment. Check/clippy and 186 standard tests pass, including byte-exact transport coverage.
+The separate Junafetch detector fork builds and passes its 18 upstream tests. Bundled command
+delivery, Rust report presentation, privacy and updater acceptance remain in progress.
+
 ## 2026-10-13 — tabs and theme families complete
 
 Implemented the approved interface stage: independent tabs, keyboard/mouse controls, exact

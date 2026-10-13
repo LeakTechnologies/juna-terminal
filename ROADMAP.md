@@ -38,4 +38,4 @@ Versioned Windows x64 GitHub Releases, distinct Stable/Preview channels, verifie
 explicit installation, rollback and an external helper for replacing the locked executable.
 See UPDATE_DESIGN.md. Do not use Actions artifacts as production update assets.
 
-Terminal-wide privacy and intentional Shift+hover now have a separate proposal in TERMINAL_PRIVACY_DESIGN.md, awaiting approval.
+Terminal-wide privacy and intentional Shift+hover are approved in TERMINAL_PRIVACY_DESIGN.md.

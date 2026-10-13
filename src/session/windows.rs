@@ -47,6 +47,9 @@ impl ConptySession {
         if let Some(dir) = &spec.cwd {
             cmd.current_dir(dir);
         }
+        for (key, value) in &spec.env {
+            cmd.env(key, value);
+        }
 
         let session = cmd
             .spawn_with(conpty_oxide::SessionOptions::new())

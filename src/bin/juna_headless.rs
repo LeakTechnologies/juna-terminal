@@ -141,6 +141,7 @@ fn main() {
         program: opts.shell.clone().into(),
         args: Vec::new(),
         cwd: None,
+        env: Vec::new(),
     };
 
     let session = match session::spawn(&spec, dims) {

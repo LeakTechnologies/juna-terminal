@@ -9,3 +9,5 @@ privacy design; unrelated command output was previously outside that design's sc
 
 Implementation order: finish approved interface work, then Junafetch plus this privacy extension,
 then GitHub release/updater work. No new runtime/dependency without a written requirement.
+
+Explicitly approved by the design lead on 2026-10-13.

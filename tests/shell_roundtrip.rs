@@ -31,6 +31,7 @@ fn drive(lines: &[&str], cols: u16, rows: u16) -> (String, String, i32) {
         program: OsString::from("cmd.exe"),
         args: Vec::new(),
         cwd: None,
+        env: Vec::new(),
     };
     let session = session::spawn(&spec, Dimensions { cols, rows }).expect("spawn cmd.exe");
     let parts = session.split().expect("split");

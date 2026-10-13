@@ -219,6 +219,7 @@ mod tests {
                 program: shell.into(),
                 args: args.into_iter().map(Into::into).collect(),
                 cwd: None,
+                env: Vec::new(),
             };
             let mut runtime = Runtime::spawn(&spec, Dimensions { cols: 80, rows: 24 }).unwrap();
             let mut bytes = Vec::new();
@@ -243,6 +244,7 @@ mod tests {
                 program: "cmd.exe".into(),
                 args: Vec::new(),
                 cwd: None,
+                env: Vec::new(),
             },
             Dimensions::default(),
         )

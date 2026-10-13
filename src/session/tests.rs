@@ -35,6 +35,7 @@ fn spec_keeps_argument_boundaries_separate() {
             "".into(),
         ],
         cwd: None,
+        env: Vec::new(),
     };
     assert_eq!(spec.args.len(), 4);
     assert_eq!(spec.args[0], "has space");
@@ -152,6 +153,7 @@ fn spawn_reports_a_missing_program_instead_of_panicking() {
         program: "definitely-not-a-real-program-xyz".into(),
         args: Vec::new(),
         cwd: None,
+        env: Vec::new(),
     };
     assert!(super::spawn(&spec, dims()).is_err());
 }
@@ -240,6 +242,7 @@ fn targets_without_a_backend_report_unsupported() {
         program: "whatever".into(),
         args: Vec::new(),
         cwd: None,
+        env: Vec::new(),
     };
     assert_eq!(
         super::spawn(&spec, dims()).unwrap_err().kind(),
@@ -262,6 +265,7 @@ mod conpty {
             program: OsString::from("cmd.exe"),
             args: vec!["/C".into(), "echo JUNA_SEAM_OK".into()],
             cwd: None,
+            env: Vec::new(),
         }
     }
 
@@ -304,6 +308,7 @@ mod conpty {
                 program: OsString::from("cmd.exe"),
                 args: vec!["/C".into(), "ping -n 60 127.0.0.1 > nul".into()],
                 cwd: None,
+                env: Vec::new(),
             },
             Dimensions::default(),
         )

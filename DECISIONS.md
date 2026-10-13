@@ -1293,3 +1293,18 @@ source was used. Families collapse by default and search exposes matches. Custom
 uses a bounded worker, family subfolders, native Juna records or single Windows Terminal schemes.
 Imported files are preserved; edits duplicate them, and removal moves files to recoverable trash.
 Read-only, oversized, malformed and duplicate sources are reported. No new dependency was added.
+
+## 2026-10-13 — Junafetch detector and child environment boundary
+
+Created the approved LeakTechnologies/junafetch fork; detector iteration 6ff6424 on
+codex/juna-detector starts at upstream 2.69.0 (0c3b852bf7bad2837a814c7a31bf332092048a2b).
+The lean GNU build disables image protocols, Lua/QuickJS, zlib and optional native video-codec
+detection. Missing DirectX AV1 declarations blocked that unused module; the fork's build stub
+returns an explicit unavailable error. No terminal implementation is borrowed. All 18 upstream
+tests pass and PE imports require only Windows system libraries. DXCore is absent; uncertain
+GPU classification and upstream compiler warnings are retained as limitations.
+
+SessionSpec now carries explicit child-only environment overrides to support the approved tool
+PATH. ConPTY receives owned keys/values without changing parent/global environment or profiles.
+The terminal-wide privacy extension received explicit approval; it is not implemented by this
+preparatory detector/environment milestone. No dependency version changed.

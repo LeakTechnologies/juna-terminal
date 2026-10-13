@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-10-13 — bundled-tool preparation
+
+- Prepare the pinned lean Junafetch detector fork and verify its 18 upstream tests.
+- Add child-only session environment overrides with a Unicode/space regression probe.
+- Record approval of terminal-wide privacy. Bundled execution and privacy UI remain in progress.
+
 ## 2026-10-13 — tabs and clearer theme/settings controls
 
 - Add independent tabs, right-click New/Close Tab, tab-strip mouse controls and keyboard switching.

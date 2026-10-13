@@ -919,3 +919,7 @@ The tab header is a presentation inset; the renderer still consumes owned snapsh
 Theme discovery uses a bounded standard-library worker with generation-tagged owned results.
 It reads validated JSON only, skips linked folders, limits depth/files/bytes, and never sees engines.
 Family folders group custom themes; edits preserve imported sources and removal uses recoverable trash.
+
+SessionSpec carries owned child-only environment overrides. Only the process backend passes them
+to ConPTY; app/tool packaging may prepend a tools directory for each session without global PATH
+or profile mutation. Environment plumbing does not change engine ownership or byte transport.
