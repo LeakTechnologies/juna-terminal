@@ -184,7 +184,9 @@ fn split_halves_move_independently_across_threads() {
     } = parts.split().expect("split must succeed");
 
     // The UI thread owns writer + control; the reader thread owns only reader.
+    let (ready, wait) = std::sync::mpsc::sync_channel(1);
     let handle = std::thread::spawn(move || {
+        wait.recv().expect("fixture output queued");
         let mut reader = reader;
         let mut buf = [0u8; 64];
         let n = reader.read(&mut buf).expect("reader thread read");
@@ -193,6 +195,7 @@ fn split_halves_move_independently_across_threads() {
 
     writer.write(b"typed by the ui thread").expect("write");
     fake.feed(b"pumped back to the reader");
+    ready.send(()).expect("reader thread ready");
 
     let got = handle.join().expect("reader thread");
     assert_eq!(got, b"pumped back to the reader");

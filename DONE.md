@@ -145,3 +145,13 @@ passed with reported cwd, repository result, visible/hidden footer transitions, 
 and exit 0. Its controlled stream accepted 967 bytes and presented 14 frames. Physical input,
 custom prompt implementations and other-machine acceptance remain human checks. Expanded fetch
 profiles/submenus and Ctrl+Shift+N designs received approval but are not shipped in dev6.
+
+## Dev6 hosted failure and dev7 correction
+
+Local dev6 acceptance did not establish hosted release readiness: both hosted runs failed and no
+Release was published. Git's conflict fixture lacked a CI committer identity; a Windows test
+compared short/long path spellings rather than directory identity; Linux exposed a pre-existing
+fake-session scheduling race. Dev7 corrects only those fixtures, with no runtime changes.
+The unfinished approved grouped-fetch work is preserved for the following cycle. Hosted and
+local dev7 gates must finish before publication is claimed.
+Verified locally for dev7: cargo check, strict all-target Clippy and all 210 standard tests passed. Runtime code is unchanged; dev6 footer/window evidence remains applicable. Hosted verification is pending.

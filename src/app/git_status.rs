@@ -482,6 +482,9 @@ mod tests {
         let root = std::env::temp_dir().join(crate::settings::new_id());
         std::fs::create_dir_all(&root).unwrap();
         git(&root, &["init", "-b", "main"]);
+        git(&root, &["config", "user.name", "Fixture"]);
+        git(&root, &["config", "user.email", "fixture@example.invalid"]);
+        git(&root, &["config", "commit.gpgsign", "false"]);
         std::fs::write(root.join("tracked"), "base\n").unwrap();
         git(&root, &["add", "tracked"]);
         git(&root, &["commit", "-m", "base"]);

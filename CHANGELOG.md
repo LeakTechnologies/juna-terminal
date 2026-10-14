@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1-dev7 — CI fixture portability
+
+- Give Git merge fixtures their own identity instead of relying on machine-wide settings.
+- Compare Windows directory identities after resolving short/long names.
+- Synchronise the fake-session fixture so reads begin after its output is queued.
+- Preserve dev6's local Git feature; expanded fetch/settings remain the next cycle.
+
 ## 0.1.1-dev6 — local Git status
 
 - Show branch, changed files, conflicts and local ahead/behind counts in a saved, toggleable footer.

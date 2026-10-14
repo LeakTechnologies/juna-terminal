@@ -78,7 +78,10 @@ mod tests {
             .working_directory()
             .1
             .expect("ConPTY did not preserve OSC 7");
-        assert_eq!(std::path::Path::new(cwd), root);
+        assert_eq!(
+            std::fs::canonicalize(cwd).unwrap(),
+            std::fs::canonicalize(&root).unwrap()
+        );
         drop(control);
         std::fs::remove_dir_all(root).unwrap();
     }
