@@ -155,3 +155,20 @@ fake-session scheduling race. Dev7 corrects only those fixtures, with no runtime
 The unfinished approved grouped-fetch work is preserved for the following cycle. Hosted and
 local dev7 gates must finish before publication is claimed.
 Verified locally for dev7: cargo check, strict all-target Clippy and all 210 standard tests passed. Runtime code is unchanged; dev6 footer/window evidence remains applicable. Hosted verification is pending.
+
+## Dev7 hosted timeouts and dev8 scheduling
+
+Dev7 Linux passed. Windows passed the corrected fixtures but timed out in the unchanged
+runtime shutdown/tail and PowerShell prompt ConPTY tests (193 passed, two failed).
+Both probes passed locally with their original deadlines in this session. The approved
+dev8 workflow isolates Windows test scheduling with one test thread; no test is skipped,
+deadline increased or process-backend dependency changed. Scheduling pressure is a
+hypothesis. An unchanged dev7 job rerun was requested once, separately from this correction.
+Expanded Junafetch/grouped settings are preserved outside this release's source.
+
+The single unchanged dev7 Windows rerun subsequently passed; Linux also passed.
+This demonstrates intermittent failure, not a confirmed scheduling root cause.
+
+Verified on isolated dev8 source: cargo check, strict all-target Clippy and all 210
+standard tests passed with sequential scheduling. No visual/runtime behaviour changed;
+prior explicit window evidence remains applicable. Hosted dev8 verification is pending.

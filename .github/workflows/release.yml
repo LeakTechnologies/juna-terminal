@@ -10,6 +10,8 @@ jobs:
   windows:
     runs-on: windows-latest
     timeout-minutes: 60
+    env:
+      RUST_TEST_THREADS: 1
     permissions:
       contents: write
     defaults:

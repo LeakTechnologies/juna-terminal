@@ -1361,6 +1361,15 @@ for the same pinned launcher-payload hash check. Native Fastfetch 2.69.0 detecto
 the separately maintained fork; script/image/codec capabilities excluded by the lean build are
 not claimed. This cycle delivers eight safe local stats, width-aware art and JSON/plain output;
 interactive protected-value reveal and terminal-wide privacy remain a separate unshipped cycle.
+## 2026-10-13 — Windows CI scheduling
+
+Dev7 Linux checks passed, but Windows timed out in two existing ConPTY lifecycle probes.
+The approved release workflow runs Windows tests sequentially with RUST_TEST_THREADS=1,
+retaining all tests and their existing deadlines. Scheduling pressure is a hypothesis,
+not an established root cause. Explicit multi-session and sustained-output acceptance
+remain required; a repeated failure requires lifecycle investigation rather than relaxed
+deadlines. No process-backend or dependency change is made by this scheduling decision.
+
 ## 2026-10-13 — local Git status
 
 Implemented the approved local Git status design using the installed Git CLI and standard

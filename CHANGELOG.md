@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1-dev8 — Windows test isolation
+
+- Run Windows release tests sequentially while retaining lifecycle/output deadlines.
+- Record dev7's two hosted ConPTY timeouts without claiming a confirmed runtime cause.
+- Keep expanded Junafetch and grouped settings in the following development cycle.
+
 ## 0.1.1-dev7 — CI fixture portability
 
 - Give Git merge fixtures their own identity instead of relying on machine-wide settings.
