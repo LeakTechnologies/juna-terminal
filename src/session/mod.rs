@@ -34,33 +34,96 @@ pub struct SessionSpec {
 }
 impl SessionSpec {
     pub fn from_environment() -> io::Result<Self> {
-        let mut spec = Self {
-            program: std::env::var_os("JUNA_SHELL").unwrap_or_else(|| "powershell.exe".into()),
-            args: Vec::new(),
-            cwd: None,
-            env: Vec::new(),
-        };
-        let mut command = std::env::args_os().skip(1);
-        while let Some(arg) = command.next() {
-            if arg == "--shell" {
-                spec.program = command.next().ok_or_else(|| {
-                    io::Error::new(io::ErrorKind::InvalidInput, "--shell requires a program")
-                })?;
-            } else if arg == "--" {
-                spec.args = command.collect();
-                return Ok(spec);
-            } else {
+        let home =
+            std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
+        launch_options(
+            std::env::args_os().skip(1),
+            std::env::var_os("JUNA_SHELL").unwrap_or_else(|| "powershell.exe".into()),
+            std::env::var("JUNA_SHELL_ARGS").ok().as_deref(),
+            home,
+        )
+    }
+}
+fn launch_options(
+    arguments: impl IntoIterator<Item = OsString>,
+    program: OsString,
+    legacy_args: Option<&str>,
+    home: Option<PathBuf>,
+) -> io::Result<SessionSpec> {
+    let mut spec = SessionSpec {
+        program,
+        args: Vec::new(),
+        cwd: None,
+        env: Vec::new(),
+    };
+    let mut command = arguments.into_iter();
+    let mut explicit_args = false;
+    while let Some(arg) = command.next() {
+        if arg == "--shell" {
+            spec.program = command.next().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "--shell requires a program")
+            })?;
+        } else if arg == "--cwd" {
+            if spec.cwd.is_some() {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
-                    "usage: juna [--shell PROGRAM] [-- ARGS...]",
+                    "--cwd may only be supplied once",
                 ));
             }
+            let cwd = command.next().ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "--cwd requires a directory")
+            })?;
+            let directory = std::fs::canonicalize(PathBuf::from(cwd))
+                    .ok().filter(|path| path.is_dir())
+                    .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "Starting directory is unavailable. Choose an existing folder with --cwd DIRECTORY."))?;
+            spec.cwd = Some(shell_directory(directory));
+        } else if arg == "--" {
+            spec.args = command.collect();
+            explicit_args = true;
+            break;
+        } else {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "usage: juna [--shell PROGRAM] [--cwd DIRECTORY] [-- ARGS...]",
+            ));
         }
-        if let Ok(args) = std::env::var("JUNA_SHELL_ARGS") {
-            spec.args = parse_arguments(&args)?;
-        }
-        Ok(spec)
     }
+    if !explicit_args {
+        if let Some(args) = legacy_args {
+            spec.args = parse_arguments(args)?;
+        }
+    }
+    if spec.cwd.is_none() && spec.args.is_empty() {
+        let directory = home.filter(|path| path.is_absolute() && path.is_dir())
+                .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "User home directory is unavailable. Check your home-folder configuration or launch with --cwd DIRECTORY."))?;
+        spec.cwd = Some(shell_directory(directory));
+    }
+    Ok(spec)
+}
+/// Use ordinary drive/share syntax after validating a canonical Windows path.
+fn shell_directory(path: PathBuf) -> PathBuf {
+    #[cfg(windows)]
+    {
+        use std::path::{Component, Prefix};
+        if let Some(Component::Prefix(prefix)) = path.components().next() {
+            let mut plain = match prefix.kind() {
+                Prefix::VerbatimDisk(drive) => PathBuf::from(format!("{}:\\", drive as char)),
+                Prefix::VerbatimUNC(server, share) => {
+                    let mut name = OsString::from("\\\\");
+                    name.push(server);
+                    name.push("\\");
+                    name.push(share);
+                    PathBuf::from(name)
+                }
+                _ => return path,
+            };
+            for component in path.components().skip(2) {
+                plain.push(component.as_os_str());
+            }
+            return plain;
+        }
+    }
+    path
 }
 /// Parse the legacy environment value with Windows quote/backslash rules.
 /// CLI arguments after `--` are already an argument vector and bypass this parser.
@@ -116,6 +179,67 @@ pub fn parse_arguments(text: &str) -> io::Result<Vec<OsString>> {
 
 #[cfg(test)]
 mod argument_tests {
+    #[test]
+    fn home_explicit_directory_and_command_launches_are_distinct() {
+        use super::*;
+        let root = std::env::temp_dir().join(crate::settings::new_id());
+        let home = root.join("home 日本語");
+        let chosen = root.join("chosen folder");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&chosen).unwrap();
+        let parse = |arguments: Vec<OsString>, legacy: Option<&str>, home: Option<PathBuf>| {
+            launch_options(arguments, "configured shell.exe".into(), legacy, home)
+        };
+        let before = std::env::current_dir().unwrap();
+        let normal = parse(vec![], None, Some(home.clone())).unwrap();
+        assert_eq!(normal.cwd, Some(home.clone()));
+        assert!(normal.args.is_empty());
+        let explicit = parse(
+            vec!["--cwd".into(), chosen.clone().into_os_string(), "--".into()],
+            Some("ignored one-off"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::canonicalize(explicit.cwd.unwrap()).unwrap(),
+            std::fs::canonicalize(&chosen).unwrap()
+        );
+        assert!(explicit.args.is_empty());
+        let script = parse(
+            vec!["--".into(), "/C".into(), "echo a b".into()],
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(script.cwd.is_none());
+        assert_eq!(
+            script.args,
+            [OsString::from("/C"), OsString::from("echo a b")]
+        );
+        assert!(parse(vec![], Some("/C exit"), None).unwrap().cwd.is_none());
+        assert!(parse(vec![], None, None).is_err());
+        assert!(parse(vec![], None, Some(root.join("missing"))).is_err());
+        assert!(parse(vec!["--cwd".into()], None, Some(home.clone())).is_err());
+        assert!(parse(
+            vec![
+                "--cwd".into(),
+                chosen.clone().into_os_string(),
+                "--cwd".into(),
+                home.clone().into_os_string()
+            ],
+            None,
+            None
+        )
+        .is_err());
+        assert!(parse(
+            vec!["--cwd".into(), root.join("missing").into_os_string()],
+            None,
+            Some(home)
+        )
+        .is_err());
+        assert_eq!(std::env::current_dir().unwrap(), before);
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn quoted_arguments_and_empty_elements_are_preserved() {
         let args =

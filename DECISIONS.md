@@ -1361,6 +1361,21 @@ for the same pinned launcher-payload hash check. Native Fastfetch 2.69.0 detecto
 the separately maintained fork; script/image/codec capabilities excluded by the lean build are
 not claimed. This cycle delivers eight safe local stats, width-aware art and JSON/plain output;
 interactive protected-value reveal and terminal-wide privacy remain a separate unshipped cycle.
+## 2026-10-14 — interactive startup directory
+
+The approved startup-directory change resolves USERPROFILE (HOME on Unix) at the session
+boundary for launches without custom shell arguments. Validate an absolute existing home
+folder; do not change the application working directory. Explicit --cwd DIRECTORY resolves
+and validates a selected folder, including relative CLI paths. Custom argument/command launches
+retain inherited cwd unless explicitly overridden, preserving scripts. Ctrl+Shift+N passes
+its intended folder as --cwd, using reported cwd or the shell's launch folder as fallback.
+Missing folders produce generic actionable errors without private path contents. No dependency
+was added; backend byte transport and pure engine ownership are unchanged.
+Validated canonical Windows paths are converted from device-prefix syntax to ordinary
+drive/share syntax before shell launch. Actual acceptance exposed CMD falling back to the
+Windows directory for a canonical device-prefixed drive path; Unicode filesystem identity
+checks verify the correction without relying on CMD's legacy text encoding.
+
 ## 2026-10-13 — independent windows
 
 The approved Ctrl+Shift+N shortcut uses a direct absolute current-executable launch and

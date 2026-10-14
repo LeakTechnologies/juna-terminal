@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1-dev11 — start interactive sessions at home
+
+- Normal interactive launches start in the user home directory instead of the portable folder.
+- Add --cwd DIRECTORY for deliberate folder launches and preserve it in new windows.
+- Keep custom command launches in their inherited folder unless --cwd is supplied.
+
 ## 0.1.1-dev10 — independent terminal windows
 
 - Add Ctrl+Shift+N for a new independent window in the reported folder or launch folder.

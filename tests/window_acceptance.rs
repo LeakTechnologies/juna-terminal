@@ -11,6 +11,82 @@ fn read_log(folder: &std::path::Path) -> String {
 }
 
 #[test]
+#[ignore = "interactive Windows desktop; portable startup home and explicit folder selection"]
+fn portable_interactive_launch_starts_at_home_and_preserves_overrides() {
+    use std::{
+        process::{Command, Stdio},
+        time::{Duration, Instant},
+    };
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("target/acceptance/start-directory")
+        .join(juna::settings::new_id());
+    let portable = root.join("portable folder");
+    let home = root.join("home 日本語");
+    let explicit = root.join("chosen folder");
+    for directory in [&portable, &home, &explicit] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    for (index, expected) in [&home, &explicit, &portable].iter().enumerate() {
+        let cache = root.join(format!("case-{index}"));
+        let script = "$actual=(Get-Location).ProviderPath; [IO.File]::WriteAllText($env:JUNA_ACCEPT_OBSERVED_FILE,$actual,[Text.UTF8Encoding]::new($false)); if([IO.Path]::GetFullPath($actual) -ne [IO.Path]::GetFullPath($env:JUNA_ACCEPT_EXPECTED_DIRECTORY)){exit 9}; Write-Output 'START_DIRECTORY_OK'; Start-Sleep -Seconds 1; exit 0";
+        let mut command = Command::new(env!("CARGO_BIN_EXE_juna"));
+        command
+            .args([
+                "--shell",
+                if index == 2 {
+                    "powershell.exe"
+                } else {
+                    "cmd.exe"
+                },
+            ])
+            .current_dir(&portable)
+            .env("USERPROFILE", &home)
+            .env("JUNA_ACCEPT_EXPECTED_DIRECTORY", expected)
+            .env("JUNA_ACCEPT_OBSERVED_FILE", cache.join("observed.txt"))
+            .env("LOCALAPPDATA", &cache)
+            .env_remove("JUNA_SHELL_ARGS")
+            .env("RUST_LOG", "info")
+            .env("JUNA_ACCEPT_MARKER", "START_DIRECTORY_OK")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        if index == 1 {
+            command.arg("--cwd").arg(&explicit);
+        }
+        if index == 2 {
+            command.args(["--", "-NoProfile", "-Command", script]);
+        } else {
+            command.env(
+                "JUNA_ACCEPT_WINDOW_COMMAND",
+                format!("powershell.exe -NoProfile -Command \"{script}\"\rexit /b\r"),
+            );
+        }
+        let mut child = command.spawn().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(40);
+        loop {
+            if let Some(status) = child.try_wait().unwrap() {
+                assert!(status.success());
+                break;
+            }
+            if Instant::now() > deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                panic!("Startup directory window timed out");
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        let log = read_log(&cache);
+        let observed = std::fs::read_to_string(cache.join("observed.txt")).unwrap();
+        assert_eq!(
+            std::fs::canonicalize(observed).unwrap(),
+            std::fs::canonicalize(expected).unwrap()
+        );
+        assert!(log.contains("ExitStatus(0)"), "{log}");
+        assert!(log.contains("Acceptance marker present=true"), "{log}");
+        assert!(!log.contains("frames=0"), "{log}");
+    }
+}
+
+#[test]
 #[ignore = "interactive Windows desktop; independent process windows and preferences"]
 fn independent_new_window_preserves_cwd_preferences_and_parent_session() {
     use std::{

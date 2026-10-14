@@ -1,5 +1,11 @@
 # Juna Terminal Engine — Architecture & Interface Specification
 
+Session startup selects an explicit --cwd directory or, for ordinary interactive launches,
+the validated user home folder. Custom shell-argument launches retain inherited cwd when
+no explicit directory is supplied. Selection performs filesystem checks at the session/app
+boundary without changing process-wide cwd or performing I/O in the VT engine. New windows
+pass their intended directory explicitly and preserve the shell launch-folder fallback.
+
 Ctrl+Shift+N launches the current absolute application executable as an independent process,
 with the configured shell and an empty interactive argument vector. Validated reported cwd
 is preferred over the launch folder; neither engine nor runtime objects cross this boundary.

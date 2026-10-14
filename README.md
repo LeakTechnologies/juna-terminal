@@ -140,3 +140,7 @@ Diagnostics are in `%LOCALAPPDATA%\Juna\logs`. Each window has a separate
 `juna-<process ID>-<nonce>.log`; match the process ID in Task Manager or sort by modification
 time to find recent logs. Log retention is currently manual.
 
+Normal interactive launches start at home (~). To choose a folder, launch
+`juna.exe --cwd "E:\My Project"`. Custom shell arguments keep the inherited folder unless
+`--cwd` is supplied. New windows preserve the reported folder or shell launch folder.
+

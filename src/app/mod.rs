@@ -428,7 +428,11 @@ impl App {
                             .as_ref()
                             .ok_or_else(|| std::io::Error::other("Shell unavailable"))?;
                         let executable = std::env::current_exe()?;
-                        let launch = std::env::current_dir()?;
+                        let launch = shell
+                            .cwd
+                            .clone()
+                            .map(Ok)
+                            .unwrap_or_else(std::env::current_dir)?;
                         let cwd = self.terminal.working_directory().1;
                         new_window::command(&executable, shell, cwd, &launch)?.spawn()?;
                         Ok(())

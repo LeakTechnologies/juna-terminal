@@ -53,6 +53,8 @@ pub fn command(
     command
         .arg("--shell")
         .arg(&shell.program)
+        .arg("--cwd")
+        .arg(cwd)
         .arg("--")
         .current_dir(cwd)
         .stdin(Stdio::null())
@@ -113,7 +115,13 @@ mod tests {
         let command = command(&executable, &shell, Some("relative"), &root).unwrap();
         assert_eq!(
             command.get_args().collect::<Vec<_>>(),
-            ["--shell", "configured shell.exe", "--"]
+            [
+                std::ffi::OsStr::new("--shell"),
+                std::ffi::OsStr::new("configured shell.exe"),
+                std::ffi::OsStr::new("--cwd"),
+                root.as_os_str(),
+                std::ffi::OsStr::new("--")
+            ]
         );
         assert_eq!(command.get_current_dir(), Some(root.as_path()));
         assert!(super::command(Path::new("relative.exe"), &shell, None, &root).is_err());

@@ -201,3 +201,18 @@ exited cleanly, and the original remained running after the new window closed. T
 three-tab concurrent-output/reaping test also passed with the new log paths. Physical shortcut
 input and other-machine acceptance remain human checks. No process backend/dependency changed.
 Dev9 and dev10 hosted checks/assets must be verified before claiming publication.
+
+## Dev11 home-directory startup
+
+Implemented the approved home-directory design. Ordinary interactive launches resolve a
+validated user home; --cwd selects an explicit directory; custom argument launches retain
+inherited cwd. New windows explicitly preserve reported or shell launch folders. No process-wide
+cwd change or dependency addition. Verified final source: check, strict all-target Clippy and
+all 214 standard tests passed. Actual portable-window acceptance verified home, explicit and
+custom-command directory identities, GPU frames and shell exit 0. Initial CMD Unicode-text
+comparisons failed; Unicode-safe measurement confirmed home selection and exposed a real CMD
+fallback for canonical device-prefixed explicit paths. Normal drive syntax fixes that defect.
+This retracts the interim interpretation that the failing acceptance was only a text fixture
+issue: the explicit-folder path also needed a production correction. Independent-window
+acceptance is recorded separately after completion. Human portable-folder testing remains pending.
+Verified final independent-window acceptance also passed: reported Unicode folder, saved appearance, separate logs and peer-session survival after closing the new window.
