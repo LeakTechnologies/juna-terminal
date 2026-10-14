@@ -1,5 +1,56 @@
 #![cfg(windows)]
 #[test]
+#[ignore = "interactive Windows desktop; local Git footer and alternate-screen refit"]
+fn git_status_tracks_reported_folder_and_hides_in_alternate_screen() {
+    use std::process::{Command, Stdio};
+    let folder =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("target/acceptance/git-window");
+    let repo = folder.join("repository");
+    std::fs::create_dir_all(&repo).unwrap();
+    assert!(Command::new("git")
+        .current_dir(&repo)
+        .args(["init", "-b", "main"])
+        .output()
+        .unwrap()
+        .status
+        .success());
+    let shell = std::path::PathBuf::from(std::env::var_os("WINDIR").unwrap())
+        .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+    let script="[Console]::Write(([char]27)+']7;'+([Uri](Get-Location).ProviderPath).AbsoluteUri+([char]7)); Write-Output 'GIT_WINDOW_OK'; Start-Sleep -Seconds 4; [Console]::Write(([char]27)+'[?1049h'); Start-Sleep -Seconds 1; [Console]::Write(([char]27)+'[?1049l'); Start-Sleep -Seconds 1; exit 0";
+    let mut child = Command::new(env!("CARGO_BIN_EXE_juna"))
+        .current_dir(&repo)
+        .arg("--shell")
+        .arg(shell)
+        .args(["--", "-NoProfile", "-Command", script])
+        .env("LOCALAPPDATA", &folder)
+        .env("RUST_LOG", "info")
+        .env("JUNA_ACCEPT_GIT_STATUS", "1")
+        .env("JUNA_ACCEPT_MARKER", "GIT_WINDOW_OK")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let start = std::time::Instant::now();
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        if start.elapsed() > std::time::Duration::from_secs(40) {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("Git window did not exit");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(25));
+    }
+    let log = std::fs::read_to_string(folder.join("Juna/juna.log")).unwrap();
+    assert!(log.contains("Git acceptance repository=true"), "{log}");
+    assert!(log.contains("Git acceptance footer=true"), "{log}");
+    assert!(log.contains("Git acceptance footer=false"), "{log}");
+    assert!(log.contains("Acceptance marker present=true"), "{log}");
+    assert!(!log.contains("frames=0"), "{log}");
+}
+#[test]
 #[ignore = "interactive Windows desktop; bundled tool startup and presentation"]
 fn bundled_fetch_runs_in_a_real_window() {
     use std::process::{Command, Stdio};

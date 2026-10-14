@@ -2,6 +2,69 @@
 use juna::{gpu::block_on, render::Renderer, vt::TerminalState};
 
 #[test]
+#[ignore = "real GPU; status footer capture and terminal-region preservation"]
+fn git_status_footer_is_owned_and_does_not_cover_terminal_rows() {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter =
+        block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).unwrap();
+    let (device, queue) =
+        block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
+    let mut renderer = Renderer::new(
+        &device,
+        &queue,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        2048,
+        (10., 22.),
+        8.,
+        16.,
+    )
+    .unwrap();
+    renderer.set_top_inset(juna::app::ui::TAB_HEIGHT);
+    let theme = juna::theme::builtins()
+        .into_iter()
+        .find(|t| t.id == "catppuccin-mocha")
+        .unwrap();
+    renderer.apply_theme(&theme, 4.5).unwrap();
+    let mut terminal = TerminalState::new(90, 19);
+    terminal.advance(b"Terminal rows stay visible\r\n\x1b[?25l");
+    let cells = terminal.snapshot(0).cells;
+    let scene = juna::app::ui::status_scene(
+        "Git: main · 2 changed · 1 conflicts · ↑1 ↓2 (last fetch)",
+        1024.,
+        512.,
+        1.,
+        &theme,
+    );
+    let baseline = render_scene_at(
+        &device,
+        &queue,
+        &mut renderer,
+        &terminal,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        None,
+        (1024, 512),
+    );
+    let pixels = render_scene_at(
+        &device,
+        &queue,
+        &mut renderer,
+        &terminal,
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        Some(&scene),
+        (1024, 512),
+    );
+    assert_eq!(&pixels[..486 * 1024 * 4], &baseline[..486 * 1024 * 4]);
+    assert_ne!(&pixels[486 * 1024 * 4..], &baseline[486 * 1024 * 4..]);
+    assert_eq!(terminal.snapshot(0).cells, cells);
+    let mut ppm = b"P6\n1024 512\n255\n".to_vec();
+    for pixel in pixels.chunks_exact(4) {
+        ppm.extend_from_slice(&pixel[..3]);
+    }
+    std::fs::create_dir_all("target/acceptance").unwrap();
+    std::fs::write("target/acceptance/git-status.ppm", ppm).unwrap();
+}
+
+#[test]
 #[ignore = "real GPU; captures all bundled fonts and checks clipping/fallback"]
 fn bundled_fonts_render_and_resize_without_row_bleed() {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());

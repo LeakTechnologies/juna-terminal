@@ -1,9 +1,11 @@
 //! Single-owner window, input, engine and rendering integration.
 mod clipboard;
+mod git_status;
 pub mod gutter;
 mod input;
 mod runtime;
 mod settings_files;
+mod shell_reporting;
 mod tabs;
 #[cfg(windows)]
 mod tools;
@@ -115,8 +117,84 @@ pub struct App {
     last_theme_scan: Instant,
     theme_errors: Vec<String>,
     removed_theme: Option<(std::path::PathBuf, std::path::PathBuf)>,
+    git_worker: Option<git_status::Worker>,
+    git_activity: Instant,
 }
 impl App {
+    fn poll_git_status(&mut self) {
+        if self.tabs.is_empty() {
+            return;
+        }
+        let (revision, cwd) = self.terminal.working_directory();
+        let tab = &mut self.tabs[self.active_tab];
+        let old = tab.git.generation;
+        tab.git.sync(revision, cwd);
+        if old != tab.git.generation {
+            self.dirty = true;
+        }
+        let Some(worker) = self.git_worker.as_ref() else {
+            return;
+        };
+        while let Ok(result) = worker.results.try_recv() {
+            if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == result.tab) {
+                if let Some(saved) = tab.saved.as_ref() {
+                    let (revision, cwd) = saved.terminal.working_directory();
+                    tab.git.sync(revision, cwd);
+                }
+                if result.generation == tab.git.generation {
+                    #[cfg(debug_assertions)]
+                    if std::env::var_os("JUNA_ACCEPT_GIT_STATUS").is_some() {
+                        log::info!(
+                            "Git acceptance repository={}",
+                            matches!(result.report, git_status::Report::Repo(_))
+                        );
+                    }
+                    tab.git.report = Some(result.report);
+                    tab.git.pending = false;
+                    self.dirty = true;
+                }
+            }
+        }
+        if !self.settings.show_git_status
+            || self.terminal.alternate_active()
+            || !self.focused
+            || self.closing_all
+        {
+            return;
+        }
+        let tab = &mut self.tabs[self.active_tab];
+        if tab.git.pending
+            && tab
+                .git
+                .last_check
+                .is_some_and(|time| time.elapsed() > Duration::from_secs(20))
+        {
+            tab.git.pending = false;
+            tab.git.generation = tab.git.generation.wrapping_add(1);
+        }
+        if tab.git.pending
+            || tab.git.last_check.is_some_and(|time| {
+                time.elapsed() < Duration::from_secs(2) || time >= self.git_activity
+            })
+        {
+            return;
+        }
+        let Some(cwd) = tab.git.cwd.clone() else {
+            return;
+        };
+        if worker
+            .requests
+            .try_send(git_status::Request {
+                tab: tab.id,
+                generation: tab.git.generation,
+                cwd,
+            })
+            .is_ok()
+        {
+            tab.git.pending = true;
+            tab.git.last_check = Some(Instant::now());
+        }
+    }
     pub fn new(cols: u16, rows: u16) -> Self {
         let store = crate::settings::Store::new(crate::settings::application_directory());
         let (settings, themes, errors) = store.load();
@@ -161,6 +239,7 @@ impl App {
                 id: 1,
                 label: "Terminal".into(),
                 saved: None,
+                git: git_status::View::new(None),
             }],
             active_tab: 0,
             next_tab_id: 2,
@@ -173,6 +252,8 @@ impl App {
             last_theme_scan: Instant::now(),
             theme_errors: Vec::new(),
             removed_theme: None,
+            git_worker: None,
+            git_activity: Instant::now(),
         }
     }
     fn take_session(&mut self) -> tabs::SavedSession {
@@ -197,6 +278,9 @@ impl App {
         self.failure = state.failure;
         self.active_closing = state.closing;
         self.active_tab = index;
+        let (revision, cwd) = self.terminal.working_directory();
+        self.tabs[index].git.sync(revision, cwd);
+        self.tabs[index].git.last_check = None;
         self.selecting = false;
         self.mouse_button = None;
         self.dirty = true;
@@ -238,6 +322,7 @@ impl App {
         if self.tabs.len() >= 16 {
             return Err("Close a tab before opening more (limit 16)".into());
         }
+        let spec = shell_reporting::prepare(spec, self.settings.report_shell_directory);
         let runtime = Runtime::spawn(
             &spec,
             Dimensions {
@@ -255,6 +340,7 @@ impl App {
             id,
             label: tabs::label(&spec),
             saved: None,
+            git: git_status::View::new(spec.cwd.clone().or_else(|| std::env::current_dir().ok())),
         });
         self.active_tab = self.tabs.len() - 1;
         self.terminal = TerminalState::new(self.cols, self.rows);
@@ -481,6 +567,7 @@ impl App {
         if batch.is_empty() {
             return;
         }
+        self.git_activity = Instant::now();
         let history = self.terminal.scrollback_len();
         let dropped = self.terminal.scrollback_dropped();
         let alternate = self.terminal.alternate_active();
@@ -519,7 +606,16 @@ impl App {
             (((width as f32 - 2. * PAD * self.scale - inset) / (CELL_W * self.scale)).max(1.)
                 as u16)
                 .clamp(1, MAX_COLS);
-        let rows = (((height as f32 - (2. * PAD + ui::TAB_HEIGHT) * self.scale)
+        let status_height = if self.settings.show_git_status && !self.terminal.alternate_active() {
+            ui::STATUS_HEIGHT
+        } else {
+            0.
+        };
+        #[cfg(debug_assertions)]
+        if std::env::var_os("JUNA_ACCEPT_GIT_STATUS").is_some() {
+            log::info!("Git acceptance footer={}", status_height > 0.);
+        }
+        let rows = (((height as f32 - (2. * PAD + ui::TAB_HEIGHT + status_height) * self.scale)
             / (CELL_H * self.scale))
             .max(1.) as u16)
             .clamp(1, MAX_ROWS);
@@ -622,6 +718,15 @@ impl App {
             w as f32,
             self.scale,
         ));
+        if self.settings.show_git_status && show_numbers {
+            renderer.overlay(&ui::status_scene(
+                &self.tabs[self.active_tab].git.label(),
+                w as f32,
+                h as f32,
+                self.scale,
+                &selection_theme,
+            ));
+        }
         if let Some(ui) = self.ui.as_mut() {
             let rows = ui.rows(&self.themes, &self.settings);
             let (_, visible, _) = ui.geometry(w as f32, h as f32, self.scale, rows.len());
@@ -696,6 +801,9 @@ impl App {
     fn paste(&mut self) {
         match clipboard::read() {
             Ok(text) => {
+                if text.contains(['\r', '\n']) {
+                    self.tabs[self.active_tab].git.invalidate_initial();
+                }
                 let bytes = input::paste(&text, self.terminal.input_modes().bracketed_paste);
                 self.offset = 0;
                 self.selection = None;
@@ -1257,6 +1365,25 @@ impl App {
                         let size = window.inner_size();
                         self.fit(size.width, size.height);
                     }
+                    self.dirty = true;
+                }
+                Action::ToggleGitStatus | Action::ToggleDirectoryReporting => {
+                    let mut settings = self.committed_preferences();
+                    if matches!(action, Action::ToggleGitStatus) {
+                        settings.show_git_status = !settings.show_git_status;
+                    } else {
+                        settings.report_shell_directory = !settings.report_shell_directory;
+                    }
+                    self.commit_preferences(settings)?;
+                    self.tabs[self.active_tab].git.last_check = None;
+                    if let Some(window) = self.window.as_ref() {
+                        let size = window.inner_size();
+                        self.fit(size.width, size.height);
+                    }
+                    self.dirty = true;
+                }
+                Action::RefreshGitStatus => {
+                    self.tabs[self.active_tab].git.last_check = None;
                     self.dirty = true;
                 }
                 Action::CloseTargetTab => {
@@ -1830,6 +1957,18 @@ impl ApplicationHandler for App {
             };
             self.tabs[self.active_tab].label = tabs::label(&spec);
             self.shell_spec = Some(spec.clone());
+            self.tabs[self.active_tab].git =
+                git_status::View::new(spec.cwd.clone().or_else(|| std::env::current_dir().ok()));
+            self.git_worker = match git_status::Worker::new() {
+                Ok(worker) => Some(worker),
+                Err(_) => {
+                    log::warn!("Local Git worker unavailable");
+                    self.tabs[self.active_tab].git.report =
+                        Some(git_status::Report::Unavailable("worker unavailable"));
+                    None
+                }
+            };
+            let spec = shell_reporting::prepare(spec, self.settings.report_shell_directory);
             self.runtime = Some(
                 Runtime::spawn(
                     &spec,
@@ -1875,6 +2014,37 @@ impl ApplicationHandler for App {
         }
         if self.handle_ui(&event) {
             return;
+        }
+        if self.settings.show_git_status
+            && !self.terminal.alternate_active()
+            && self.window.as_ref().is_some_and(|w| {
+                self.pointer_px[1] >= w.inner_size().height as f32 - ui::STATUS_HEIGHT * self.scale
+            })
+        {
+            if matches!(event, WindowEvent::CursorMoved { .. }) {
+                if let Some(button) = self.mouse_button.take() {
+                    let modes = self.terminal.input_modes();
+                    self.send(&input::mouse(
+                        button,
+                        self.pointer.0,
+                        self.pointer.1,
+                        true,
+                        self.modifiers,
+                        modes.mouse_sgr,
+                    ));
+                }
+                self.selecting = false;
+                return;
+            }
+            if matches!(
+                event,
+                WindowEvent::MouseInput {
+                    button: MouseButton::Left | MouseButton::Middle,
+                    ..
+                } | WindowEvent::MouseWheel { .. }
+            ) {
+                return;
+            }
         }
         if self.left_inset > 0.
             && self.pointer_px[0] < PAD * self.scale + self.left_inset
@@ -1931,6 +2101,10 @@ impl ApplicationHandler for App {
                 self.dirty = true;
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
+                self.git_activity = Instant::now();
+                if matches!(event.logical_key, Key::Named(NamedKey::Enter)) {
+                    self.tabs[self.active_tab].git.invalidate_initial();
+                }
                 let shortcut = self.modifiers.control_key() && self.modifiers.shift_key();
                 if shortcut
                     && matches!(&event.logical_key,Key::Character(s)if s.eq_ignore_ascii_case("v"))
@@ -2095,6 +2269,7 @@ impl ApplicationHandler for App {
         self.refresh_themes();
         self.drain();
         self.drain_inactive();
+        self.poll_git_status();
         let mut inactive_done = Vec::new();
         for (i, tab) in self.tabs.iter_mut().enumerate() {
             let Some(state) = tab.saved.as_mut() else {
@@ -2416,6 +2591,7 @@ mod option_tests {
         app.tabs.push(tabs::Tab {
             id: 42,
             label: "Second".into(),
+            git: git_status::View::new(None),
             saved: Some(tabs::SavedSession {
                 terminal: TerminalState::new(20, 3),
                 runtime: None,
@@ -2458,6 +2634,7 @@ mod option_tests {
         second.advance(b"second\x1b[31m");
         app.tabs.push(tabs::Tab {
             id: 2,
+            git: git_status::View::new(None),
             label: "Second".into(),
             saved: Some(tabs::SavedSession {
                 terminal: second,

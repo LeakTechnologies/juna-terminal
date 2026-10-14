@@ -19,6 +19,10 @@ pub struct PortableSettings {
     minimum_contrast: f32,
     #[serde(default)]
     show_line_numbers: bool,
+    #[serde(default = "crate::settings::default_git_status")]
+    show_git_status: bool,
+    #[serde(default)]
+    report_shell_directory: bool,
     #[serde(default)]
     favourite_theme_ids: Vec<String>,
 }
@@ -30,6 +34,8 @@ impl From<&Settings> for PortableSettings {
             font_size: s.font_size,
             minimum_contrast: s.minimum_contrast,
             show_line_numbers: s.show_line_numbers,
+            show_git_status: s.show_git_status,
+            report_shell_directory: s.report_shell_directory,
             favourite_theme_ids: s.favourite_theme_ids.clone(),
         }
     }
@@ -42,6 +48,8 @@ impl PortableSettings {
             font_size: self.font_size,
             minimum_contrast: self.minimum_contrast,
             show_line_numbers: self.show_line_numbers,
+            show_git_status: self.show_git_status,
+            report_shell_directory: self.report_shell_directory,
             favourite_theme_ids: self.favourite_theme_ids.clone(),
             ..Default::default()
         }

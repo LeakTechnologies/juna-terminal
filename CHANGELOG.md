@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1-dev6 — local Git status
+
+- Show branch, changed files, conflicts and local ahead/behind counts in a saved, toggleable footer.
+- Follow validated OSC 7 folders; offer opt-in PowerShell reporting for new default sessions.
+- Reject stale tab/folder results and hide/refit the footer in alternate-screen applications.
+- Keep queries local/read-only; report active-filter repositories and failed checks unavailable.
+- Queue approved grouped Junafetch profiles/settings and near-term horizontal/vertical panes.
+
 ## 0.1.1-dev5 — legacy Windows roadmap
 
 - Record low-priority investigation of a legacy console backend for pre-1809 Windows.

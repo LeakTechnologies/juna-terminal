@@ -244,3 +244,21 @@ strict Clippy and one report regression passed. Pinned payload/source verificati
 The real-window bundled_fetch test passed: system-only PATH, both aliases, eight-field JSON,
 rendered acceptance marker, presented GPU frames and normal shell/window cleanup. This is
 controlled runtime evidence; artwork aesthetics and other-machine acceptance remain human checks.
+
+## 2026-10-13 — local Git status acceptance in progress
+
+Verified targeted tests: real clean/staged/unstaged/untracked/conflicted/detached/worktree and
+local ahead/behind fixtures; unchanged index bytes/mtime; fsmonitor suppression and active-filter
+refusal; initial-folder invalidation/stale generations; bounded worker shutdown. PowerShell's
+controlled prompt text and LASTEXITCODE are preserved, and Unicode OSC 7 metadata survives real
+ConPTY. Invalid/remote metadata is rejected without changing cells. Full gates and footer/window
+acceptance must pass before this development cycle lands. Physical input/other-machine review
+remain separate; older Windows 1803 is unsupported by the current ConPTY backend.
+
+Dev6 final evidence: cargo check, strict all-target Clippy and all 210 standard tests passed
+on the settled source. Explicit GPU footer comparison passed, preserving terminal pixels and
+engine cells; docs/acceptance/git-status.png was visually reviewed. The actual-window Git test
+passed with reported cwd, repository result, visible/hidden footer transitions, presentation
+and exit 0. Its controlled stream accepted 967 bytes and presented 14 frames. Physical input,
+custom prompt implementations and other-machine acceptance remain human checks. Expanded fetch
+profiles/submenus and Ctrl+Shift+N designs received approval but are not shipped in dev6.

@@ -15,6 +15,7 @@ pub struct Tab {
     pub label: String,
     /// Exactly the active slot is None; its state resides in App's active fields.
     pub saved: Option<SavedSession>,
+    pub git: super::git_status::View,
 }
 pub fn label(spec: &crate::session::SessionSpec) -> String {
     let name = std::path::Path::new(&spec.program)

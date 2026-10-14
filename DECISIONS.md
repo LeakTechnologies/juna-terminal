@@ -1361,3 +1361,23 @@ for the same pinned launcher-payload hash check. Native Fastfetch 2.69.0 detecto
 the separately maintained fork; script/image/codec capabilities excluded by the lean build are
 not claimed. This cycle delivers eight safe local stats, width-aware art and JSON/plain output;
 interactive protected-value reveal and terminal-wide privacy remain a separate unshipped cycle.
+## 2026-10-13 — local Git status
+
+Implemented the approved local Git status design using the installed Git CLI and standard
+library worker/channels; no dependency was added. OSC 7 local-file URI validation is original
+pure engine metadata. Reject remote/invalid URI updates and clear stale folder data. Optional
+PowerShell prompt reporting applies only to default interactive launches, with saved opt-in
+and new-tab scope; custom launch arguments are untouched. Preserve original prompt text and
+LASTEXITCODE. Unsupported shells show folder-reporting unavailable after initial input.
+
+Git queries disable optional index writes, fsmonitor, submodule recursion, auto maintenance
+and lazy object fetching. Check tracked attributes before status, refuse active external
+filters and blank discovered filter commands as a further safeguard. Inactive global LFS
+configuration does not block ordinary repositories. Counts use local tracking refs from the
+last fetch; oversized/failing reports are unavailable. Checks refresh on folder/activity/tab
+changes or explicit request with a two-second rate limit. Concurrent repository edits can
+change the view between reads; this is a status indicator, not an atomic repository snapshot.
+Initial-directory fallback is labelled and retired on input or reported metadata. Status data
+is not stored/exported/logged. Only display/reporting preferences enter portable settings.
+
+Protocol references: [Git porcelain v2](https://git-scm.com/docs/git-status), [Git filters](https://git-scm.com/docs/gitattributes), and [published OSC 7 behaviour](https://wezterm.org/config/lua/pane/get_current_working_dir.html). These are specification/behaviour references; no terminal-engine implementation was copied.

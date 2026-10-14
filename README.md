@@ -98,6 +98,13 @@ Line numbers label retained terminal rows, including wrapped rows, rather than s
 or source-file lines. They follow each tab's scrollback, reset with cleared/evicted history, and
 stay out of clipboard copies. Full-screen alternate buffers hide Juna's gutter and regain its width.
 
+The optional Git footer shows the local branch, changed files, conflicts and ahead/behind counts
+from the last fetch. Juna does not fetch automatically. Settings controls visibility and refresh.
+Enable PowerShell folder reporting and open a new default tab to track folder changes without
+editing profiles. Other shells can emit OSC 7 local-file URIs. An unreported launch folder is
+labelled as initial-only and retired on input. Active external file filters, missing Git or failed
+checks display Unavailable. Full-screen apps hide the footer and regain its height.
+
 ![Grouped theme choices](docs/acceptance/theme-families.png)
 
 ## Testing and project documents

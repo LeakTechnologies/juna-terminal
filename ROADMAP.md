@@ -75,9 +75,11 @@ No translations or Language tab are claimed as implemented at this stage.
   network access; internet reachability and relay services are outside the initial exploration.
   This is a product direction, not an approved implementation or a shipped security guarantee.
 
-- Multiple terminal tiles within one tab, with keyboard and mouse split/focus/resize controls
+- Near-term after Junafetch configuration: horizontal and vertical terminal tiles within one
+  tab, with keyboard and mouse split/focus/resize controls
   inspired by Terminator's workflow. Use the existing pure BSP layout implementation; declare
-  session ownership, output fairness and per-tile shutdown before implementation.
+  session ownership, output fairness and per-tile shutdown before implementation. The layout
+  foundation exists; interactive panes are not implemented. Prepare a separate approved design.
 - Export custom themes for other terminals, including VS Code.
 - Further privacy controls for outputs beyond Junafetch, with an explicit scope and test plan.
 - Mixed-DPI and additional GPU backend acceptance; Unicode/contextual layout improvements.

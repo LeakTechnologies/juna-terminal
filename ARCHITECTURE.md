@@ -1,5 +1,13 @@
 # Juna Terminal Engine — Architecture & Interface Specification
 
+Local Git metadata is an app-owned, bounded worker, separate from process transport and engine
+state. The original VT engine validates OSC 7 local-file URI metadata without I/O. Active-tab
+folder/generation values cross the worker boundary; owned reports return to the UI thread and
+stale results are rejected. A read-only footer scene reserves one row outside the terminal grid
+and disappears in alternate screens. Opt-in default PowerShell prompt integration is per-session
+and never writes profiles. The worker never fetches, mutates the index or invokes active filters;
+filtered repositories are reported unavailable. See GIT_STATUS_DESIGN.md for scope and evidence.
+
 Bundled utilities are app-owned console executables, separate from the VT engine. Juna
 verifies/extracts the embedded Junafetch frontend into a per-user version directory and
 prepends it only to child-session PATH. The frontend verifies its pinned native detector,

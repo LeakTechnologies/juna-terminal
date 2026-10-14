@@ -6,6 +6,26 @@ use crate::{
 };
 use winit::keyboard::{Key, NamedKey};
 pub const TAB_HEIGHT: f32 = 32.;
+pub const STATUS_HEIGHT: f32 = 26.;
+pub fn status_scene(label: &str, width: f32, height: f32, scale: f32, theme: &Theme) -> Overlay {
+    let color = |value: &str| {
+        let c = crate::theme::rgb(value).unwrap();
+        [c[0], c[1], c[2], 1.]
+    };
+    let y = (height - STATUS_HEIGHT * scale).max(0.);
+    Overlay {
+        rectangles: vec![Rectangle {
+            rect: [0., y, width, STATUS_HEIGHT * scale],
+            color: color(&theme.colors.background),
+        }],
+        text: vec![Text {
+            pos: [8. * scale, y + 3. * scale],
+            width: (width - 16. * scale).max(0.),
+            value: label.into(),
+            color: color(&theme.colors.foreground),
+        }],
+    }
+}
 pub fn numeric_settings(settings: &Settings, index: usize, text: &str) -> Result<Settings, String> {
     let mut result = settings.clone();
     let value = text.trim().to_ascii_lowercase();
@@ -112,6 +132,9 @@ pub enum Action {
     CollapseAll,
     ToggleFavourite(String),
     ToggleLineNumbers,
+    ToggleGitStatus,
+    ToggleDirectoryReporting,
+    RefreshGitStatus,
     CloseTargetTab,
     RenameTab,
     SaveTabName,
@@ -489,6 +512,31 @@ impl Ui {
                     }
                     .into(),
                     Action::ToggleLineNumbers,
+                    None,
+                ),
+                row(
+                    format!(
+                        "[{}] Show Git status",
+                        if settings.show_git_status { "x" } else { " " }
+                    ),
+                    Action::ToggleGitStatus,
+                    None,
+                ),
+                row(
+                    format!(
+                        "[{}] PowerShell folder reporting (new tabs)",
+                        if settings.report_shell_directory {
+                            "x"
+                        } else {
+                            " "
+                        }
+                    ),
+                    Action::ToggleDirectoryReporting,
+                    None,
+                ),
+                row(
+                    "Refresh local Git status".into(),
+                    Action::RefreshGitStatus,
                     None,
                 ),
                 row("Close".into(), Action::Cancel, None),

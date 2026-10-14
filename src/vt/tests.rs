@@ -382,3 +382,13 @@ fn realistic_shell_prompt_sequence() {
         "PS C:\\Users\\dev>".trim_end()
     );
 }
+#[test]
+fn osc_working_directory_is_metadata_and_invalid_updates_clear_it() {
+    let mut terminal = super::TerminalState::new(10, 2);
+    let before = terminal.snapshot(0).cells;
+    terminal.advance(b"\x1b]7;file://localhost/C:/one%20two\x1b\\");
+    assert!(terminal.working_directory().1.unwrap().contains("one two"));
+    assert_eq!(terminal.snapshot(0).cells, before);
+    terminal.advance(b"\x1b]7;file://remote/share\x07");
+    assert_eq!(terminal.working_directory(), (2, None));
+}

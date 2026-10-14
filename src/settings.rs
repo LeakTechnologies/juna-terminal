@@ -15,6 +15,10 @@ pub struct Settings {
     pub minimum_contrast: f32,
     #[serde(default)]
     pub show_line_numbers: bool,
+    #[serde(default = "default_git_status")]
+    pub show_git_status: bool,
+    #[serde(default)]
+    pub report_shell_directory: bool,
     #[serde(default)]
     pub favourite_theme_ids: Vec<String>,
 }
@@ -27,9 +31,14 @@ impl Default for Settings {
             font_size: 16.,
             minimum_contrast: 4.5,
             show_line_numbers: false,
+            show_git_status: true,
+            report_shell_directory: false,
             favourite_theme_ids: Vec::new(),
         }
     }
+}
+pub fn default_git_status() -> bool {
+    true
 }
 impl Settings {
     pub fn validate(&self) -> Result<(), String> {

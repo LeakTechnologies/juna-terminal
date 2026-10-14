@@ -1,4 +1,5 @@
 pub mod cell;
+mod cwd;
 pub mod grid;
 pub mod parser;
 pub mod scrollback;
@@ -77,6 +78,8 @@ pub struct TerminalState {
     attrs: Attrs,
     title: String,
     icon_title: String,
+    cwd: Option<String>,
+    cwd_revision: u64,
     modes: InputModes,
     cursor_style: u16,
     responses: Vec<u8>,
@@ -109,6 +112,8 @@ impl TerminalState {
             attrs: Attrs::new(0),
             title: String::new(),
             icon_title: String::new(),
+            cwd: None,
+            cwd_revision: 0,
             modes: InputModes::default(),
             cursor_style: 0,
             responses: Vec::new(),
@@ -142,6 +147,9 @@ impl TerminalState {
 
     pub fn title(&self) -> &str {
         &self.title
+    }
+    pub fn working_directory(&self) -> (u64, Option<&str>) {
+        (self.cwd_revision, self.cwd.as_deref())
     }
     pub fn input_modes(&self) -> InputModes {
         self.modes
@@ -523,6 +531,10 @@ impl TerminalState {
             }
             "1" => self.icon_title = text.to_owned(),
             "2" => self.title = text.to_owned(),
+            "7" => {
+                self.cwd = cwd::local_path(text);
+                self.cwd_revision = self.cwd_revision.wrapping_add(1);
+            }
             _ => {}
         }
     }
