@@ -172,3 +172,18 @@ This demonstrates intermittent failure, not a confirmed scheduling root cause.
 Verified on isolated dev8 source: cargo check, strict all-target Clippy and all 210
 standard tests passed with sequential scheduling. No visual/runtime behaviour changed;
 prior explicit window evidence remains applicable. Hosted dev8 verification is pending.
+
+## Dev9 grouped Junafetch and settings
+
+Implemented the approved expanded-statistics and grouped-settings designs. The standalone
+frontend passed check, strict Clippy and four tests; its rebuilt embedded payload and all
+normalized source fingerprints passed verification. On final source, root check, strict
+all-target Clippy and all 212 standard tests passed. The ConPTY alias test verified saved
+Brief, CLI Standard override, protected placeholders and a next-command Detailed preference
+change within the same shell. Explicit GPU panel acceptance passed without engine mutation;
+docs/acceptance/grouped-settings.png was visually reviewed, including the shortened folder
+reporting label. Actual-window bundled fetch passed with 6,528 accepted bytes, six presented
+frames, marker present and exit 0. Human input/other-machine review remain outstanding.
+Shell versions may be unavailable; actual IP masking/reveal is not shipped. Dev8 hosted
+Windows/Linux checks and independently downloaded checksum/version/seven-icon checks passed.
+Dev9 hosted publication still requires verification after push.

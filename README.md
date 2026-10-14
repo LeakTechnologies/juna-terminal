@@ -52,7 +52,7 @@ Pass shell arguments after `--`; they retain their individual argument boundarie
 | Close tab | Ctrl+Shift+W or right-click its tab |
 | Middle-click a tab | Confirm Close tab, or Cancel |
 | Rename a tab | Right-click its tab → Rename tab |
-| Line numbers | Settings → Show line numbers |
+| Line numbers | Settings → Terminal → Show line numbers |
 | Switch tabs | Ctrl+Tab / Ctrl+Shift+Tab or click a tab |
 | Options while a terminal app owns the mouse | Shift+right-click |
 | Copy selection | Ctrl+Shift+C |
@@ -66,7 +66,7 @@ Pass shell arguments after `--`; they retain their individual argument boundarie
 | Enter an exact font size | Click its row or press Space/Enter; accepts px or pt |
 | Close Settings | Close or Esc |
 | Cancel an unfinished numeric/font hover preview | Esc or Cancel |
-| Transfer settings | Settings → Import settings / Export settings |
+| Transfer settings | Settings → Import/Export |
 
 Font size is limited to 8–40 px. Explicit choices and arrows/zoom save immediately, including
 inside Settings. Hovering a font/theme stays temporary; numeric typing previews until Enter/Apply.
@@ -127,10 +127,11 @@ Full bidi/contextual text layout, image protocols and a Unix process backend rem
 - [Contribution rules](AGENTS.md)
 
 Juna bundles Junafetch: run `junafetch` or its shorter alias `fetch` without installing
-Fastfetch. The compact report shows eight local hardware/session statistics and omits
-personal and network identifiers. Use `fetch --plain`, `fetch --json`, or
-`fetch --logo full` for other presentations. Terminal-wide privacy and deliberate
-hover reveal remain planned work.
+Fastfetch. The default groups System, Hardware, Storage, Desktop, Session and Network.
+Choose Brief, Standard or Detailed and artwork under Settings → Tools → Junafetch.
+Use `fetch --brief`, `fetch --details`, `fetch --plain`, `fetch --json`, or `fetch --logo full`
+to override saved choices. Personal/network fields remain Hidden; terminal-wide privacy
+and deliberate hover reveal remain planned work.
 
 See the [roadmap](ROADMAP.md) for tiled terminals, privacy and bundled tools.
 

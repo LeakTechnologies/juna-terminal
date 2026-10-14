@@ -12,3 +12,4 @@
 
 # Local-only reference artwork; juna-logo.png is the sole icon source.
 assets/*original-rgb.png
+/tools/junafetch/target/

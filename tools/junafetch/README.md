@@ -4,12 +4,16 @@ This small Rust console program presents the separately maintained Fastfetch 2.6
 It is built independently to avoid GUI-process wait/exit behavior and circular binary embedding.
 Juna embeds the resulting executable and registers both junafetch.exe and fetch.exe per session.
 
-Default report: OS/build, CPU cores/threads, physical GPU/VRAM where known, memory, system disk,
-uptime, launch-session shell and Juna version. Values use binary units and consistent percentages.
-Unknown data is labelled Unavailable. A generated JSON profile scopes default disk detection to
-the system drive and ignores installed Fastfetch configs. --details adds safe hardware rows;
---plain and --json avoid artwork. Artwork uses the compact candidate, full original or none.
-Width comes from the native console; narrow output stacks artwork and rows. Pipes default to plain.
+Standard groups System, Hardware, Storage, Desktop, Session and Network statistics. It includes
+kernel, locale, all detected GPUs/displays/disks, memory/swap and Windows appearance. Detailed
+adds board, BIOS, battery and driver fields; Brief retains eight compact rows and the system disk.
+Unknown data, including shell versions the detector cannot identify, is labelled Unavailable.
+Values use binary units and consistent percentages. Generated profiles ignore installed configs.
+Settings → Tools → Junafetch saves profile/artwork choices for the next invocation in any tab.
+Explicit --brief, --details, --profile and --logo flags override saved choices. --plain and --json
+avoid artwork; JSON schema 2 includes profile and section on each field. Artwork is compact, full
+or none. Unicode-aware wrapping fits console width; narrow output stacks or omits oversized art.
+Pipes default to plain headings. Section borders use Juna's ANSI palette accent.
 
 Personal/network identifiers and raw paths are omitted rather than passed through the report.
 There is no public-IP request or background polling. Interactive protected-value reveal and

@@ -1361,6 +1361,20 @@ for the same pinned launcher-payload hash check. Native Fastfetch 2.69.0 detecto
 the separately maintained fork; script/image/codec capabilities excluded by the lean build are
 not claimed. This cycle delivers eight safe local stats, width-aware art and JSON/plain output;
 interactive protected-value reveal and terminal-wide privacy remain a separate unshipped cycle.
+## 2026-10-13 — grouped Junafetch presentation
+
+The approved expanded report constructs safe fields from bounded native detector modules;
+it never passes raw JSON through. Standard/Detailed cover all detected GPUs, displays and
+mounted disks using generic drive labels, Windows desktop appearance and Juna preferences.
+Unavailable values are explicit. Sensitive identifiers/network data are Hidden placeholders,
+not evidence of privacy detection or hover reveal. Saved profiles/artwork are read on each
+invocation from a bounded validated settings file; CLI overrides them. Settings use short
+Appearance/Terminal/Tools/Import-Export categories and retain immediate confirmed persistence.
+The standalone frontend adds pinned unicode-width 0.2.2 and unicode-segmentation 1.13.3 for
+display-column wrapping without splitting grapheme clusters. These existing project standards
+data dependencies provide no terminal semantics; their original notices accompany the payload.
+No engine, process transport or native detector dependency changed.
+
 ## 2026-10-13 — Windows CI scheduling
 
 Dev7 Linux checks passed, but Windows timed out in two existing ConPTY lifecycle probes.

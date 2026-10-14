@@ -91,6 +91,13 @@ mod tests {
             crate::settings::new_id()
         ));
         let directory = root.join("Juna");
+        crate::settings::Store::new(directory.clone())
+            .save_settings(&crate::settings::Settings {
+                junafetch_profile: "brief".into(),
+                junafetch_logo: "none".into(),
+                ..Default::default()
+            })
+            .unwrap();
         let windows = std::env::var_os("WINDIR")
             .map(std::path::PathBuf::from)
             .unwrap();
@@ -105,7 +112,13 @@ mod tests {
         .unwrap();
         env.iter_mut().find(|(key, _)| key == "PATH").unwrap().1 = path;
         env.push(("LOCALAPPDATA".into(), root.clone().into_os_string()));
-        let spec = SessionSpec { program, args: vec!["-NoProfile".into(),"-Command".into(),"$a=junafetch --json|ConvertFrom-Json; if($LASTEXITCODE -ne 0 -or $a.fields.Count -ne 8){exit 21}; $b=fetch --plain; if($LASTEXITCODE -ne 0){exit 22}; Write-Output 'JUNA_BUNDLED_FETCH_OK'".into()], cwd: None, env };
+        let script = r#"$a=junafetch --json|ConvertFrom-Json; if($LASTEXITCODE -ne 0 -or $a.profile -ne 'brief' -or $a.fields.Count -ne 8){exit 21}; $b=fetch --profile standard --json|ConvertFrom-Json; if($LASTEXITCODE -ne 0 -or $b.profile -ne 'standard' -or $b.fields.Count -le 8 -or @($b.fields|Where-Object {$_.name -eq 'Local IP' -and $_.value -eq 'Hidden'}).Count -ne 1){exit 22}; $path=Join-Path $env:LOCALAPPDATA 'Juna/settings.json'; $prefs=Get-Content -Raw $path|ConvertFrom-Json; $prefs.junafetch_profile='detailed'; [IO.File]::WriteAllText($path,($prefs|ConvertTo-Json),[Text.UTF8Encoding]::new($false)); $c=junafetch --json|ConvertFrom-Json; if($LASTEXITCODE -ne 0 -or $c.profile -ne 'detailed' -or @($c.fields|Where-Object name -eq 'BIOS').Count -ne 1){exit 23}; Write-Output 'JUNA_BUNDLED_FETCH_OK'"#;
+        let spec = SessionSpec {
+            program,
+            args: vec!["-NoProfile".into(), "-Command".into(), script.into()],
+            cwd: None,
+            env,
+        };
         let mut child = session::spawn(
             &spec,
             Dimensions {

@@ -14,6 +14,11 @@ prepends it only to child-session PATH. The frontend verifies its pinned native 
 uses bounded JSON output and a finite process deadline, and constructs a safe local report.
 Neither utility receives engine state. Cache failure reports a warning without preventing
 terminal startup. See tools/junafetch/README.md and assets/tools/manifest.json for provenance.
+The frontend reads only bounded validated presentation preferences on each invocation;
+confirmed app settings choose detail/artwork for the next command in existing sessions.
+Owned named sections are wrapped by Unicode display columns before console output. Sensitive
+rows remain placeholders until the separate protected-value transport exists. The app's
+settings categories and previews do not change engine ownership or byte transport.
 
 Status: **Implemented Windows terminal, with readiness repairs approved 2026-10-12.
 The acceptance record distinguishes verified behavior from pending human testing.**

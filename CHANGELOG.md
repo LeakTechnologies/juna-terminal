@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1-dev9 — grouped Junafetch and settings
+
+- Expand Junafetch into named sections covering the demonstrated Fastfetch categories.
+- Save Brief/Standard/Detailed and compact/full/no-art choices; CLI flags override them.
+- Group Settings into Appearance, Terminal, Tools and Import/Export with keyboard/mouse Back.
+- Keep identifiers/network values Hidden pending protected-value transport and reveal.
+
 ## 0.1.1-dev8 — Windows test isolation
 
 - Run Windows release tests sequentially while retaining lifecycle/output deadlines.

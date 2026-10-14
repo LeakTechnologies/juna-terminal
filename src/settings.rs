@@ -19,6 +19,10 @@ pub struct Settings {
     pub show_git_status: bool,
     #[serde(default)]
     pub report_shell_directory: bool,
+    #[serde(default = "default_junafetch_profile")]
+    pub junafetch_profile: String,
+    #[serde(default = "default_junafetch_logo")]
+    pub junafetch_logo: String,
     #[serde(default)]
     pub favourite_theme_ids: Vec<String>,
 }
@@ -33,6 +37,8 @@ impl Default for Settings {
             show_line_numbers: false,
             show_git_status: true,
             report_shell_directory: false,
+            junafetch_profile: default_junafetch_profile(),
+            junafetch_logo: default_junafetch_logo(),
             favourite_theme_ids: Vec::new(),
         }
     }
@@ -40,8 +46,21 @@ impl Default for Settings {
 pub fn default_git_status() -> bool {
     true
 }
+pub fn default_junafetch_profile() -> String {
+    "standard".into()
+}
+pub fn default_junafetch_logo() -> String {
+    "compact".into()
+}
 impl Settings {
     pub fn validate(&self) -> Result<(), String> {
+        if !matches!(
+            self.junafetch_profile.as_str(),
+            "brief" | "standard" | "detailed"
+        ) || !matches!(self.junafetch_logo.as_str(), "compact" | "full" | "none")
+        {
+            return Err("Invalid Junafetch preferences".into());
+        }
         let unique: std::collections::BTreeSet<_> = self.favourite_theme_ids.iter().collect();
         if self.favourite_theme_ids.len() > 128
             || unique.len() != self.favourite_theme_ids.len()

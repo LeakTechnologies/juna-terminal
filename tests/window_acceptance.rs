@@ -59,7 +59,7 @@ fn bundled_fetch_runs_in_a_real_window() {
     std::fs::create_dir_all(&folder).unwrap();
     let system = std::path::PathBuf::from(std::env::var_os("WINDIR").unwrap()).join("System32");
     let shell = system.join("WindowsPowerShell/v1.0/powershell.exe");
-    let script = "$a=junafetch --json | ConvertFrom-Json; if ($LASTEXITCODE -ne 0 -or $a.fields.Count -ne 8) { exit 21 }; fetch; if ($LASTEXITCODE -ne 0) { exit 22 }; Write-Output 'BUNDLED_FETCH_OK'; Start-Sleep -Seconds 2";
+    let script = "$a=junafetch --brief --json | ConvertFrom-Json; if ($LASTEXITCODE -ne 0 -or $a.fields.Count -ne 8) { exit 21 }; fetch; if ($LASTEXITCODE -ne 0) { exit 22 }; Write-Output 'BUNDLED_FETCH_OK'; Start-Sleep -Seconds 2";
     let mut child = Command::new(env!("CARGO_BIN_EXE_juna"))
         .arg("--shell")
         .arg(shell)

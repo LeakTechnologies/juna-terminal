@@ -913,7 +913,19 @@ impl App {
         false
     }
     fn open_ui(&mut self, kind: ui::Kind) {
-        if matches!(kind, ui::Kind::Settings | ui::Kind::Fonts) {
+        if kind == ui::Kind::Appearance
+            && self
+                .ui
+                .as_ref()
+                .is_some_and(|ui| ui.kind == ui::Kind::Fonts)
+        {
+            self.settings = self.committed_preferences();
+            self.rebuild_renderer();
+        }
+        if matches!(
+            kind,
+            ui::Kind::Settings | ui::Kind::Appearance | ui::Kind::Fonts
+        ) {
             if self.settings_before.is_none() {
                 self.settings_before = Some(self.settings.clone());
             }
@@ -1533,13 +1545,38 @@ impl App {
                     self.open_ui(Kind::Custom);
                 }
                 Action::Settings => self.open_ui(Kind::Settings),
+                Action::Appearance => self.open_ui(Kind::Appearance),
+                Action::TerminalSettings => self.open_ui(Kind::TerminalSettings),
+                Action::Tools => self.open_ui(Kind::Tools),
+                Action::ImportExport => self.open_ui(Kind::ImportExport),
+                Action::Junafetch => self.open_ui(Kind::Junafetch),
+                Action::FetchProfiles => self.open_ui(Kind::FetchProfiles),
+                Action::FetchArtwork => self.open_ui(Kind::FetchArtwork),
+                Action::FetchProfile(profile) => {
+                    let mut settings = self.committed_preferences();
+                    settings.junafetch_profile = profile;
+                    self.commit_preferences(settings)?;
+                    self.open_ui(Kind::Junafetch);
+                    if let Some(ui) = self.ui.as_mut() {
+                        ui.message = "Saved — applies to next fetch".into();
+                    }
+                }
+                Action::FetchLogo(logo) => {
+                    let mut settings = self.committed_preferences();
+                    settings.junafetch_logo = logo;
+                    self.commit_preferences(settings)?;
+                    self.open_ui(Kind::Junafetch);
+                    if let Some(ui) = self.ui.as_mut() {
+                        ui.message = "Saved — applies to next fetch".into();
+                    }
+                }
                 Action::Fonts => self.open_ui(Kind::Fonts),
                 Action::PickFont(name) => {
                     let mut settings = self.committed_preferences();
                     settings.font_family = name;
                     self.commit_preferences(settings)?;
                     self.rebuild_renderer();
-                    self.open_ui(Kind::Settings);
+                    self.open_ui(Kind::Appearance);
                     if let Some(panel) = self.ui.as_mut() {
                         panel.message = "Font saved".into();
                     }
@@ -1634,7 +1671,7 @@ impl App {
                     )?;
                     self.commit_preferences(settings)?;
                     self.rebuild_renderer();
-                    self.open_ui(Kind::Settings);
+                    self.open_ui(Kind::Appearance);
                     if let Some(ui) = self.ui.as_mut() {
                         let rows = ui.rows(&self.themes, &self.settings);
                         ui.focus_row(index, &rows);
@@ -1647,7 +1684,7 @@ impl App {
                         self.settings = before;
                         self.rebuild_renderer();
                     }
-                    self.open_ui(Kind::Settings);
+                    self.open_ui(Kind::Appearance);
                     if let Some(ui) = self.ui.as_mut() {
                         let rows = ui.rows(&self.themes, &self.settings);
                         ui.focus_row(index, &rows);
@@ -2459,6 +2496,37 @@ pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod option_tests {
+    #[test]
+    fn fetch_profile_choices_persist_and_fonts_return_to_appearance() {
+        let root = std::env::temp_dir().join(crate::settings::new_id());
+        let mut app = App::new(20, 3);
+        app.store = crate::settings::Store::new(root.clone());
+        app.settings = crate::settings::Settings::default();
+        app.open_ui(ui::Kind::Settings);
+        app.ui_action(ui::Action::Tools);
+        app.ui_action(ui::Action::Junafetch);
+        app.ui_action(ui::Action::FetchProfiles);
+        app.ui_action(ui::Action::FetchProfile("brief".into()));
+        app.ui_action(ui::Action::FetchLogo("none".into()));
+        app.close_ui();
+        let saved = app.store.load().0;
+        assert_eq!(saved.junafetch_profile, "brief");
+        assert_eq!(saved.junafetch_logo, "none");
+        app.open_ui(ui::Kind::Appearance);
+        app.ui_action(ui::Action::Fonts);
+        app.ui_action(ui::Action::PickFont("Fira Code".into()));
+        assert_eq!(app.ui.as_ref().unwrap().kind, ui::Kind::Appearance);
+        let mut preview = app.settings.clone();
+        preview.font_family = "JetBrains Mono".into();
+        app.settings = preview;
+        app.rebuild_renderer();
+        app.open_ui(ui::Kind::Fonts);
+        app.ui_action(ui::Action::Appearance);
+        assert_eq!(app.settings.font_family, "Fira Code");
+        app.close_ui();
+        assert_eq!(app.store.load().0.junafetch_profile, "brief");
+        std::fs::remove_dir_all(root).unwrap();
+    }
     use super::*;
     #[test]
     fn editing_panels_ignore_right_click_and_numeric_choices_persist() {

@@ -135,6 +135,15 @@ pub enum Action {
     ToggleGitStatus,
     ToggleDirectoryReporting,
     RefreshGitStatus,
+    Appearance,
+    TerminalSettings,
+    Tools,
+    ImportExport,
+    Junafetch,
+    FetchProfiles,
+    FetchArtwork,
+    FetchProfile(String),
+    FetchLogo(String),
     CloseTargetTab,
     RenameTab,
     SaveTabName,
@@ -170,6 +179,13 @@ pub enum Action {
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
+    Appearance,
+    TerminalSettings,
+    Tools,
+    ImportExport,
+    Junafetch,
+    FetchProfiles,
+    FetchArtwork,
     ImportReview,
     ConfirmClose,
     TabContext,
@@ -483,10 +499,117 @@ impl Ui {
                             )
                         }),
                 );
-                rows.push(row("Back to settings".into(), Action::Settings, None));
+                rows.push(row("Back to appearance".into(), Action::Appearance, None));
                 rows
             }
             Kind::Settings => vec![
+                row("Appearance...".into(), Action::Appearance, None),
+                row("Terminal...".into(), Action::TerminalSettings, None),
+                row("Tools...".into(), Action::Tools, None),
+                row("Import / Export...".into(), Action::ImportExport, None),
+                row("Close".into(), Action::Cancel, None),
+            ],
+            Kind::Tools => vec![
+                row("Junafetch...".into(), Action::Junafetch, None),
+                row("Back to settings".into(), Action::Settings, None),
+            ],
+            Kind::ImportExport => vec![
+                row("Import settings...".into(), Action::ImportSettings, None),
+                row("Export settings...".into(), Action::ExportSettings, None),
+                row("Back to settings".into(), Action::Settings, None),
+            ],
+            Kind::Junafetch => vec![
+                row(
+                    format!("Report: {}...", settings.junafetch_profile),
+                    Action::FetchProfiles,
+                    None,
+                ),
+                row(
+                    format!("Artwork: {}...", settings.junafetch_logo),
+                    Action::FetchArtwork,
+                    None,
+                ),
+                row("Back to tools".into(), Action::Tools, None),
+            ],
+            Kind::FetchProfiles => ["brief", "standard", "detailed"]
+                .into_iter()
+                .map(|name| {
+                    row(
+                        format!(
+                            "[{}] {}",
+                            if settings.junafetch_profile == name {
+                                "x"
+                            } else {
+                                " "
+                            },
+                            match name {
+                                "brief" => "Brief — eight stats",
+                                "standard" => "Standard — grouped report",
+                                _ => "Detailed — additional hardware",
+                            }
+                        ),
+                        Action::FetchProfile(name.into()),
+                        None,
+                    )
+                })
+                .chain([row("Back to Junafetch".into(), Action::Junafetch, None)])
+                .collect(),
+            Kind::FetchArtwork => ["compact", "full", "none"]
+                .into_iter()
+                .map(|name| {
+                    row(
+                        format!(
+                            "[{}] {}",
+                            if settings.junafetch_logo == name {
+                                "x"
+                            } else {
+                                " "
+                            },
+                            name
+                        ),
+                        Action::FetchLogo(name.into()),
+                        None,
+                    )
+                })
+                .chain([row("Back to Junafetch".into(), Action::Junafetch, None)])
+                .collect(),
+            Kind::TerminalSettings => vec![
+                row(
+                    format!(
+                        "[{}] Show line numbers",
+                        if settings.show_line_numbers { "x" } else { " " }
+                    ),
+                    Action::ToggleLineNumbers,
+                    None,
+                ),
+                row(
+                    format!(
+                        "[{}] Show Git status",
+                        if settings.show_git_status { "x" } else { " " }
+                    ),
+                    Action::ToggleGitStatus,
+                    None,
+                ),
+                row(
+                    format!(
+                        "[{}] PowerShell folder (new tabs)",
+                        if settings.report_shell_directory {
+                            "x"
+                        } else {
+                            " "
+                        }
+                    ),
+                    Action::ToggleDirectoryReporting,
+                    None,
+                ),
+                row(
+                    "Refresh local Git status".into(),
+                    Action::RefreshGitStatus,
+                    None,
+                ),
+                row("Back to settings".into(), Action::Settings, None),
+            ],
+            Kind::Appearance => vec![
                 row(
                     format!("Font: {}", settings.font_family),
                     Action::Fonts,
@@ -504,44 +627,7 @@ impl Ui {
                 ),
                 row("Edit theme...".into(), Action::Edit, None),
                 row("Theme selector...".into(), Action::Themes, None),
-                row(
-                    if settings.show_line_numbers {
-                        "[x] Show line numbers"
-                    } else {
-                        "[ ] Show line numbers"
-                    }
-                    .into(),
-                    Action::ToggleLineNumbers,
-                    None,
-                ),
-                row(
-                    format!(
-                        "[{}] Show Git status",
-                        if settings.show_git_status { "x" } else { " " }
-                    ),
-                    Action::ToggleGitStatus,
-                    None,
-                ),
-                row(
-                    format!(
-                        "[{}] PowerShell folder reporting (new tabs)",
-                        if settings.report_shell_directory {
-                            "x"
-                        } else {
-                            " "
-                        }
-                    ),
-                    Action::ToggleDirectoryReporting,
-                    None,
-                ),
-                row(
-                    "Refresh local Git status".into(),
-                    Action::RefreshGitStatus,
-                    None,
-                ),
-                row("Close".into(), Action::Cancel, None),
-                row("Import settings...".into(), Action::ImportSettings, None),
-                row("Export settings...".into(), Action::ExportSettings, None),
+                row("Back to settings".into(), Action::Settings, None),
             ],
             Kind::Editor => {
                 let t = self.draft.as_ref().expect("editor draft");
@@ -765,7 +851,7 @@ impl Ui {
                 return rows.get(self.focus).map(|row| row.action.clone())
             }
             Key::Named(NamedKey::ArrowLeft | NamedKey::ArrowRight)
-                if self.kind == Kind::Settings
+                if self.kind == Kind::Appearance
                     && rows
                         .get(self.focus)
                         .is_some_and(|r| r.action == Action::Setting(1)) =>
@@ -779,10 +865,16 @@ impl Ui {
                 ));
             }
             Key::Named(NamedKey::Escape) => {
-                return Some(if self.kind == Kind::Number {
-                    Action::CancelSetting
-                } else {
-                    Action::Cancel
+                return Some(match self.kind {
+                    Kind::Number => Action::CancelSetting,
+                    Kind::Appearance
+                    | Kind::TerminalSettings
+                    | Kind::Tools
+                    | Kind::ImportExport => Action::Settings,
+                    Kind::Junafetch => Action::Tools,
+                    Kind::FetchProfiles | Kind::FetchArtwork => Action::Junafetch,
+                    Kind::Fonts => Action::Appearance,
+                    _ => Action::Cancel,
                 })
             }
             Key::Named(NamedKey::ArrowDown | NamedKey::Tab) => {
@@ -797,7 +889,7 @@ impl Ui {
             Key::Character(s)
                 if control
                     && s.eq_ignore_ascii_case("s")
-                    && matches!(self.kind, Kind::Settings | Kind::Fonts) =>
+                    && matches!(self.kind, Kind::Settings | Kind::Appearance | Kind::Fonts) =>
             {
                 return Some(Action::SaveSettings);
             }
@@ -917,6 +1009,13 @@ impl Ui {
             Kind::Custom => "Custom themes - live preview",
             Kind::Fonts => "Fonts - live preview",
             Kind::Settings => "Settings - saved automatically",
+            Kind::Appearance => "Appearance - live preview",
+            Kind::TerminalSettings => "Terminal - saved automatically",
+            Kind::Tools => "Tools",
+            Kind::ImportExport => "Import / Export",
+            Kind::Junafetch => "Junafetch - next command",
+            Kind::FetchProfiles => "Junafetch report detail",
+            Kind::FetchArtwork => "Junafetch artwork",
             Kind::Editor => "Custom theme - live preview",
             Kind::Number => {
                 if self.number == Some(1) {
@@ -1014,7 +1113,14 @@ impl Ui {
                     }
                 }
                 Kind::Manage => "Enter selects | Esc closes",
-                Kind::Settings => "Left/Right size | Enter edits | Esc closes",
+                Kind::Appearance => "Left/Right size | Enter edits | Esc back",
+                Kind::Junafetch => "Identity/network hidden | Reveal pending",
+                Kind::Settings
+                | Kind::TerminalSettings
+                | Kind::Tools
+                | Kind::ImportExport
+                | Kind::FetchProfiles
+                | Kind::FetchArtwork => "Enter selects | Esc back",
                 Kind::Fonts => "Search | Enter picks | Esc cancels",
                 Kind::Editor => "Ctrl+S saves | Esc cancels",
                 Kind::Number => "Enter applies | Esc returns",
@@ -1040,6 +1146,37 @@ impl Ui {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn grouped_settings_keep_root_short_and_keyboard_returns_to_parent() {
+        let settings = Settings::default();
+        let rows = Ui::new(Kind::Settings, [0.; 2]).rows(&[], &settings);
+        assert_eq!(rows.len(), 5);
+        assert!(rows.iter().all(|row| !matches!(
+            row.action,
+            Action::ToggleLineNumbers | Action::Setting(_) | Action::FetchProfile(_)
+        )));
+        let mut profiles = Ui::new(Kind::FetchProfiles, [0.; 2]);
+        let rows = profiles.rows(&[], &settings);
+        assert_eq!(
+            profiles.key(&Key::Named(NamedKey::Enter), None, false, &rows),
+            Some(Action::FetchProfile("brief".into()))
+        );
+        assert_eq!(
+            profiles.key(&Key::Named(NamedKey::Escape), None, false, &rows),
+            Some(Action::Junafetch)
+        );
+        let mut tools = Ui::new(Kind::Tools, [0.; 2]);
+        let rows = tools.rows(&[], &settings);
+        assert_eq!(
+            tools.key(&Key::Named(NamedKey::Escape), None, false, &rows),
+            Some(Action::Settings)
+        );
+        let (rect, _, _) = profiles.geometry(1024., 700., 1., 4);
+        assert_eq!(
+            profiles.hit([rect[0] + 16., rect[1] + 40.], 1024., 700., 1., 4),
+            Some(0)
+        );
+    }
     #[test]
     fn wheel_scrolls_viewport_immediately_and_accumulates_pixels() {
         use super::*;
@@ -1123,7 +1260,7 @@ mod tests {
             Action::NewTab | Action::CloseTab | Action::CloseTargetTab | Action::RenameTab
         )));
         assert!(!body.iter().any(|r| r.action == Action::ToggleLineNumbers));
-        assert!(Ui::new(Kind::Settings, [0.; 2])
+        assert!(Ui::new(Kind::TerminalSettings, [0.; 2])
             .rows(&[], &settings)
             .iter()
             .any(|r| r.action == Action::ToggleLineNumbers));
@@ -1145,7 +1282,7 @@ mod tests {
         for bad in ["NaN", "0", "100pt", "invalid"] {
             assert!(numeric_settings(&settings, 1, bad).is_err());
         }
-        let mut ui = Ui::new(Kind::Settings, [0., 0.]);
+        let mut ui = Ui::new(Kind::Appearance, [0., 0.]);
         let rows = ui.rows(&[], &settings);
         ui.focus_row(1, &rows);
         assert_eq!(
@@ -1231,7 +1368,7 @@ mod tests {
         assert!(!rows
             .iter()
             .any(|r| r.action == Action::PickFont("Fira Code".into())));
-        let mut ui = Ui::new(Kind::Settings, [0., 0.]);
+        let mut ui = Ui::new(Kind::Appearance, [0., 0.]);
         let rows = ui.rows(&[], &settings);
         ui.focus_row(1, &rows);
         assert_eq!(

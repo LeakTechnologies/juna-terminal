@@ -1,4 +1,5 @@
 //! Juna-owned lean presentation over the separately maintained Fastfetch detector.
+mod presentation;
 use serde_json::{json, Value};
 use std::{
     io::{self, IsTerminal, Read, Write},
@@ -104,7 +105,26 @@ fn detect(details: bool) -> Result<Value, String> {
     } else {
         json!("Disk")
     };
-    let profile = json!({"modules":["OS","Kernel","CPU","GPU","Memory",disk,"Uptime"]});
+    let mut modules = vec![
+        json!("OS"),
+        json!("Kernel"),
+        json!("CPU"),
+        json!("GPU"),
+        json!("Memory"),
+        disk,
+        json!("Uptime"),
+    ];
+    if details {
+        modules.extend(
+            [
+                "Shell", "Display", "WM", "WMTheme", "Theme", "Icons", "Font", "Cursor",
+                "Terminal", "Swap", "Locale", "Bios", "Board", "Battery",
+            ]
+            .into_iter()
+            .map(|module| json!(module)),
+        );
+    }
+    let profile = json!({"modules":modules});
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|_| "Profile clock unavailable")?
@@ -327,14 +347,26 @@ fn report(data: &Value, details: bool) -> Vec<(String, String)> {
     rows
 }
 fn run() -> Result<(), String> {
-    let mut details = false;
+    use presentation::Profile;
+    use unicode_width::UnicodeWidthStr;
+    let prefs = presentation::preferences();
+    let mut profile = prefs.profile;
+    let mut logo = prefs.logo.clone();
     let mut json_output = false;
     let mut plain = false;
-    let mut logo = "compact".to_string();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
-            "--details" => details = true,
+            "--brief" => profile = Profile::Brief,
+            "--details" => profile = Profile::Detailed,
+            "--profile" => {
+                profile = Profile::parse(
+                    &args
+                        .next()
+                        .ok_or("--profile requires brief, standard or detailed")?,
+                )
+                .ok_or("Use brief, standard or detailed")?
+            }
             "--json" => json_output = true,
             "--plain" => plain = true,
             "--logo" => {
@@ -351,61 +383,85 @@ fn run() -> Result<(), String> {
                 return Ok(());
             }
             "--help" | "-h" => {
-                println!("junafetch / fetch [--details] [--json] [--plain] [--logo compact|full|none]\nLean local stats; no public-IP request or background refresh. Personal/network identifiers are omitted.");
+                println!("junafetch / fetch [--brief | --details | --profile brief|standard|detailed] [--json] [--plain] [--logo compact|full|none]\nGrouped local stats; saved choices apply on each run. Identity/network values stay Hidden; hover reveal is not implemented.");
                 return Ok(());
             }
             _ => return Err("Unknown option; use --help".into()),
         }
     }
-    let rows = report(&detect(details)?, details);
+    let data = detect(profile != Profile::Brief)?;
+    let sections = presentation::sections(&data, profile, &prefs);
     if json_output {
+        let fields: Vec<_> = sections
+            .iter()
+            .flat_map(|section| {
+                section.fields.iter().map(
+                    move |(name, value)| json!({"section":section.name,"name":name,"value":value}),
+                )
+            })
+            .collect();
         println!(
             "{}",
-            json!({"schema_version":1,"fields":rows.iter().map(|(name,value)|json!({"name":name,"value":value})).collect::<Vec<_>>() })
+            json!({"schema_version":2,"profile":profile.name(),"fields":fields})
         );
         return Ok(());
     }
     let terminal = io::stdout().is_terminal();
-    let lines: Vec<_> = if terminal && !plain && logo != "none" {
-        if logo == "full" { FULL } else { COMPACT }
+    let columns = width().max(16);
+    let art: Vec<_> = if terminal && !plain && logo != "none" {
+        (if logo == "full" { FULL } else { COMPACT })
             .trim_end()
             .lines()
             .collect()
     } else {
         Vec::new()
     };
-    let labels = rows.iter().map(|(k, _)| k.len()).max().unwrap_or(0);
-    let formatted: Vec<_> = rows
-        .iter()
-        .map(|(name, value)| format!("{name:labels$} : {value}"))
-        .collect();
-    let logo_width = lines.iter().map(|line| line.len()).max().unwrap_or(0);
-    let side = !lines.is_empty()
-        && width()
-            >= logo_width
-                + 4
-                + formatted
-                    .iter()
-                    .map(|line| line.chars().count())
-                    .max()
-                    .unwrap_or(0);
+    let logo_width = art.iter().map(|line| line.width()).max().unwrap_or(0);
+    let art = if logo_width <= columns {
+        art
+    } else {
+        Vec::new()
+    };
+    let side = !art.is_empty() && columns >= logo_width + 4 + 32;
+    let report_width = if side {
+        columns - logo_width - 4
+    } else {
+        columns
+    };
+    let borders = terminal && !plain && profile != Profile::Brief;
+    let formatted = presentation::lines(&sections, report_width, borders);
+    let colors = terminal && !plain;
+    let colored = |line: &str| {
+        if colors && (line.starts_with('┌') || line.starts_with('└') || line.starts_with('[')) {
+            format!("\x1b[36m{line}\x1b[0m")
+        } else {
+            line.to_owned()
+        }
+    };
     let mut out = io::stdout().lock();
     if side {
-        for index in 0..lines.len().max(formatted.len()) {
-            writeln!(
-                out,
-                "\x1b[32m{:logo_width$}\x1b[0m    {}",
-                lines.get(index).unwrap_or(&""),
-                formatted.get(index).map(String::as_str).unwrap_or("")
-            )
+        for index in 0..art.len().max(formatted.len()) {
+            let logo = art.get(index).copied().unwrap_or("");
+            let pad = " ".repeat(logo_width.saturating_sub(logo.width()));
+            let report = colored(formatted.get(index).map(String::as_str).unwrap_or(""));
+            if colors {
+                writeln!(out, "\x1b[36m{logo}{pad}\x1b[0m    {report}")
+            } else {
+                writeln!(out, "{logo}{pad}    {report}")
+            }
             .map_err(|_| "Output failed")?;
         }
     } else {
-        for line in lines {
-            writeln!(out, "{line}").map_err(|_| "Output failed")?;
+        for line in art {
+            if colors {
+                writeln!(out, "\x1b[36m{line}\x1b[0m")
+            } else {
+                writeln!(out, "{line}")
+            }
+            .map_err(|_| "Output failed")?;
         }
         for line in formatted {
-            writeln!(out, "{line}").map_err(|_| "Output failed")?;
+            writeln!(out, "{}", colored(&line)).map_err(|_| "Output failed")?;
         }
     }
     Ok(())
