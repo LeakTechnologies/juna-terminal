@@ -1,4 +1,114 @@
 #![cfg(windows)]
+fn read_log(folder: &std::path::Path) -> String {
+    let mut logs = std::fs::read_dir(folder.join("Juna/logs"))
+        .unwrap()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "log"))
+        .collect::<Vec<_>>();
+    logs.sort_by_key(|path| std::fs::metadata(path).unwrap().modified().unwrap());
+    std::fs::read_to_string(logs.last().expect("No window log")).unwrap()
+}
+
+#[test]
+#[ignore = "interactive Windows desktop; independent process windows and preferences"]
+fn independent_new_window_preserves_cwd_preferences_and_parent_session() {
+    use std::{
+        process::{Command, Stdio},
+        time::{Duration, Instant},
+    };
+    let folder = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("target/acceptance/new-window")
+        .join(juna::settings::new_id());
+    let reported = folder.join("reported folder 日本語");
+    std::fs::create_dir_all(&reported).unwrap();
+    juna::settings::Store::new(folder.join("Juna"))
+        .save_settings(&juna::settings::Settings {
+            font_family: "Fira Code".into(),
+            font_size: 18.,
+            ..Default::default()
+        })
+        .unwrap();
+    let executable = std::path::Path::new(env!("CARGO_BIN_EXE_juna"));
+    let parent_script = "echo PARENT_WINDOW_OK & ping -n 20 127.0.0.1 >nul & exit /b 0";
+    let mut parent = Command::new(executable)
+        .args(["--shell", "cmd.exe", "--", "/Q", "/C", parent_script])
+        .current_dir(&folder)
+        .env("LOCALAPPDATA", &folder)
+        .env("RUST_LOG", "info")
+        .env("JUNA_ACCEPT_MARKER", "PARENT_WINDOW_OK")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let shell = juna::session::SessionSpec {
+        program: "cmd.exe".into(),
+        args: vec!["/C".into(), "echo REPLAYED_ONE_OFF & exit /b 9".into()],
+        cwd: None,
+        env: vec![],
+    };
+    let mut command =
+        juna::app::new_window::command(executable, &shell, reported.to_str(), &folder).unwrap();
+    command
+        .env("LOCALAPPDATA", &folder)
+        .env("RUST_LOG", "info")
+        .env("JUNA_SHELL_ARGS", "/C exit /b 9")
+        .env("JUNA_ACCEPT_WINDOW_CWD", &reported)
+        .env("JUNA_ACCEPT_WINDOW_FONT", "Fira Code")
+        .env("JUNA_ACCEPT_WINDOW_SIZE", "18")
+        .env("JUNA_ACCEPT_MARKER", "CHILD_WINDOW_OK")
+        .env(
+            "JUNA_ACCEPT_WINDOW_COMMAND",
+            "echo CHILD_WINDOW_OK & ping -n 3 127.0.0.1 >nul & exit /b 0\r",
+        );
+    let mut child = command.spawn().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(40);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        if Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = parent.kill();
+            panic!("New window did not close");
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    assert!(
+        parent.try_wait().unwrap().is_none(),
+        "Closing new window closed the original"
+    );
+    loop {
+        if let Some(status) = parent.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        if Instant::now() > deadline {
+            let _ = parent.kill();
+            panic!("Original window did not finish");
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    let logs = std::fs::read_dir(folder.join("Juna/logs"))
+        .unwrap()
+        .map(|entry| std::fs::read_to_string(entry.unwrap().path()).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(logs.len(), 2);
+    let child = logs
+        .iter()
+        .find(|log| log.contains("Window acceptance"))
+        .unwrap();
+    assert!(
+        child.contains("Window acceptance cwd=true preferences=true"),
+        "{child}"
+    );
+    for log in &logs {
+        assert!(log.contains("Acceptance marker present=true"), "{log}");
+        assert!(log.contains("ExitStatus(0)"), "{log}");
+        assert!(!log.contains("frames=0"), "{log}");
+    }
+}
 #[test]
 #[ignore = "interactive Windows desktop; local Git footer and alternate-screen refit"]
 fn git_status_tracks_reported_folder_and_hides_in_alternate_screen() {
@@ -43,7 +153,7 @@ fn git_status_tracks_reported_folder_and_hides_in_alternate_screen() {
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
-    let log = std::fs::read_to_string(folder.join("Juna/juna.log")).unwrap();
+    let log = read_log(&folder);
     assert!(log.contains("Git acceptance repository=true"), "{log}");
     assert!(log.contains("Git acceptance footer=true"), "{log}");
     assert!(log.contains("Git acceptance footer=false"), "{log}");
@@ -85,7 +195,7 @@ fn bundled_fetch_runs_in_a_real_window() {
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
-    let log = std::fs::read_to_string(folder.join("Juna/juna.log")).unwrap();
+    let log = read_log(&folder);
     assert!(log.contains("Acceptance marker present=true"), "{log}");
     assert!(log.contains("ExitStatus(0)"), "{log}");
     assert!(!log.contains("frames=0"), "{log}");
@@ -117,7 +227,7 @@ fn inactive_tabs_drain_output_and_reap_without_closing_other_tabs() {
         }
         std::thread::sleep(std::time::Duration::from_millis(25));
     }
-    let log = std::fs::read_to_string(folder.join("Juna/juna.log")).unwrap();
+    let log = read_log(&folder);
     assert!(log.contains("count=3"), "{log}");
     assert_eq!(log.matches("marker present=true").count(), 3, "{log}");
     assert_eq!(log.matches("exited").count(), 3, "{log}");
@@ -176,7 +286,7 @@ fn real_window_presents_then_closes_on_shell_exit() {
             }
             std::thread::sleep(Duration::from_millis(25));
         }
-        let log = std::fs::read_to_string(folder.join("Juna/juna.log")).unwrap();
+        let log = read_log(&folder);
         assert!(log.contains("Shell exited:"), "{log}");
         assert!(log.contains("Taskbar relaunch icon configured"), "{log}");
         assert!(log.contains("Taskbar application ID: LeakTechnologies.Juna.Terminal"), "{log}");
@@ -223,7 +333,7 @@ fn options_overlays_keep_shell_output_flowing() {
             }
             std::thread::sleep(Duration::from_millis(25));
         }
-        let log = std::fs::read_to_string(folder.join("Juna/juna.log")).unwrap();
+        let log = read_log(&folder);
         assert!(log.contains("Options panel:"), "{log}");
         assert!(log.contains("Acceptance marker present=true"), "{log}");
         assert!(!log.contains("frames=0"), "{log}");

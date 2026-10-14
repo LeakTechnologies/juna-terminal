@@ -53,6 +53,7 @@ Pass shell arguments after `--`; they retain their individual argument boundarie
 | Middle-click a tab | Confirm Close tab, or Cancel |
 | Rename a tab | Right-click its tab → Rename tab |
 | Line numbers | Settings → Terminal → Show line numbers |
+| New window | Ctrl+Shift+N |
 | Switch tabs | Ctrl+Tab / Ctrl+Shift+Tab or click a tab |
 | Options while a terminal app owns the mouse | Shift+right-click |
 | Copy selection | Ctrl+Shift+C |
@@ -134,4 +135,8 @@ to override saved choices. Personal/network fields remain Hidden; terminal-wide 
 and deliberate hover reveal remain planned work.
 
 See the [roadmap](ROADMAP.md) for tiled terminals, privacy and bundled tools.
+
+Diagnostics are in `%LOCALAPPDATA%\Juna\logs`. Each window has a separate
+`juna-<process ID>-<nonce>.log`; match the process ID in Task Manager or sort by modification
+time to find recent logs. Log retention is currently manual.
 

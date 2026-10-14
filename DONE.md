@@ -187,3 +187,17 @@ frames, marker present and exit 0. Human input/other-machine review remain outst
 Shell versions may be unavailable; actual IP masking/reveal is not shipped. Dev8 hosted
 Windows/Linux checks and independently downloaded checksum/version/seven-icon checks passed.
 Dev9 hosted publication still requires verification after push.
+
+## Dev10 independent windows
+
+Implemented the approved Ctrl+Shift+N design: absolute direct launch, configured interactive
+shell, reported local folder with launch-folder fallback, preserved argument boundaries and
+no replay of one-off/inherited shell arguments. Editing panels, IME, Alt/AltGr and repeat do
+not activate the shortcut. Separate create-new diagnostic files prevent cross-window truncation.
+Verified locally: cargo check, strict all-target Clippy and all 213 standard tests passed.
+The controlled desktop test used the same launch constructor as the shortcut: reported Unicode
+cwd and saved Fira Code/18px preferences matched, two independent windows presented frames and
+exited cleanly, and the original remained running after the new window closed. The explicit
+three-tab concurrent-output/reaping test also passed with the new log paths. Physical shortcut
+input and other-machine acceptance remain human checks. No process backend/dependency changed.
+Dev9 and dev10 hosted checks/assets must be verified before claiming publication.

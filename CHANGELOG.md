@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1-dev10 — independent terminal windows
+
+- Add Ctrl+Shift+N for a new independent window in the reported folder or launch folder.
+- Start the configured shell interactively without repeating one-off commands.
+- Keep logs separate per window under the Juna logs directory.
+
 ## 0.1.1-dev9 — grouped Junafetch and settings
 
 - Expand Junafetch into named sections covering the demonstrated Fastfetch categories.

@@ -3,6 +3,8 @@ mod clipboard;
 mod git_status;
 pub mod gutter;
 mod input;
+#[doc(hidden)]
+pub mod new_window;
 mod runtime;
 mod settings_files;
 mod shell_reporting;
@@ -415,6 +417,31 @@ impl App {
             return false;
         }
         if let WindowEvent::KeyboardInput { event, .. } = event {
+            if event.state == ElementState::Pressed
+                && !self.ime
+                && new_window::shortcut(&event.logical_key, self.modifiers)
+            {
+                if !event.repeat && !self.closing_all {
+                    let result = (|| -> Result<(), std::io::Error> {
+                        let shell = self
+                            .shell_spec
+                            .as_ref()
+                            .ok_or_else(|| std::io::Error::other("Shell unavailable"))?;
+                        let executable = std::env::current_exe()?;
+                        let launch = std::env::current_dir()?;
+                        let cwd = self.terminal.working_directory().1;
+                        new_window::command(&executable, shell, cwd, &launch)?.spawn()?;
+                        Ok(())
+                    })();
+                    if result.is_err() {
+                        log::warn!("New window launch failed");
+                        clipboard::error_dialog("Could not open a new Juna window. Check that the application and launch folder are still available.");
+                    } else {
+                        log::info!("Opened independent Juna window");
+                    }
+                }
+                return true;
+            }
             if event.state == ElementState::Pressed
                 && !self.ime
                 && self.modifiers.control_key()
@@ -2017,6 +2044,24 @@ impl ApplicationHandler for App {
                 .map_err(|e| e.to_string())?,
             );
             #[cfg(debug_assertions)]
+            if let Ok(command) = std::env::var("JUNA_ACCEPT_WINDOW_COMMAND") {
+                let cwd_ok = std::env::var_os("JUNA_ACCEPT_WINDOW_CWD")
+                    .map(std::path::PathBuf::from)
+                    .is_some_and(|expected| {
+                        std::env::current_dir().ok().as_ref() == Some(&expected)
+                    });
+                let preferences_ok = std::env::var("JUNA_ACCEPT_WINDOW_FONT").ok().as_ref()
+                    == Some(&self.settings.font_family)
+                    && std::env::var("JUNA_ACCEPT_WINDOW_SIZE")
+                        .ok()
+                        .and_then(|v| v.parse::<f32>().ok())
+                        == Some(self.settings.font_size);
+                log::info!("Window acceptance cwd={cwd_ok} preferences={preferences_ok}");
+                if command.len() <= 8192 {
+                    self.send(command.as_bytes());
+                }
+            }
+            #[cfg(debug_assertions)]
             if let Ok(count) = std::env::var("JUNA_STARTUP_TABS") {
                 let count = count.parse::<usize>().unwrap_or(1).clamp(1, 16);
                 for _ in 1..count {
@@ -2469,16 +2514,16 @@ pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(std::env::temp_dir)
         .join("Juna");
     std::fs::create_dir_all(&path)?;
-    let log = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(path.join("juna.log"))?;
+    let (log_path, log) = new_window::diagnostic_file(&path)?;
     let mut builder =
         env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"));
     builder
         .target(env_logger::Target::Pipe(Box::new(log)))
         .try_init()?;
+    log::info!(
+        "Diagnostic file: {}",
+        log_path.file_name().unwrap_or_default().to_string_lossy()
+    );
     #[cfg(windows)]
     log::info!("Taskbar application ID: {APP_ID}");
     if let Err(error) = std::fs::write(path.join("font-licenses.txt"), crate::fonts::notices()) {

@@ -1361,6 +1361,18 @@ for the same pinned launcher-payload hash check. Native Fastfetch 2.69.0 detecto
 the separately maintained fork; script/image/codec capabilities excluded by the lean build are
 not claimed. This cycle delivers eight safe local stats, width-aware art and JSON/plain output;
 interactive protected-value reveal and terminal-wide privacy remain a separate unshipped cycle.
+## 2026-10-13 — independent windows
+
+The approved Ctrl+Shift+N shortcut uses a direct absolute current-executable launch and
+separate argument values, without invoking a shell to launch Juna. Pass --shell and an empty
+-- argument list to avoid replaying one-off arguments or inherited JUNA_SHELL_ARGS. Prefer
+validated reported local cwd, fall back to the application launch folder, and reject nonlocal
+or relative launch folders. Alt/AltGr, Super, IME composition, repeat and editing-panel ownership
+prevent accidental activation. Processes load the normal saved preferences independently.
+Logs move to Juna/logs/juna-<pid>-<nonce>.log with create-new semantics; a new window cannot
+truncate another's diagnostic file. The startup record identifies its filename. No dependency
+was added and no mutable engine/runtime state is shared. Log retention remains manual.
+
 ## 2026-10-13 — grouped Junafetch presentation
 
 The approved expanded report constructs safe fields from bounded native detector modules;

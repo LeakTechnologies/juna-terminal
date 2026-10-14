@@ -1,5 +1,11 @@
 # Juna Terminal Engine — Architecture & Interface Specification
 
+Ctrl+Shift+N launches the current absolute application executable as an independent process,
+with the configured shell and an empty interactive argument vector. Validated reported cwd
+is preferred over the launch folder; neither engine nor runtime objects cross this boundary.
+Each process reads saved settings and owns its sessions and an exclusive diagnostic log.
+Closing one window does not request cleanup of another window's sessions.
+
 Local Git metadata is an app-owned, bounded worker, separate from process transport and engine
 state. The original VT engine validates OSC 7 local-file URI metadata without I/O. Active-tab
 folder/generation values cross the worker boundary; owned reports return to the UI thread and

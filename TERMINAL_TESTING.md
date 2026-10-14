@@ -23,7 +23,7 @@ Shift+right-click opens Juna's menu when a TUI owns mouse input.
 Multiline unbracketed paste sends line endings to the shell, so use clipboard content you intend
 to execute. Bracketed-paste-aware programs receive the matching start/end delimiters.
 
-Diagnostics are written to `%LOCALAPPDATA%\Juna\juna.log`; startup/session failure also displays
+Diagnostics are written to `%LOCALAPPDATA%\Juna\logs\juna-<pid>-<nonce>.log`; startup/session failure also displays
 a Windows error dialog. `RUST_LOG=info` includes adapter, presentation and lifecycle evidence.
 The latest launch replaces that log; copy it before starting another diagnostic run.
 
@@ -64,7 +64,7 @@ They do not use shell prompt matching or inject operating-system keystrokes.
 The GPU test compares row pixels before and after editing the next row and captures
 `target\acceptance\render.ppm`. The window test opens the actual winit application separately
 with cmd and PowerShell, verifies presented frames and real exit codes, and writes isolated logs
-under `target\acceptance\<shell>\Juna\juna.log`. These are synthetic test data, not user sessions.
+under `target\acceptance\<shell>\Juna\logs`. These are synthetic test data, not user sessions.
 
 ## Verification matrix
 
