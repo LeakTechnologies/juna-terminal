@@ -25,6 +25,12 @@ This first privacy delivery protects Junafetch's structured fields. The separate
 terminal-wide recognizer remains a subsequent stage; arbitrary Fastfetch/command output is
 not claimed protected by this implementation. No raw-secret fallback is permitted.
 
+Dev14 also uses the authenticated broker for `action: "update"` with a validated stable/preview
+channel. Its empty-array acknowledgement confirms queueing, not installation. Application-side
+handling checks the originating tab is live, then enters the normal verified update/Cancel-first
+confirmation flow. Unknown actions and invalid capabilities/channels are rejected. No command
+request may confirm installation; the CLI also verifies the host uses the same executable.
+
 Current-user ACLs use read-only token identity queries, without impersonation or privilege
 changes. Windows security/pipes/file/overlapped-I/O features serve this concrete requirement;
 no new crate or async runtime is needed. References: Microsoft named-pipe security and

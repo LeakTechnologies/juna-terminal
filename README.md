@@ -140,6 +140,15 @@ automatic masking of arbitrary Fastfetch and other terminal output remains plann
 
 See the [roadmap](ROADMAP.md) for tiled terminals, privacy and bundled tools.
 
+Check for updates with `juna --check-update`, or download a verified update with
+`juna --update`. Both use your saved update channel; add `--channel stable` or
+`--channel preview` for a temporary override. Inside Juna, installation is confirmed
+in the hosting window before its sessions close. Outside Juna, installation requires
+an interactive yes/no answer and other Juna windows must be closed. `juna --help`
+lists the commands. Juna adds itself to its own sessions' PATH only. In a portable
+folder outside Juna, use `./juna.exe`; PowerShell can wait for text output with
+`./juna.exe --check-update | Out-Host`. Checks open no terminal window.
+
 Diagnostics are in `%LOCALAPPDATA%\Juna\logs`. Each window has a separate
 `juna-<process ID>-<nonce>.log`; match the process ID in Task Manager or sort by modification
 time to find recent logs. Log retention is currently manual.

@@ -20,7 +20,13 @@
 /// diagnostics requirements in `DECISIONS.md` 5 explicitly reject.
 #[cfg(all(windows, not(debug_assertions)))]
 fn attach_parent_console() {
-    use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+    use windows::Win32::{
+        Storage::FileSystem::{GetFileType, FILE_TYPE_UNKNOWN},
+        System::Console::{
+            AttachConsole, GetStdHandle, SetStdHandle, ATTACH_PARENT_PROCESS, STD_ERROR_HANDLE,
+            STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+        },
+    };
 
     // SAFETY: `AttachConsole` takes no pointers or buffers and imposes no
     // preconditions beyond the process not already owning a console, which is
@@ -28,7 +34,21 @@ fn attach_parent_console() {
     // expected and benign when the parent has no console (launched from
     // Explorer), so the result is deliberately discarded.
     unsafe {
+        // Preserve caller-owned redirection: attaching a console must not replace valid pipe/file handles.
+        let saved = [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE].map(|kind| {
+            (
+                kind,
+                GetStdHandle(kind).ok().filter(|handle| {
+                    !handle.is_invalid() && GetFileType(*handle) != FILE_TYPE_UNKNOWN
+                }),
+            )
+        });
         let _ = AttachConsole(ATTACH_PARENT_PROCESS);
+        for (kind, handle) in saved {
+            if let Some(handle) = handle {
+                let _ = SetStdHandle(kind, handle);
+            }
+        }
     }
 }
 
@@ -37,6 +57,23 @@ fn attach_parent_console() {}
 
 fn main() {
     attach_parent_console();
+    match juna::updates::cli::parse(std::env::args_os().skip(1)) {
+        Ok(Some(action)) => {
+            let code = match juna::updates::cli::run(action) {
+                Ok(()) => 0,
+                Err(error) => {
+                    eprintln!("juna: {error}");
+                    1
+                }
+            };
+            std::process::exit(code);
+        }
+        Err(error) => {
+            eprintln!("juna: {error}");
+            std::process::exit(2);
+        }
+        Ok(None) => {}
+    }
     if let Some(busy) = juna::updates::helper::installation_state() {
         if busy {
             eprintln!("Juna update is in progress; please wait for the automatic restart.");

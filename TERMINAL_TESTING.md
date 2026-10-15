@@ -1,5 +1,23 @@
 # Testing the repaired terminal
 
+## Dev14 evidence (2026-10-15)
+
+Required check/strict all-target Clippy and all 234 standard tests passed. Six explicit GPU
+tests passed. Actual GitHub CLI checks exercised saved Stable and temporary Preview selection,
+no newer release results, unchanged preference bytes and absence of window logs/staging.
+Debug and production GUI-subsystem executables passed redirected help/errors/check output.
+Real-window tests passed external rejection while the executable is in use, then authenticated
+in-window --update handoff, correct channel and unchanged saved preferences in both builds.
+Verified-download acceptance enters a Cancel-first confirmation without closing sessions.
+Wrong capabilities are rejected by the local command protocol.
+
+The shared helper passed a real locked-file update/restart rehearsal with matching native
+identity and preserved settings/themes; actual GitHub download/staging passed too. These
+exercise the shared installer, not a complete interactive external CLI installation to a
+newer published candidate, which is unavailable during this release's current-version test.
+That user journey and stable acceptance remain follow-up validation. CLI accepts only y/yes,
+defaults to cancellation, bounds the answer, and refuses noninteractive installation input.
+
 ## Dev13 evidence (2026-10-15)
 
 Check and strict all-target Clippy passed; all 231 standard tests and seven Junafetch frontend

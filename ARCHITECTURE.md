@@ -989,3 +989,11 @@ Application-owned committed snapshots keep privacy redraws outside synchronized 
 the renderer receives an owned read-only snapshot and a separately owned temporary reveal overlay.
 The broker blocks on I/O/stop events rather than periodic idle polling. See
 JUNAFETCH_PRIVACY_PROTOCOL.md for bounds and the intentionally narrower first-delivery scope.
+
+The same current-user broker accepts bounded authenticated update requests with a channel,
+not permission to install. CLI checks reuse the I/O worker without creating a renderer or
+session. Host-window update requests enter the existing UI verification/confirmation flow;
+only confirmation invokes session teardown and the helper. Outside Juna the CLI requires
+interactive confirmation and uses that same helper transaction. Process-image/window preflight
+and parent-console redirection remain app/platform concerns. The engine receives no commands
+or update state and its byte transport is unchanged.

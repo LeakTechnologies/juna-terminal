@@ -1,5 +1,20 @@
 # Juna — Decision Register
 
+## 2026-10-15 — command-line updates
+
+Approved CLI_UPDATE_DESIGN.md adds --check-update and --update, optional temporary channel
+selection and --help. Reuse the existing verified release worker and transactional installer.
+Checks use no GPU/session. External installation requires interactive default-No confirmation;
+matching-executable Juna windows must close before handoff. Enumerate fixed-title Juna windows
+and verify their query-only process image paths; existing replacement retries/rollback remain.
+Current-user authenticated IPC gains an update request carrying a validated channel, without
+installation authority. The hosting window verifies/downloads and presents its existing
+Cancel-first confirmation. A request never terminates sessions or approves installation.
+Verify the host process uses the same executable before sending the request. Channel overrides
+are displayed separately and do not alter saved preferences. Add the application directory only
+to child-session PATH. Preserve redirected pipe/file standard handles across parent-console
+attachment. These use existing Windows platform features; no dependency or VT-engine change.
+
 ## 2026-10-12 — application title and Fastfetch
 
 Keep the native window title fixed as Juna Terminal; preserve OSC titles in engine metadata.

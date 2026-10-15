@@ -1,4 +1,64 @@
 #![cfg(windows)]
+#[test]
+#[ignore = "Windows desktop/network; authenticated CLI update handoff preserves the host and saved channel"]
+fn command_line_update_handoff_preserves_the_host_and_preferences() {
+    use std::{
+        process::{Command, Stdio},
+        time::{Duration, Instant},
+    };
+    let root = std::env::temp_dir().join(juna::settings::new_id());
+    let store = juna::settings::Store::new(root.join("Juna"));
+    store
+        .save_settings(&juna::settings::Settings {
+            update_channel: "preview".into(),
+            ..Default::default()
+        })
+        .unwrap();
+    let before = std::fs::read(store.directory.join("settings.json")).unwrap();
+    let shell = std::path::PathBuf::from(std::env::var_os("WINDIR").unwrap())
+        .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+    let script = r#"$i=New-Object Diagnostics.ProcessStartInfo; $i.FileName=(Get-Command juna -ErrorAction Stop).Source; $i.Arguments='--update --channel stable'; $i.UseShellExecute=$false; $i.RedirectStandardOutput=$true; $i.RedirectStandardError=$true; $i.EnvironmentVariables.Remove('JUNA_PRIVACY_SERVER'); $p=[Diagnostics.Process]::Start($i); $o=$p.StandardOutput.ReadToEnd(); $e=$p.StandardError.ReadToEnd(); $p.WaitForExit(); if($p.ExitCode -ne 1 -or $e -notlike '*Close other Juna windows*'){exit 30}; $i.EnvironmentVariables['JUNA_PRIVACY_SERVER']=$env:JUNA_PRIVACY_SERVER; $p=[Diagnostics.Process]::Start($i); $o=$p.StandardOutput.ReadToEnd(); $e=$p.StandardError.ReadToEnd(); $p.WaitForExit(); if($p.ExitCode -ne 0 -or $o -notlike '*request sent*'){exit 31}; [IO.File]::WriteAllText($env:JUNA_CLI_HANDOFF_FILE,'CLI_HANDOFF_OK'); Write-Output 'CLI_HANDOFF_OK'; Start-Sleep -Seconds 4; exit 0"#;
+    let executable = std::env::var_os("JUNA_CLI_ACCEPTANCE_EXE")
+        .unwrap_or_else(|| env!("CARGO_BIN_EXE_juna").into());
+    let marker = root.join("handoff-result.txt");
+    let mut child = Command::new(executable)
+        .arg("--shell")
+        .arg(shell)
+        .args(["--", "-NoProfile", "-Command", script])
+        .env("LOCALAPPDATA", &root)
+        .env("RUST_LOG", "info")
+        .env("JUNA_ACCEPT_MARKER", "CLI_HANDOFF_OK")
+        .env("JUNA_CLI_HANDOFF_FILE", &marker)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    let start = Instant::now();
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        if start.elapsed() > Duration::from_secs(45) {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("CLI handoff window did not exit");
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    let log = read_log(&root);
+    assert!(
+        log.contains("Authenticated command-line update request accepted; channel=stable"),
+        "{log}"
+    );
+    assert_eq!(std::fs::read_to_string(marker).unwrap(), "CLI_HANDOFF_OK");
+    assert!(log.contains("ExitStatus(0)"), "{log}");
+    assert_eq!(
+        std::fs::read(store.directory.join("settings.json")).unwrap(),
+        before
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
 fn read_log(folder: &std::path::Path) -> String {
     let mut logs = std::fs::read_dir(folder.join("Juna/logs"))
         .unwrap()

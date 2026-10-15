@@ -132,9 +132,42 @@ pub struct App {
     privacy_broker: Option<crate::privacy::ipc::Broker>,
     privacy_reveal: crate::privacy::view::Reveal,
     privacy_dirty: bool,
+    command_update_pending: bool,
+    command_update_channel: Option<String>,
     last_update_receipt: Instant,
 }
 impl App {
+    fn accept_downloaded_update(&mut self, stage: crate::updates::Staged) {
+        self.update_stage = Some(stage);
+        self.update_message = "Checksum, version and source verified".into();
+        if std::mem::take(&mut self.command_update_pending) {
+            self.open_ui(ui::Kind::ConfirmUpdate);
+        }
+    }
+    fn command_update(&mut self, channel: String) {
+        if self.update_worker.is_some() || self.closing_all {
+            return;
+        }
+        log::info!("Authenticated command-line update request accepted; channel={channel}");
+        self.command_update_channel = Some(channel.clone());
+        self.open_ui(ui::Kind::Updates);
+        let discard = self.update_stage.take().map(|stage| stage.root);
+        self.update_candidate = None;
+        self.command_update_pending = true;
+        if let Err(error) = self.start_update_task(
+            crate::updates::Task::Check {
+                channel,
+                current: env!("CARGO_PKG_VERSION").into(),
+                directory: self.store.directory.clone(),
+                discard,
+            },
+            "Command-line update: checking GitHub...",
+        ) {
+            self.command_update_pending = false;
+            self.update_message = error;
+            self.refresh_update_panel();
+        }
+    }
     fn start_update_task(
         &mut self,
         task: crate::updates::Task,
@@ -153,6 +186,9 @@ impl App {
     fn refresh_update_panel(&mut self) {
         if let Some(ui) = self.ui.as_mut().filter(|ui| ui.kind == ui::Kind::Updates) {
             ui.summary = vec![format!("Installed: v{}", env!("CARGO_PKG_VERSION"))];
+            if let Some(channel) = self.command_update_channel.as_ref() {
+                ui.summary.push(format!("Command channel: {channel}"));
+            }
             if let Some(candidate) = self.update_candidate.as_ref() {
                 ui.summary
                     .push(format!("Available: v{}", candidate.version));
@@ -205,6 +241,7 @@ impl App {
         if let Some(result) = result {
             self.update_worker.take();
             if self.update_cancelled {
+                self.command_update_pending = false;
                 let root = match result {
                     Ok(crate::updates::Outcome::Downloaded(stage)) => Some(stage.root),
                     Ok(crate::updates::Outcome::Prepared(plan)) => {
@@ -236,10 +273,15 @@ impl App {
                         }
                         .into();
                         self.update_candidate = candidate;
+                        if std::mem::take(&mut self.command_update_pending)
+                            && self.update_candidate.is_some()
+                        {
+                            self.command_update_pending = true;
+                            self.ui_action(ui::Action::DownloadUpdate);
+                        }
                     }
                     Ok(crate::updates::Outcome::Downloaded(stage)) => {
-                        self.update_stage = Some(stage);
-                        self.update_message = "Checksum, version and source verified".into();
+                        self.accept_downloaded_update(stage);
                     }
                     Ok(crate::updates::Outcome::Prepared(path)) => {
                         match crate::updates::helper::launch(&path) {
@@ -252,7 +294,10 @@ impl App {
                             Err(error) => self.update_message = error,
                         }
                     }
-                    Err(error) => self.update_message = error,
+                    Err(error) => {
+                        self.command_update_pending = false;
+                        self.update_message = error;
+                    }
                 }
             }
             self.refresh_update_panel();
@@ -410,6 +455,8 @@ impl App {
             privacy_broker: None,
             privacy_reveal: Default::default(),
             privacy_dirty: false,
+            command_update_pending: false,
+            command_update_channel: None,
             last_update_receipt: Instant::now(),
         }
     }
@@ -1807,6 +1854,8 @@ impl App {
                 }
                 Action::Updates => self.open_ui(Kind::Updates),
                 Action::UpdateChannel(channel) => {
+                    self.command_update_channel = None;
+                    self.command_update_pending = false;
                     if self.update_worker.is_some() {
                         return Err("Cancel or finish the current operation first".into());
                     }
@@ -1829,6 +1878,8 @@ impl App {
                     self.refresh_update_panel();
                 }
                 Action::CheckUpdate => {
+                    self.command_update_channel = None;
+                    self.command_update_pending = false;
                     if self.update_worker.is_some() {
                         return Err("Wait for the current operation or cancel it first".into());
                     }
@@ -1872,6 +1923,11 @@ impl App {
                     self.open_ui(Kind::ConfirmUpdate);
                 }
                 Action::ConfirmUpdate => {
+                    let executable =
+                        std::env::current_exe().map_err(|_| "Installed executable unavailable")?;
+                    if crate::updates::cli::installation_in_use(&executable)? {
+                        return Err("Close other Juna windows before installing this update".into());
+                    }
                     let stage = self
                         .update_stage
                         .clone()
@@ -1900,6 +1956,7 @@ impl App {
                     )?;
                 }
                 Action::CancelUpdate => {
+                    self.command_update_pending = false;
                     if let Some(worker) = self.update_worker.as_ref() {
                         worker
                             .cancel
@@ -2981,6 +3038,21 @@ mod option_tests {
         assert!(!app.closing_all);
         assert!(app.update_worker.is_none());
         app.ui_action(ui::Action::UpdateChannel("stable".into()));
+        assert_eq!(app.store.load().0.update_channel, "stable");
+        app.command_update_pending = true;
+        app.command_update_channel = Some("preview".into());
+        app.accept_downloaded_update(crate::updates::Staged {
+            version: "0.1.1-dev999".into(),
+            commit: "0".repeat(40),
+            exe_hash: "0".repeat(64),
+            root: root.join("unopened-fixture"),
+        });
+        assert_eq!(app.ui.as_ref().unwrap().kind, ui::Kind::ConfirmUpdate);
+        assert_eq!(app.ui.as_ref().unwrap().focus, 1);
+        assert!(!app.closing_all);
+        assert!(app.update_worker.is_none());
+        assert_eq!(app.settings.update_channel, "stable");
+        assert_eq!(app.terminal.snapshot(0).cells, cells);
         assert_eq!(app.store.load().0.update_channel, "stable");
         assert_eq!(app.terminal.snapshot(0).cells, cells);
         app.open_ui(ui::Kind::ConfirmUpdate);

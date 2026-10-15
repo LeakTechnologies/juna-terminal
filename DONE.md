@@ -1,3 +1,21 @@
+## Dev14 command-line updates
+
+Implemented --check-update, --update, temporary channel overrides and --help under the approved
+CLI_UPDATE_DESIGN.md. Checks are window-free; in-terminal installs use authenticated host
+handoff and the existing Cancel-first confirmation. External installs require interactive
+confirmation. Matching-executable window preflight and preserved redirected standard handles
+support portable use without system PATH/profile changes. No dependency or engine change.
+
+Verified this session: check, strict all-target Clippy and all 234 standard tests; six GPU
+tests; actual GitHub checks with saved/temporary channels; debug and release help/error output;
+and real-window external rejection followed by authenticated handoff, with byte-identical
+preferences. The shared installer passed locked-file replacement/restart and preserved settings
+and custom themes; actual published-release staging also passed. The new fixture initially
+asserted its baseline before saving it; corrected fixture ordering passed without relaxing
+application checks. A complete CLI yes-to-newer-release user journey still needs a subsequent
+newer published candidate; current checks correctly report no newer release. Stable/human
+acceptance remains separate.
+
 ## Dev13 protected Junafetch fields
 
 Implemented authenticated current-user local IPC, shaded `░░░░░` cells, per-tab bounded

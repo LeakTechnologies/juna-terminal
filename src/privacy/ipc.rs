@@ -9,6 +9,7 @@ use std::{
 pub struct Report {
     pub tab: u64,
     pub fields: Vec<(String, String)>,
+    pub update_channel: Option<String>,
 }
 pub struct Broker {
     pub path: String,
@@ -291,6 +292,32 @@ fn receive(
         .iter()
         .find_map(|(tab, cap)| constant_equal(token.as_bytes(), cap.as_bytes()).then_some(*tab))
         .ok_or("Privacy capability rejected")?;
+    if value["action"] == "update" {
+        let channel = value["channel"]
+            .as_str()
+            .filter(|s| matches!(*s, "stable" | "preview"))
+            .ok_or("Invalid update channel")?;
+        sender
+            .try_send(Report {
+                tab,
+                fields: Vec::new(),
+                update_channel: Some(channel.into()),
+            })
+            .map_err(|_| "Command receiver busy")?;
+        let response = b"[]";
+        pipe.write_all(&(response.len() as u32).to_le_bytes(), Some(stop), deadline)?;
+        pipe.write_all(response, Some(stop), deadline)?;
+        let mut acknowledged = [0];
+        pipe.read_exact(&mut acknowledged, Some(stop), deadline)?;
+        return if acknowledged == [1] {
+            Ok(())
+        } else {
+            Err("Invalid acknowledgement".into())
+        };
+    }
+    if !value["action"].is_null() {
+        return Err("Unsupported local command".into());
+    }
     let values = value["fields"]
         .as_array()
         .filter(|v| !v.is_empty() && v.len() <= MAX_FIELDS)
@@ -307,7 +334,11 @@ fn receive(
         ids.push(id);
     }
     sender
-        .try_send(Report { tab, fields })
+        .try_send(Report {
+            tab,
+            fields,
+            update_channel: None,
+        })
         .map_err(|_| "Privacy receiver busy")?;
     let response = serde_json::to_vec(&ids).map_err(|_| "Cannot encode privacy acknowledgement")?;
     pipe.write_all(&(response.len() as u32).to_le_bytes(), Some(stop), deadline)?;

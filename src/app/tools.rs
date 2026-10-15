@@ -56,6 +56,12 @@ pub fn prepare(directory: &Path, shell: &OsString) -> Result<Vec<(OsString, OsSt
     install(&folder.join("junafetch.exe"), FRONTEND)?;
     install(&folder.join("fetch.exe"), FRONTEND)?;
     let mut paths = vec![folder];
+    if let Some(directory) = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(Path::to_path_buf))
+    {
+        paths.push(directory);
+    }
     if let Some(path) = std::env::var_os("PATH") {
         paths.extend(std::env::split_paths(&path));
     }

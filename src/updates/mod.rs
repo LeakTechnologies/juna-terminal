@@ -1,5 +1,6 @@
 //! Owned update metadata and bounded I/O work, entirely outside terminal state/transport.
 pub mod archive;
+pub mod cli;
 pub mod helper;
 mod http;
 pub mod version;

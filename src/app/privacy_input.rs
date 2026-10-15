@@ -27,6 +27,16 @@ impl App {
             else {
                 break;
             };
+            if let Some(channel) = report.update_channel {
+                if self.tabs.iter().any(|tab| {
+                    tab.id == report.tab && !tab.saved.as_ref().is_some_and(|saved| saved.closing)
+                }) && !self.active_closing
+                    && !self.closing_all
+                {
+                    self.command_update(channel);
+                }
+                continue;
+            }
             if let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == report.tab) {
                 if !tab.saved.as_ref().is_some_and(|saved| saved.closing) {
                     tab.privacy.accept(report.fields);

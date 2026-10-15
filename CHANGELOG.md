@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1-dev14 — command-line updates
+
+- Add --check-update, --update, temporary --channel stable/preview, and --help.
+- Reuse verified GitHub downloads and the existing installer, rollback and restart.
+- Hand in-terminal requests to the authenticated hosting window for Cancel-first confirmation.
+- Require interactive confirmation externally and check for other windows using the executable.
+- Add Juna to its own child-session PATH and preserve redirected command output.
+
 ## 0.1.1-dev13 — protected Junafetch fields
 
 - Replace sensitive-field placeholders with five shaded cells and deliberate Shift+hover reveal.
