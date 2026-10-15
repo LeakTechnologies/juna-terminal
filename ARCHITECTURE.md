@@ -978,3 +978,14 @@ the next mutable atlas access, retains foreground instance capacity and reuses e
 results for adjacent equal colour pairs. It still consumes an owned read-only engine snapshot.
 The engine's BEL counter is pure metadata; inactive-tab indication timestamps and animation
 belong to the application and do not infer child-command completion.
+
+Protected Junafetch fields use a window-owned, current-user local IPC broker and per-tab
+random capabilities. Actual values live in bounded application memory; the VT byte stream
+contains only shaded cells and opaque 128-bit tokens. Juna's private OSC 777
+`JunaPrivate;<32-hex-token>` / `JunaPrivate;0` annotations select a bounded engine token-table
+entry. Four-byte cell metadata follows ordinary movement, erasure and reflow without growing
+the existing cell storage size. The engine performs no IPC and never receives protected values.
+Application-owned committed snapshots keep privacy redraws outside synchronized partial output;
+the renderer receives an owned read-only snapshot and a separately owned temporary reveal overlay.
+The broker blocks on I/O/stop events rather than periodic idle polling. See
+JUNAFETCH_PRIVACY_PROTOCOL.md for bounds and the intentionally narrower first-delivery scope.

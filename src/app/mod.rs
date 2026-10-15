@@ -5,6 +5,7 @@ pub mod gutter;
 mod input;
 #[doc(hidden)]
 pub mod new_window;
+mod privacy_input;
 mod runtime;
 mod settings_files;
 mod shell_reporting;
@@ -128,6 +129,9 @@ pub struct App {
     update_cancelled: bool,
     update_progress: u64,
     update_receipt_until: Option<Instant>,
+    privacy_broker: Option<crate::privacy::ipc::Broker>,
+    privacy_reveal: crate::privacy::view::Reveal,
+    privacy_dirty: bool,
     last_update_receipt: Instant,
 }
 impl App {
@@ -381,6 +385,7 @@ impl App {
                 saved: None,
                 git: git_status::View::new(None),
                 attention: None,
+                privacy: Default::default(),
             }],
             active_tab: 0,
             next_tab_id: 2,
@@ -402,6 +407,9 @@ impl App {
             update_cancelled: false,
             update_progress: 0,
             update_receipt_until: Some(Instant::now() + Duration::from_secs(40)),
+            privacy_broker: None,
+            privacy_reveal: Default::default(),
+            privacy_dirty: false,
             last_update_receipt: Instant::now(),
         }
     }
@@ -416,6 +424,8 @@ impl App {
         }
     }
     fn restore_session(&mut self, index: usize) {
+        self.privacy_reveal.hide();
+        self.privacy_dirty = true;
         let state = self.tabs[index]
             .saved
             .take()
@@ -472,6 +482,7 @@ impl App {
         if self.tabs.len() >= 16 {
             return Err("Close a tab before opening more (limit 16)".into());
         }
+        let spec = self.privacy_environment(spec, self.next_tab_id);
         let spec = shell_reporting::prepare(spec, self.settings.report_shell_directory);
         let runtime = Runtime::spawn(
             &spec,
@@ -492,6 +503,7 @@ impl App {
             saved: None,
             git: git_status::View::new(spec.cwd.clone().or_else(|| std::env::current_dir().ok())),
             attention: None,
+            privacy: Default::default(),
         });
         self.active_tab = self.tabs.len() - 1;
         self.terminal = TerminalState::new(self.cols, self.rows);
@@ -508,6 +520,11 @@ impl App {
         Ok(())
     }
     fn close_tab(&mut self) {
+        self.privacy_reveal.hide();
+        self.privacy_dirty = true;
+        if let Some(broker) = self.privacy_broker.as_ref() {
+            broker.unregister(self.tabs[self.active_tab].id);
+        }
         self.close_ui();
         self.active_closing = true;
         if let Some(runtime) = self.runtime.as_mut() {
@@ -516,6 +533,13 @@ impl App {
         self.dirty = true;
     }
     fn close_all_tabs(&mut self) {
+        self.privacy_reveal.hide();
+        self.privacy_dirty = true;
+        if let Some(broker) = self.privacy_broker.as_ref() {
+            for tab in &self.tabs {
+                broker.unregister(tab.id);
+            }
+        }
         self.closing_all = true;
         self.active_closing = true;
         if let Some(runtime) = self.runtime.as_mut() {
@@ -848,14 +872,22 @@ impl App {
             return;
         }
         let selection_theme = self.active_theme();
-        let selection_top = self.history_start();
+        self.tabs[self.active_tab]
+            .privacy
+            .update(&self.terminal, self.offset);
+        let mut snapshot = self.tabs[self.active_tab]
+            .privacy
+            .snapshot()
+            .unwrap()
+            .clone();
+        let selection_top = self.tabs[self.active_tab].privacy.top();
         let show_numbers = !self.terminal.alternate_active();
         let Some(g) = self.gpu.as_ref() else { return };
+        let (w, h) = (g.config.width, g.config.height);
+        let privacy_scene = self.privacy_overlay(w, h);
         let Some(renderer) = self.renderer.as_mut() else {
             return;
         };
-        let (w, h) = (g.config.width, g.config.height);
-        let mut snapshot = self.terminal.snapshot(self.offset);
         if !self.focused {
             snapshot.cursor_style = 4;
         }
@@ -933,11 +965,15 @@ impl App {
             let scene = ui.scene(&rows, w as f32, h as f32, self.scale);
             renderer.overlay(&scene);
         }
+        if let Some(scene) = privacy_scene.as_ref() {
+            renderer.overlay(scene);
+        }
         match g.render(renderer.clear_color(), |device, queue, pass| {
             renderer.draw(device, queue, w, h, pass)
         }) {
             Ok(true) => {
                 self.dirty = false;
+                self.privacy_dirty = false;
                 self.frames += 1;
                 if self.frames == 1
                     && self.update_receipt_until.is_some()
@@ -1118,6 +1154,8 @@ impl App {
         false
     }
     fn open_ui(&mut self, kind: ui::Kind) {
+        self.privacy_reveal.hide();
+        self.privacy_dirty = true;
         if kind == ui::Kind::Appearance
             && self
                 .ui
@@ -1758,6 +1796,15 @@ impl App {
                 }
                 Action::Settings => self.open_ui(Kind::Settings),
                 Action::Appearance => self.open_ui(Kind::Appearance),
+                Action::Privacy => self.open_ui(Kind::Privacy),
+                Action::PrivacyMode(mode) => {
+                    let mut settings = self.committed_preferences();
+                    settings.privacy_mode = mode;
+                    settings.validate()?;
+                    self.commit_preferences(settings)?;
+                    self.privacy_reveal.hide();
+                    self.privacy_dirty = true;
+                }
                 Action::Updates => self.open_ui(Kind::Updates),
                 Action::UpdateChannel(channel) => {
                     if self.update_worker.is_some() {
@@ -2324,6 +2371,11 @@ impl ApplicationHandler for App {
                     None
                 }
             };
+            self.privacy_broker = crate::privacy::ipc::Broker::new().ok();
+            if self.privacy_broker.is_none() {
+                log::warn!("Protected fetch transport unavailable; values remain masked");
+            }
+            let spec = self.privacy_environment(spec, self.tabs[self.active_tab].id);
             let spec = shell_reporting::prepare(spec, self.settings.report_shell_directory);
             self.runtime = Some(
                 Runtime::spawn(
@@ -2380,6 +2432,7 @@ impl ApplicationHandler for App {
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + FRAME));
     }
     fn window_event(&mut self, _event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        self.privacy_event(&event);
         if self.tab_controls(&event) {
             return;
         }
@@ -2639,6 +2692,7 @@ impl ApplicationHandler for App {
         }
     }
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.poll_privacy();
         self.poll_updates();
         self.poll_settings_files();
         self.refresh_themes();
@@ -2698,6 +2752,9 @@ impl ApplicationHandler for App {
             }
         }
         for index in inactive_done.into_iter().rev() {
+            if let Some(broker) = self.privacy_broker.as_ref() {
+                broker.unregister(self.tabs[index].id);
+            }
             self.tabs.remove(index);
             if index < self.active_tab {
                 self.active_tab -= 1;
@@ -2750,6 +2807,9 @@ impl ApplicationHandler for App {
             }
         }
         if active_done && !self.tabs.is_empty() {
+            if let Some(broker) = self.privacy_broker.as_ref() {
+                broker.unregister(self.tabs[self.active_tab].id);
+            }
             self.tabs.remove(self.active_tab);
             if self.tabs.is_empty() {
                 self.runtime.take();
@@ -2771,6 +2831,11 @@ impl ApplicationHandler for App {
         if !sync {
             self.last_sync = Instant::now();
         }
+        if sync && self.last_sync.elapsed() > Duration::from_secs(1) {
+            self.tabs[self.active_tab]
+                .privacy
+                .commit_timeout(&self.terminal, self.offset);
+        }
         let now = Instant::now();
         if self.tabs.iter().any(|t| {
             t.attention.is_some_and(|at| {
@@ -2781,7 +2846,7 @@ impl ApplicationHandler for App {
         }
         if self.dirty
             && !self.minimized
-            && (!sync || self.last_sync.elapsed() > Duration::from_secs(1))
+            && (!sync || self.privacy_dirty || self.last_sync.elapsed() > Duration::from_secs(1))
         {
             if let Some(w) = self.window.as_ref() {
                 w.request_redraw();
@@ -2852,6 +2917,57 @@ pub fn update_error_dialog(message: &str) {
 
 #[cfg(test)]
 mod option_tests {
+    #[test]
+    fn protected_fields_use_real_input_gestures_and_copy_only_shaded_cells() {
+        let root = std::env::temp_dir().join(crate::settings::new_id());
+        let mut app = App::new(20, 3);
+        app.store = crate::settings::Store::new(root.clone());
+        app.settings = crate::settings::Settings::default();
+        let token = "0123456789abcdef0123456789abcdef";
+        app.terminal.advance(
+            format!("\x1b]777;JunaPrivate;{token}\x1b\\░░░░░\x1b]777;JunaPrivate;0\x1b\\")
+                .as_bytes(),
+        );
+        app.tabs[0]
+            .privacy
+            .accept(vec![(token.into(), "192.0.2.55".into())]);
+        app.pointer_px = [PAD + 5., PAD + ui::TAB_HEIGHT + 5.];
+        let moved = WindowEvent::CursorMoved {
+            device_id: winit::event::DeviceId::dummy(),
+            position: winit::dpi::PhysicalPosition::new(
+                app.pointer_px[0] as f64,
+                app.pointer_px[1] as f64,
+            ),
+        };
+        app.privacy_event(&moved);
+        assert!(app.privacy_overlay(800, 600).is_none());
+        app.privacy_event(&WindowEvent::ModifiersChanged(ModifiersState::SHIFT.into()));
+        assert!(app.privacy_overlay(800, 600).is_none());
+        app.privacy_event(&moved);
+        assert!(app
+            .privacy_overlay(800, 600)
+            .unwrap()
+            .text
+            .iter()
+            .any(|text| text.value == "192.0.2.55"));
+        app.selection = Some(((0, 1), (0, 3)));
+        assert_eq!(app.selection_text(), "░░░");
+        app.terminal.advance(b"\x1b[?2026h\rchanged");
+        app.privacy_event(&WindowEvent::ModifiersChanged(
+            ModifiersState::empty().into(),
+        ));
+        assert!(app.privacy_overlay(800, 600).is_none());
+        assert!(app.privacy_dirty);
+        app.open_ui(ui::Kind::Privacy);
+        app.ui_action(ui::Action::PrivacyMode("hover".into()));
+        assert_eq!(app.store.load().0.privacy_mode, "hover");
+        app.close_ui();
+        app.privacy_event(&moved);
+        assert!(app.privacy_overlay(800, 600).is_some());
+        app.privacy_event(&WindowEvent::Focused(false));
+        assert!(app.privacy_overlay(800, 600).is_none());
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn updater_channel_persists_and_install_requires_a_verified_candidate() {
         let root = std::env::temp_dir().join(crate::settings::new_id());
@@ -3040,6 +3156,7 @@ mod option_tests {
             label: "Second".into(),
             git: git_status::View::new(None),
             attention: None,
+            privacy: Default::default(),
             saved: Some(tabs::SavedSession {
                 terminal: TerminalState::new(20, 3),
                 runtime: None,
@@ -3085,6 +3202,7 @@ mod option_tests {
             git: git_status::View::new(None),
             label: "Second".into(),
             attention: None,
+            privacy: Default::default(),
             saved: Some(tabs::SavedSession {
                 terminal: second,
                 runtime: None,

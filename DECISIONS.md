@@ -1361,6 +1361,22 @@ for the same pinned launcher-payload hash check. Native Fastfetch 2.69.0 detecto
 the separately maintained fork; script/image/codec capabilities excluded by the lean build are
 not claimed. This cycle delivers eight safe local stats, width-aware art and JSON/plain output;
 interactive protected-value reveal and terminal-wide privacy remain a separate unshipped cycle.
+## 2026-10-15 — protected Junafetch fields
+
+Implement the previously approved Junafetch/terminal privacy designs' structured-field stage,
+with five shaded cells and deliberate Shift+hover reveal. JUNAFETCH_PRIVACY_PROTOCOL.md records
+the private annotation, tab capabilities and bounded current-user local IPC. Add Windows
+Security_Authorization, Storage_FileSystem, System_Pipes and System_IO features for a current-user
+DACL, remote-rejecting named pipe and cancellable overlapped operations. Identity queries are
+read-only; there is no impersonation, privilege adjustment, new crate or async runtime.
+Values remain outside PTY output/VT/history/normal copies. General terminal-wide recognition
+remains a subsequent approved stage and is not claimed by this structured-field delivery.
+Confirmed by the cell-storage regression guard: the new metadata fits within the existing
+48-byte cell ceiling. Broker I/O waits on completion/stop events; it adds no periodic idle
+polling. An application-owned cached viewport supports immediate hiding during synchronized
+output; values are never put in engine snapshots. The enlarged settings import message is
+boxed rather than increasing the worker-result enum for every empty/export result.
+
 ## 2026-10-15 — measured redraw preparation
 
 Existing inactive-tab attention work is included in this validation pass: the pure engine

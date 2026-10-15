@@ -1,5 +1,21 @@
 # Testing the repaired terminal
 
+## Dev13 evidence (2026-10-15)
+
+Check and strict all-target Clippy passed; all 231 standard tests and seven Junafetch frontend
+tests passed. Explicit GPU tests: six passed, including shaded protected fields and a temporary
+reveal overlay. Removing the overlay restores byte-identical masked pixels without changing
+engine cells. Captures: target/acceptance/privacy-hidden.png, privacy-revealed.png and
+privacy-menu-right.png; these contain only a synthetic RFC documentation IP address.
+
+Input-event tests verify Shift alone does not reveal, movement after Shift does, modifier
+release/focus loss hide, and copied selections contain shades. IPC tests cover authentication,
+wrong server identity, repeated messages, revoked tab capabilities and cancellation on shutdown.
+The extended real ConPTY bundled-fetch test verifies emitted opaque tags and absence of protected
+values in captured PTY output. The real-window bundled-fetch test also passed. The cell-storage
+regression guard passed at the existing 48-byte ceiling. Physical mouse/keyboard use, other
+machines and arbitrary-output privacy recognition remain unverified or unimplemented as stated.
+
 ## Dev12 evidence (2026-10-15)
 
 Required check/strict Clippy and all 224 standard tests passed. All five explicit GPU tests

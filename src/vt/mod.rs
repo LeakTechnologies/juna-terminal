@@ -83,6 +83,10 @@ pub struct TerminalState {
     modes: InputModes,
     cursor_style: u16,
     responses: Vec<u8>,
+    revision: u64,
+    private_tag: u32,
+    private_tokens: Vec<std::sync::Arc<str>>,
+    private_lookup: std::collections::HashMap<String, u32>,
     /// Monotonic count of BEL (0x07) bytes. The engine surfaces the signal; it
     /// never produces sound or UI. Consumers diff successive reads.
     bell_count: u64,
@@ -120,6 +124,10 @@ impl TerminalState {
             modes: InputModes::default(),
             cursor_style: 0,
             responses: Vec::new(),
+            revision: 0,
+            private_tag: 0,
+            private_tokens: Vec::new(),
+            private_lookup: std::collections::HashMap::new(),
             bell_count: 0,
             saved_rendition: None,
             last_print: None,
@@ -169,7 +177,16 @@ impl TerminalState {
     pub fn bell_count(&self) -> u64 {
         self.bell_count
     }
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+    pub fn private_token(&self, tag: u32) -> Option<&str> {
+        tag.checked_sub(1)
+            .and_then(|index| self.private_tokens.get(index as usize))
+            .map(|token| token.as_ref())
+    }
     pub fn finish(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
         for action in self.parser.flush() {
             self.apply(action, &mut SnapshotDelta::default());
             self.collect_history();
@@ -246,6 +263,7 @@ impl TerminalState {
     }
 
     pub fn resize(&mut self, cols: u16, rows: u16) -> SnapshotDelta {
+        self.revision = self.revision.wrapping_add(1);
         let cols = cols.clamp(1, MAX_COLS);
         let rows = rows.clamp(1, MAX_ROWS);
         self.scrollback.set_cols(cols);
@@ -260,6 +278,7 @@ impl TerminalState {
     }
 
     pub fn advance(&mut self, bytes: &[u8]) -> SnapshotDelta {
+        let revision = self.revision;
         let actions = self.parser.advance(bytes);
         let mut delta = SnapshotDelta::default();
         for a in actions {
@@ -272,6 +291,7 @@ impl TerminalState {
         delta.wrap_pending = self.grid().wrap_pending;
         delta.alternate = self.alternate_active();
         if !bytes.is_empty() {
+            self.revision = revision.wrapping_add(1);
             delta.damage = vec![Damage::Full];
         }
         delta
@@ -347,6 +367,7 @@ impl TerminalState {
             fg: self.fg,
             bg: self.bg,
             attrs: self.attrs,
+            private_tag: self.private_tag,
             ..Default::default()
         };
 
@@ -544,6 +565,25 @@ impl TerminalState {
             "7" => {
                 self.cwd = cwd::local_path(text);
                 self.cwd_revision = self.cwd_revision.wrapping_add(1);
+            }
+            "777" => {
+                if let Some(token) = text.strip_prefix("JunaPrivate;") {
+                    self.private_tag = 0;
+                    if token.len() == 32
+                        && token
+                            .bytes()
+                            .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+                    {
+                        if let Some(tag) = self.private_lookup.get(token) {
+                            self.private_tag = *tag;
+                        } else if self.private_tokens.len() < 4096 {
+                            self.private_tokens.push(std::sync::Arc::from(token));
+                            self.private_tag = self.private_tokens.len() as u32;
+                            self.private_lookup
+                                .insert(token.to_owned(), self.private_tag);
+                        }
+                    }
+                }
             }
             _ => {}
         }

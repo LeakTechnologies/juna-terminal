@@ -1,6 +1,6 @@
 [package]
 name = "juna"
-version = "0.1.1-dev12"
+version = "0.1.1-dev13"
 edition = "2021"
 rust-version = "1.97"
 description = "A terminal emulator with an original VT engine"
@@ -58,6 +58,11 @@ features = [
     # Approved updater: synchronous HTTPS on its bounded I/O worker and parent-exit wait.
     "Win32_Networking_WinHttp",
     "Win32_System_Threading",
+    # Approved Junafetch privacy: current-user ACLs and cancellable local named pipes.
+    "Win32_Security_Authorization",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Pipes",
+    "Win32_System_IO",
 ]
 
 # Windows-only. conpty-oxide carries `compile_error!` under `cfg(not(windows))`,

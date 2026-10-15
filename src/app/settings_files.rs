@@ -5,7 +5,7 @@ use std::{
     sync::{mpsc, Arc},
 };
 pub enum Outcome {
-    Imported(Bundle),
+    Imported(Box<Bundle>),
     Exported,
 }
 pub type ResultChannel = mpsc::Receiver<Result<Option<Outcome>, String>>;
@@ -36,7 +36,7 @@ pub fn start(
                     bundle.export(&path)?;
                     Ok(Some(Outcome::Exported))
                 } else {
-                    Ok(Some(Outcome::Imported(Bundle::read(&path)?)))
+                    Ok(Some(Outcome::Imported(Box::new(Bundle::read(&path)?))))
                 }
             })();
             let _ = tx.send(result);

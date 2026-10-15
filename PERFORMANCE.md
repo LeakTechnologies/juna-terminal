@@ -1,5 +1,20 @@
 # Performance evidence
 
+## Dev13 privacy regression probe (2026-10-15)
+
+Repeated the isolated-window probe against the published dev12 executable and the dev13
+release build: three runs each, Consolas 16px, no-profile PowerShell, fresh app caches and
+Git footer off. No compilation ran during measurements. Sanitized raw reports are in
+`docs/performance/dev13` and identify both executable hashes.
+
+Median parent CPU for 4,096,000 bytes was 3.516 seconds in both builds. Launch-to-exit medians
+were 6.032 and 5.886 seconds respectively; this small sample does not establish a speedup.
+Median idle private memory was 433.9 versus 433.5 MiB; median sampled idle CPU was zero in
+both builds over approximately three seconds. One dev12 idle sample recorded 93.75 ms.
+The privacy broker adds no periodic I/O wakeup and protected metadata fits within the existing
+48-byte cell ceiling. These results show no evident regression in this limited desktop probe;
+they do not resolve high memory use, bulk-output cost, laptop performance or battery behaviour.
+
 ## 2026-10-15 desktop baseline
 
 Windows 11 build 26200, 12 logical processors, NVIDIA RTX 3060/Vulkan for Juna.

@@ -108,6 +108,8 @@ pub struct Cell {
     pub fg: Color,
     pub bg: Color,
     pub attrs: Attrs,
+    /// Opaque protected-field annotation, never a secret value. Zero means none.
+    pub private_tag: u32,
     pub underline_color: Option<Color>,
 }
 
@@ -118,6 +120,7 @@ impl Cell {
             fg: Color::Default,
             bg,
             attrs,
+            private_tag: 0,
             underline_color: None,
         }
     }

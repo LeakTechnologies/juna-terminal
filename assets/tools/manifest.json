@@ -6,15 +6,17 @@
   "upstream_commit": "0c3b852bf7bad2837a814c7a31bf332092048a2b",
   "target": "x86_64-pc-windows-gnu",
   "detector_sha256": "b83449bcf22d57970ef6509063ff79ce044534445e578f34a8ebd22f897e969d",
-  "frontend_version": "0.2.0",
-  "frontend_sha256": "671c2d93c62dc354aac0079912d9c9e57c07b5d19e5d24120617b37d80fbb0c2",
+  "frontend_version": "0.3.0",
+  "frontend_sha256": "40b6ccd0660b561c6fb5dc2b282d8e96f3c476760dd43c5a5e920811124043be",
   "source_hashes": {
-    "tools/junafetch/Cargo.toml": "ba9f44944c40c0d0ccd4556bf2514244c325d1a46643e6c0721e4af474ed5604",
-    "tools/junafetch/Cargo.lock": "5498b7f942834179b5a25bf8468ca7a6f9807328b17d2ab39d870e625a9a425e",
-    "tools/junafetch/src/main.rs": "84e0f4fc3fbdfb8b333f080b8461c8bf38e00b4bc6395b9a558fa05739967268",
+    "tools/junafetch/Cargo.toml": "20287f34e88f2676dfbcff5c342562743a6b2897f7b94b366ee6c2800c94da4d",
+    "tools/junafetch/Cargo.lock": "e011e1d377ea0b0a3f591765d82b9773306ac802efc811fce10ba4c93508184b",
+    "tools/junafetch/src/main.rs": "29a88f712cbbd36f8a942a41be20af235aefbf24d24e7b2747998924e5a78f8c",
     "tools/junafetch/assets/logo-compact.txt": "f8da196c13df738d4334e4e5c0696053614c212b8cdc54fd25f41b4a4d454dae",
     "tools/junafetch/assets/logo-full.txt": "7104c0d5246d12e121c0f9a826847e34b7df39a5919ae73cb04abe00e1eddf8e",
-    "tools/junafetch/src/presentation.rs": "37e884769f7cfd8b658620fc9b86b38bdafd789de0fa908d9a728cfe57256fb8"
+    "tools/junafetch/src/presentation.rs": "74a6ace0b0c94e5140a8f0bc72dded432acab4a466ae5eb61984ed770f826043",
+    "tools/junafetch/src/privacy.rs": "fe4b139e41e6d2a6afa7cdd441ae5bfa70ebc11aa29e01804128a88cac7d579d",
+    "src/privacy/wire.rs": "be5ea6d2428aae75e2018e7850af1727c4d4bd5f36e0968c7519f0da83918849"
   },
   "native_features": {
     "image_protocols": false,

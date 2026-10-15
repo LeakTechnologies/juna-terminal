@@ -1,3 +1,18 @@
+## Dev13 protected Junafetch fields
+
+Implemented authenticated current-user local IPC, shaded `░░░░░` cells, per-tab bounded
+value storage, deliberate Shift+hover reveal and saved Privacy controls. Copies remain masked;
+plain/JSON output is masked unless the user explicitly disables censorship. General terminal
+recognition remains open. No additional crate, async runtime or borrowed engine was added.
+
+Verified in this session: check, strict all-target Clippy, 231 standard tests, seven frontend
+tests, bundled frontend/source hashes, all six explicit GPU tests and real-window bundled
+fetch. The extended ConPTY integration also verifies that protected values never enter its
+captured output. GPU captures show five shaded cells and an RFC documentation-address popup;
+hiding restores identical pixels. Engine cell storage stays at or below its existing 48 bytes.
+Physical input and other-machine acceptance remain outstanding. High memory/bulk-output
+performance remains open; this cycle does not claim new laptop performance results.
+
 ## Dev12 verified updater and measured redraw preparation
 
 Settings → Updates provides manual Stable/Preview checks, verified GitHub Release downloads

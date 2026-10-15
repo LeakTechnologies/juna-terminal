@@ -29,6 +29,8 @@ pub struct PortableSettings {
     junafetch_logo: String,
     #[serde(default = "crate::settings::default_update_channel")]
     update_channel: String,
+    #[serde(default = "crate::settings::default_privacy_mode")]
+    privacy_mode: String,
     #[serde(default)]
     favourite_theme_ids: Vec<String>,
 }
@@ -45,6 +47,7 @@ impl From<&Settings> for PortableSettings {
             junafetch_profile: s.junafetch_profile.clone(),
             junafetch_logo: s.junafetch_logo.clone(),
             update_channel: s.update_channel.clone(),
+            privacy_mode: s.privacy_mode.clone(),
             favourite_theme_ids: s.favourite_theme_ids.clone(),
         }
     }
@@ -62,6 +65,7 @@ impl PortableSettings {
             junafetch_profile: self.junafetch_profile.clone(),
             junafetch_logo: self.junafetch_logo.clone(),
             update_channel: self.update_channel.clone(),
+            privacy_mode: self.privacy_mode.clone(),
             favourite_theme_ids: self.favourite_theme_ids.clone(),
             ..Default::default()
         }

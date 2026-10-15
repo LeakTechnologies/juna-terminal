@@ -20,6 +20,7 @@ pub struct Tab {
     /// since. The timestamp drives the flash animation; the flag itself drives
     /// the settled accent colour, cleared when the tab becomes active.
     pub attention: Option<std::time::Instant>,
+    pub privacy: crate::privacy::view::TabPrivacy,
 }
 pub fn label(spec: &crate::session::SessionSpec) -> String {
     let name = std::path::Path::new(&spec.program)

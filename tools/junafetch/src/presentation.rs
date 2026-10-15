@@ -27,6 +27,7 @@ impl Profile {
     }
 }
 pub struct Preferences {
+    pub privacy_mode: String,
     pub profile: Profile,
     pub logo: String,
     pub theme: String,
@@ -35,6 +36,7 @@ pub struct Preferences {
 impl Default for Preferences {
     fn default() -> Self {
         Self {
+            privacy_mode: "shift-hover".into(),
             profile: Profile::Standard,
             logo: "compact".into(),
             theme: "catppuccin-mocha".into(),
@@ -94,6 +96,11 @@ fn decode_preferences(value: &Value) -> Option<Preferences> {
         return None;
     }
     Some(Preferences {
+        privacy_mode: value["privacy_mode"]
+            .as_str()
+            .filter(|mode| matches!(*mode, "shift-hover" | "hover" | "always-hidden" | "off"))
+            .unwrap_or("shift-hover")
+            .into(),
         profile,
         logo: logo.into(),
         theme: theme.into(),
@@ -157,7 +164,7 @@ pub fn sections(data: &Value, profile: Profile, prefs: &Preferences) -> Vec<Sect
                     .map(super::clean)
                     .unwrap_or_else(|| "Unavailable".into()),
             ),
-            row("Identity", "Hidden".into()),
+            row("Identity", crate::privacy::MASK.into()),
         ],
     };
     let cpu = result(data, "CPU");
@@ -416,8 +423,8 @@ pub fn sections(data: &Value, profile: Profile, prefs: &Preferences) -> Vec<Sect
     let network = Section {
         name: "Network",
         fields: vec![
-            row("Local IP", "Hidden".into()),
-            row("MAC", "Hidden".into()),
+            row("Local IP", crate::privacy::MASK.into()),
+            row("MAC", crate::privacy::MASK.into()),
         ],
     };
     vec![system, hardware, storage, desktop, session, network]
@@ -514,7 +521,7 @@ mod tests {
         );
         let output = super::lines(&sections, 48, true).join("\n");
         assert!(!output.contains("SECRET"));
-        assert!(output.contains("Hidden"));
+        assert!(output.contains(crate::privacy::MASK));
         assert!(output.contains("NTFS"));
         assert_eq!(
             super::sections(&data, super::Profile::Brief, &Default::default())[0]

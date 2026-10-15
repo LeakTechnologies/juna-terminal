@@ -24,6 +24,8 @@ pub struct Settings {
     pub junafetch_logo: String,
     #[serde(default = "default_update_channel")]
     pub update_channel: String,
+    #[serde(default = "default_privacy_mode")]
+    pub privacy_mode: String,
     #[serde(default)]
     pub favourite_theme_ids: Vec<String>,
 }
@@ -41,9 +43,13 @@ impl Default for Settings {
             junafetch_profile: default_junafetch_profile(),
             junafetch_logo: default_junafetch_logo(),
             update_channel: default_update_channel(),
+            privacy_mode: default_privacy_mode(),
             favourite_theme_ids: Vec::new(),
         }
     }
+}
+pub fn default_privacy_mode() -> String {
+    "shift-hover".into()
 }
 pub fn default_git_status() -> bool {
     true
@@ -64,6 +70,12 @@ pub fn default_junafetch_logo() -> String {
 }
 impl Settings {
     pub fn validate(&self) -> Result<(), String> {
+        if !matches!(
+            self.privacy_mode.as_str(),
+            "shift-hover" | "hover" | "always-hidden" | "off"
+        ) {
+            return Err("Invalid privacy mode".into());
+        }
         if !matches!(self.update_channel.as_str(), "stable" | "preview") {
             return Err("Invalid update channel".into());
         }

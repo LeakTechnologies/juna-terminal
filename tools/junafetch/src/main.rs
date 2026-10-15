@@ -1,5 +1,6 @@
 //! Juna-owned lean presentation over the separately maintained Fastfetch detector.
 mod presentation;
+mod privacy;
 use serde_json::{json, Value};
 use std::{
     io::{self, IsTerminal, Read, Write},
@@ -115,6 +116,7 @@ fn detect(details: bool) -> Result<Value, String> {
         json!("Uptime"),
     ];
     if details {
+        modules.push(json!({"type":"LocalIp", "showIpv4":true, "showIpv6":true, "showMac":true}));
         modules.extend(
             [
                 "Shell", "Display", "WM", "WMTheme", "Theme", "Icons", "Font", "Cursor",
@@ -354,6 +356,7 @@ fn run() -> Result<(), String> {
     let mut logo = prefs.logo.clone();
     let mut json_output = false;
     let mut plain = false;
+    let mut privacy_mode = prefs.privacy_mode.clone();
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -383,14 +386,33 @@ fn run() -> Result<(), String> {
                 return Ok(());
             }
             "--help" | "-h" => {
-                println!("junafetch / fetch [--brief | --details | --profile brief|standard|detailed] [--json] [--plain] [--logo compact|full|none]\nGrouped local stats; saved choices apply on each run. Identity/network values stay Hidden; hover reveal is not implemented.");
+                println!("junafetch / fetch [--brief | --details | --profile brief|standard|detailed] [--json] [--plain] [--logo compact|full|none] [--privacy shift-hover|hover|always-hidden|off]\nGrouped local stats; saved choices apply on each run. Protected fields use shaded masks. Juna defaults to deliberate Shift+hover reveal; plain/JSON output stays masked unless censorship is explicitly off.");
                 return Ok(());
+            }
+            "--privacy" => {
+                privacy_mode = args
+                    .next()
+                    .filter(|mode| {
+                        matches!(
+                            mode.as_str(),
+                            "shift-hover" | "hover" | "always-hidden" | "off"
+                        )
+                    })
+                    .ok_or("Invalid privacy mode")?;
             }
             _ => return Err("Unknown option; use --help".into()),
         }
     }
     let data = detect(profile != Profile::Brief)?;
-    let sections = presentation::sections(&data, profile, &prefs);
+    let mut sections = presentation::sections(&data, profile, &prefs);
+    let terminal = io::stdout().is_terminal();
+    let values = privacy::values(&data);
+    let protected = privacy::prepare(
+        &mut sections,
+        &values,
+        &privacy_mode,
+        terminal && !plain && !json_output,
+    );
     if json_output {
         let fields: Vec<_> = sections
             .iter()
@@ -400,13 +422,15 @@ fn run() -> Result<(), String> {
                 )
             })
             .collect();
+        // Keep mask characters readable to older PowerShell JSON pipelines as well as UTF-8 consumers.
         println!(
             "{}",
             json!({"schema_version":2,"profile":profile.name(),"fields":fields})
+                .to_string()
+                .replace('░', "\\u2591")
         );
         return Ok(());
     }
-    let terminal = io::stdout().is_terminal();
     let columns = width().max(16);
     let art: Vec<_> = if terminal && !plain && logo != "none" {
         (if logo == "full" { FULL } else { COMPACT })
@@ -432,10 +456,11 @@ fn run() -> Result<(), String> {
     let formatted = presentation::lines(&sections, report_width, borders);
     let colors = terminal && !plain;
     let colored = |line: &str| {
+        let annotated = privacy::annotate(line, &protected);
         if colors && (line.starts_with('┌') || line.starts_with('└') || line.starts_with('[')) {
-            format!("\x1b[36m{line}\x1b[0m")
+            format!("\x1b[36m{annotated}\x1b[0m")
         } else {
-            line.to_owned()
+            annotated
         }
     };
     let mut out = io::stdout().lock();

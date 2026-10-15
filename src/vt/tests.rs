@@ -42,6 +42,31 @@ fn bel_increments_the_bell_count_without_touching_the_grid() {
 }
 
 #[test]
+fn protected_metadata_follows_cells_without_increasing_cell_storage() {
+    assert!(std::mem::size_of::<Cell>() <= 48);
+    let token = "0123456789abcdef0123456789abcdef";
+    let mut s = state(4, 2);
+    let bytes = format!("\x1b]777;JunaPrivate;{token}\x1b\\░░░░░\x1b]777;JunaPrivate;0\x1b\\");
+    for byte in bytes.as_bytes() {
+        s.advance(&[*byte]);
+    }
+    let tag = s.grid().cell(0, 0).unwrap().private_tag;
+    assert_ne!(tag, 0);
+    assert_eq!(s.private_token(tag), Some(token));
+    assert_eq!(s.grid().cell(1, 0).unwrap().private_tag, tag);
+    s.advance(b"\r\n\r\n");
+    assert_eq!(s.scrollback_line(0).unwrap()[0].private_tag, tag);
+    s.resize(8, 2);
+    assert_eq!(s.scrollback_line(0).unwrap()[0].private_tag, tag);
+    s.advance(b"\x1b[H\x1b[2J");
+    assert!(s.snapshot(0).cells.iter().all(|cell| cell.private_tag == 0));
+    let responses = s.take_responses();
+    s.advance(b"\x1b]777;JunaPrivate;not-a-valid-token\x1b\\X");
+    assert_eq!(s.grid().cell(0, 0).unwrap().private_tag, 0);
+    assert_eq!(s.take_responses(), responses);
+}
+
+#[test]
 fn crlf_moves_to_the_next_row_column_zero() {
     let mut s = state(20, 5);
     s.advance(b"ab\r\ncd");

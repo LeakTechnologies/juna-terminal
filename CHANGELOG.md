@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1-dev13 — protected Junafetch fields
+
+- Replace sensitive-field placeholders with five shaded cells and deliberate Shift+hover reveal.
+- Keep protected values outside terminal output, scrollback and copied text using authenticated local IPC.
+- Add saved Privacy settings for deliberate reveal, ordinary hover and explicit censorship opt-out.
+- Preserve committed views during synchronized output and hide reveal on focus loss or tab changes.
+- Bound field storage and protocol messages; retain the existing terminal-cell storage size.
+
 ## 0.1.1-dev12 — verified updates and faster redraw preparation
 
 - Add Settings → Updates with saved Stable/Preview selection and manual checks/downloads.

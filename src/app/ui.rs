@@ -147,6 +147,8 @@ pub fn tab_scene(
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
+    Privacy,
+    PrivacyMode(String),
     Updates,
     UpdateChannel(String),
     CheckUpdate,
@@ -208,6 +210,7 @@ pub enum Action {
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
+    Privacy,
     Updates,
     ConfirmUpdate,
     Appearance,
@@ -328,6 +331,38 @@ impl Ui {
                     None,
                 ),
             ],
+            Kind::Privacy => {
+                let mut rows = [
+                    ("shift-hover", "Mask · Shift+hover reveal"),
+                    ("hover", "Mask · hover reveal"),
+                    ("always-hidden", "Always mask · Shift override"),
+                    ("off", "Censorship off · next report"),
+                ]
+                .into_iter()
+                .map(|(mode, label)| {
+                    row(
+                        format!(
+                            "[{}] {label}",
+                            if settings.privacy_mode == mode {
+                                "x"
+                            } else {
+                                " "
+                            }
+                        ),
+                        Action::PrivacyMode(mode.into()),
+                        None,
+                    )
+                })
+                .collect::<Vec<_>>();
+                rows.push(row("Junafetch fields only".into(), Action::Privacy, None));
+                rows.push(row(
+                    "Off permits output/history disclosure".into(),
+                    Action::Privacy,
+                    None,
+                ));
+                rows.push(row("Back to settings".into(), Action::Settings, None));
+                rows
+            }
             Kind::Updates => {
                 let mut rows = self
                     .summary
@@ -587,6 +622,7 @@ impl Ui {
                 row("Tools...".into(), Action::Tools, None),
                 row("Import / Export...".into(), Action::ImportExport, None),
                 row("Updates...".into(), Action::Updates, None),
+                row("Privacy...".into(), Action::Privacy, None),
                 row("Close".into(), Action::Cancel, None),
             ],
             Kind::Tools => vec![
@@ -946,7 +982,7 @@ impl Ui {
             }
             Key::Named(NamedKey::Escape) => {
                 return Some(match self.kind {
-                    Kind::Updates => Action::Settings,
+                    Kind::Privacy | Kind::Updates => Action::Settings,
                     Kind::ConfirmUpdate => Action::Updates,
                     Kind::Number => Action::CancelSetting,
                     Kind::Appearance
@@ -1082,6 +1118,7 @@ impl Ui {
             color: [bg[0], bg[1], bg[2], 1.],
         });
         let title = match self.kind {
+            Kind::Privacy => "Privacy - saved automatically",
             Kind::Updates => "Updates",
             Kind::ConfirmUpdate => "Install update and restart?",
             Kind::ImportReview => "Review settings import",
@@ -1199,7 +1236,8 @@ impl Ui {
                 }
                 Kind::Manage => "Enter selects | Esc closes",
                 Kind::Appearance => "Left/Right size | Enter edits | Esc back",
-                Kind::Junafetch => "Identity/network hidden | Reveal pending",
+                Kind::Privacy => "Masked reports copy as masks",
+                Kind::Junafetch => "Protected values: Settings > Privacy",
                 Kind::Settings
                 | Kind::TerminalSettings
                 | Kind::Tools
@@ -1236,7 +1274,7 @@ mod tests {
     fn grouped_settings_keep_root_short_and_keyboard_returns_to_parent() {
         let settings = Settings::default();
         let rows = Ui::new(Kind::Settings, [0.; 2]).rows(&[], &settings);
-        assert_eq!(rows.len(), 6);
+        assert_eq!(rows.len(), 7);
         assert!(rows.iter().all(|row| !matches!(
             row.action,
             Action::ToggleLineNumbers | Action::Setting(_) | Action::FetchProfile(_)

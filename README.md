@@ -131,8 +131,12 @@ Juna bundles Junafetch: run `junafetch` or its shorter alias `fetch` without ins
 Fastfetch. The default groups System, Hardware, Storage, Desktop, Session and Network.
 Choose Brief, Standard or Detailed and artwork under Settings → Tools → Junafetch.
 Use `fetch --brief`, `fetch --details`, `fetch --plain`, `fetch --json`, or `fetch --logo full`
-to override saved choices. Personal/network fields remain Hidden; terminal-wide privacy
-and deliberate hover reveal remain planned work.
+to override saved choices. Personal/network fields display `░░░░░`. Hold Shift and move
+over a shaded field to reveal its value temporarily. Settings → Privacy also offers ordinary
+hover or an explicit censorship opt-out for subsequent reports. Copied text stays masked
+during reveal; missing protected transport leaves fields masked. Plain/JSON reports stay
+masked unless censorship is explicitly disabled. This protects structured Junafetch fields;
+automatic masking of arbitrary Fastfetch and other terminal output remains planned work.
 
 See the [roadmap](ROADMAP.md) for tiled terminals, privacy and bundled tools.
 

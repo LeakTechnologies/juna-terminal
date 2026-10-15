@@ -2,6 +2,46 @@
 use juna::{gpu::block_on, render::Renderer, vt::TerminalState};
 
 #[test]
+#[ignore = "real GPU; protected-field mask, deliberate reveal overlay and complete hiding"]
+fn protected_value_overlay_hides_without_changing_terminal_cells() {
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
+    let adapter =
+        block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default())).unwrap();
+    let (device, queue) =
+        block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).unwrap();
+    let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+    let mut renderer = Renderer::new(&device, &queue, format, 2048, (10., 22.), 8., 16.).unwrap();
+    let theme = juna::theme::default_theme();
+    renderer.apply_theme(&theme, 4.5).unwrap();
+    let token = "0123456789abcdef0123456789abcdef";
+    let mut terminal = TerminalState::new(48, 9);
+    terminal.advance(format!("Network\r\nLocal IP: \x1b]777;JunaPrivate;{token}\x1b\\░░░░░\x1b]777;JunaPrivate;0\x1b\\").as_bytes());
+    let cells = terminal.snapshot(0).cells;
+    let hidden = render(&device, &queue, &mut renderer, &terminal, format);
+    let overlay = juna::privacy::view::popup("192.0.2.55", [108., 40.], 512., 256., 1., &theme);
+    let revealed = render_scene(
+        &device,
+        &queue,
+        &mut renderer,
+        &terminal,
+        format,
+        Some(&overlay),
+    );
+    assert_ne!(revealed, hidden);
+    let hidden_again = render(&device, &queue, &mut renderer, &terminal, format);
+    assert_eq!(hidden_again, hidden);
+    assert_eq!(terminal.snapshot(0).cells, cells);
+    for (name, pixels) in [("privacy-hidden", hidden), ("privacy-revealed", revealed)] {
+        let mut ppm = b"P6\n512 256\n255\n".to_vec();
+        for pixel in pixels.chunks_exact(4) {
+            ppm.extend_from_slice(&pixel[..3]);
+        }
+        std::fs::create_dir_all("target/acceptance").unwrap();
+        std::fs::write(format!("target/acceptance/{name}.ppm"), ppm).unwrap();
+    }
+}
+
+#[test]
 #[ignore = "real GPU; status footer capture and terminal-region preservation"]
 fn git_status_footer_is_owned_and_does_not_cover_terminal_rows() {
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
@@ -437,6 +477,7 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
     custom.source = None;
     menu_themes.push(custom);
     for kind in [
+        Kind::Privacy,
         Kind::Updates,
         Kind::ConfirmUpdate,
         Kind::Context,
@@ -522,6 +563,7 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
             ppm.extend_from_slice(&pixel[..3]);
         }
         let name = match kind {
+            Kind::Privacy => "privacy-menu",
             Kind::Updates => "updates-menu",
             Kind::ConfirmUpdate => "update-confirmation",
             Kind::ImportReview => "settings-import",
