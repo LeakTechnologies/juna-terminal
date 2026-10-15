@@ -16,6 +16,10 @@ pub struct Tab {
     /// Exactly the active slot is None; its state resides in App's active fields.
     pub saved: Option<SavedSession>,
     pub git: super::git_status::View,
+    /// `Some(since)` when this (inactive) tab rang BEL and has not been viewed
+    /// since. The timestamp drives the flash animation; the flag itself drives
+    /// the settled accent colour, cleared when the tab becomes active.
+    pub attention: Option<std::time::Instant>,
 }
 pub fn label(spec: &crate::session::SessionSpec) -> String {
     let name = std::path::Path::new(&spec.program)

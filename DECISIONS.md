@@ -1361,6 +1361,61 @@ for the same pinned launcher-payload hash check. Native Fastfetch 2.69.0 detecto
 the separately maintained fork; script/image/codec capabilities excluded by the lean build are
 not claimed. This cycle delivers eight safe local stats, width-aware art and JSON/plain output;
 interactive protected-value reveal and terminal-wide privacy remain a separate unshipped cycle.
+## 2026-10-15 — measured redraw preparation
+
+Existing inactive-tab attention work is included in this validation pass: the pure engine
+counts BEL bytes, while application-owned timestamps drive the tab indication and viewing
+the tab clears it. No audio or command-completion inference is introduced.
+
+The lead approved PERFORMANCE_DESIGN.md and retained the GitHub updater in this cycle.
+Release-mode measurement found repeated contrast correction dominated the light-box workload.
+Reuse its exact result for adjacent identical colour pairs, borrow cached glyph slices until
+the next mutable atlas access, encode scalar UTF-8 on the stack, and retain foreground-instance
+capacity between frames. No terminal semantics, accessibility policy or ownership boundary
+changes. No dependency addition. PERFORMANCE.md records desktop timing and memory evidence,
+comparison limitations and outstanding laptop/private-memory work. Timing probes contain no
+terminal contents and do not claim end-to-end latency or a general terminal ranking.
+
+## 2026-10-14 — verified manual updates and restart
+
+Implemented the approved update design with manual Stable/Preview checks and explicit
+Download/Install-and-Restart actions in Settings. Development builds default to Preview;
+stable builds default to Stable. Compare Juna's strict numeric versions, inspect published
+releases independently of API order, and require the exact x64 ZIP plus checksum/provenance
+assets and API digests. Stream HTTPS through WinHTTP on one owned I/O worker with DNS/connect,
+header and idle timeouts, cancellation and size limits; do not set an overall transfer deadline
+or weaken TLS. Disable automatic HTTP credentials and restrict initial/final origins.
+
+Add pinned flate2 1.1.10 with only its Rust backend because the standard library cannot decode
+the release ZIP's Deflate members. Its resolved compression/checksum dependencies are
+miniz_oxide 0.9.1, crc32fast 1.5.2, adler2 2.0.1 and simd-adler32 0.3.10; original notices ship
+under notices/updater. They provide nonterminal compression infrastructure. No async runtime
+or terminal engine was added. Windows WinHTTP and Threading features provide HTTPS and parent
+process synchronization. The original read-only PE/resource reader is shared by packaging and
+update verification; it never executes a downloaded file.
+
+The restricted ZIP subset admits only stored/Deflate entries for juna.exe, notices and release
+notes; reject traversal, duplicates, device names (including superscript aliases), links,
+encryption, ZIP64 and oversized/overlapping records. Verify archive SHA-256, member CRCs and
+native x64/version/source identity before installation. A temporary copy of Juna runs a hidden
+Rust helper. Wait for parent exit, copy onto the installation volume, retry locked replacement,
+retain the old executable/notices, and roll back handled failures. New startup acknowledges its
+first presented frame and launched session; missing acknowledgement restores the old version.
+An installation marker prevents starting a mixed file set. A helper crash/power loss is reported
+as interrupted and requires manual recovery from retained files; automatic crash recovery is
+not claimed. Rollback/staging retention is currently manual after completed installations.
+Other Juna windows must be closed; they are never forcibly terminated to unlock an update.
+
+Persist only the channel in portable settings. Runtime schema-1 settings ignore unknown future
+fields so a rollback preserves known preferences; portable imports remain a strict allowlist.
+Paths, update plans and results stay in local app-owned staging and never enter exports or
+terminal output. Checksums/TLS are integrity/origin checks, not publisher signatures.
+
+References: [GitHub Releases API](https://docs.github.com/en/rest/releases/releases),
+[PKWARE APPNOTE](https://pkware.cachefly.net/webdocs/casestudies/APPNOTE.TXT),
+[Windows filenames/namespaces](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file),
+and the existing Microsoft PE resource format reference. No terminal implementation was copied.
+
 ## 2026-10-14 — interactive startup directory
 
 The approved startup-directory change resolves USERPROFILE (HOME on Unix) at the session

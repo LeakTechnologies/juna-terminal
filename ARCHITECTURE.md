@@ -1,5 +1,14 @@
 # Juna Terminal Engine — Architecture & Interface Specification
 
+Updates are app-owned I/O/installation metadata, never engine or renderer state. One bounded
+worker returns owned release/staging results and atomic progress/cancellation values. The UI
+requires a verified candidate and explicit confirmation before closing/reaping this window's
+sessions. A temporary independent Rust helper waits for process exit, performs a guarded
+executable/notices transaction with retained rollback files, and starts the configured shell
+interactively without replaying commands. The new process acknowledges its first successful
+frame/session startup through local app-owned IPC. Receipt reads are bounded/local; network
+checks are manual. Packaging and updating share Juna's original pure read-only PE reader.
+
 Session startup selects an explicit --cwd directory or, for ordinary interactive launches,
 the validated user home folder. Custom shell-argument launches retain inherited cwd when
 no explicit directory is supplied. Selection performs filesystem checks at the session/app
@@ -963,3 +972,9 @@ Tab menus hold stable session IDs so inactive actions and exit races cannot targ
 Middle-click close uses a Cancel-first confirmation; process shutdown follows the existing path.
 Theme favourites are independent saved preferences and update the appearance rollback snapshot
 without committing previewed fonts/themes. The confirmation UI shares the pure contrast policy.
+
+Redraw preparation borrows shaped glyph slices from renderer-owned cache entries only until
+the next mutable atlas access, retains foreground instance capacity and reuses exact contrast
+results for adjacent equal colour pairs. It still consumes an owned read-only engine snapshot.
+The engine's BEL counter is pure metadata; inactive-tab indication timestamps and animation
+belong to the application and do not infer child-command completion.

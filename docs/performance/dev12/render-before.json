@@ -1,0 +1,63 @@
+{
+  "adapter": "NVIDIA GeForce RTX 3060",
+  "atlas_initialisation": {
+    "median_us": 75967.90000000001,
+    "p95_us": 80694.5,
+    "samples": 3
+  },
+  "backend": "Vulkan",
+  "cols": 140,
+  "commit": "61425b365beb37527183b4c761b7bd5064e7dc11",
+  "font": "IBM Plex Mono",
+  "font_px": 16,
+  "limits": "CPU snapshot/build only; excludes GPU submission, presentation and input latency. Parse timings are single exploratory samples. No comparative terminal ranking.",
+  "rows": 45,
+  "version": "0.1.1-dev12",
+  "workloads": [
+    {
+      "build": {
+        "median_us": 2119.0,
+        "p95_us": 2637.1,
+        "samples": 200
+      },
+      "bytes": 13750,
+      "name": "ascii",
+      "parse_us": 5430.7,
+      "snapshot": {
+        "median_us": 16.6,
+        "p95_us": 27.900000000000002,
+        "samples": 200
+      }
+    },
+    {
+      "build": {
+        "median_us": 14707.8,
+        "p95_us": 17754.0,
+        "samples": 200
+      },
+      "bytes": 14500,
+      "name": "contrast",
+      "parse_us": 4578.099999999999,
+      "snapshot": {
+        "median_us": 32.7,
+        "p95_us": 76.10000000000001,
+        "samples": 200
+      }
+    },
+    {
+      "build": {
+        "median_us": 2085.5,
+        "p95_us": 2633.7000000000003,
+        "samples": 200
+      },
+      "bytes": 14750,
+      "name": "unicode",
+      "parse_us": 3740.5,
+      "snapshot": {
+        "median_us": 28.799999999999997,
+        "p95_us": 38.800000000000004,
+        "samples": 200
+      }
+    }
+  ]
+}

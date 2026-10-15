@@ -1,6 +1,6 @@
 [package]
 name = "juna"
-version = "0.1.1-dev11"
+version = "0.1.1-dev12"
 edition = "2021"
 rust-version = "1.97"
 description = "A terminal emulator with an original VT engine"
@@ -21,6 +21,8 @@ unicode-segmentation = "=1.13.3"
 # Approved THEME_DESIGN: typed, versioned custom-theme and settings JSON.
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
+# Approved UPDATE_DESIGN: bounded Deflate decompression for verified release ZIPs.
+flate2 = { version = "=1.1.10", default-features = false, features = ["rust_backend"] }
 
 # D6 decision: the pure-Rust rasterisation stack is the primary backend.
 # fontdb discovers system fonts; swash shapes clusters and rasterises glyphs.
@@ -53,6 +55,9 @@ features = [
     "Win32_UI_Controls_Dialogs",
     # Approved bundled-tool delivery: verify the pinned console-launcher payload in the user cache.
     "Win32_Security_Cryptography",
+    # Approved updater: synchronous HTTPS on its bounded I/O worker and parent-exit wait.
+    "Win32_Networking_WinHttp",
+    "Win32_System_Threading",
 ]
 
 # Windows-only. conpty-oxide carries `compile_error!` under `cfg(not(windows))`,

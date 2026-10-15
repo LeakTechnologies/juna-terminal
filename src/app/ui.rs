@@ -7,6 +7,10 @@ use crate::{
 use winit::keyboard::{Key, NamedKey};
 pub const TAB_HEIGHT: f32 = 32.;
 pub const STATUS_HEIGHT: f32 = 26.;
+/// Total duration of the attention flash before it settles to a steady accent.
+pub const ATTENTION_FLASH_MS: u64 = 1200;
+/// Half-period of the flash: background toggles every this many milliseconds.
+pub const ATTENTION_FLASH_PERIOD_MS: u64 = 400;
 pub fn status_scene(label: &str, width: f32, height: f32, scale: f32, theme: &Theme) -> Overlay {
     let color = |value: &str| {
         let c = crate::theme::rgb(value).unwrap();
@@ -86,7 +90,14 @@ pub fn tab_hit(
     let index = (point[0].max(0.) / step) as usize + start;
     (index < count).then_some(TabHit::Select(index))
 }
-pub fn tab_scene(labels: &[String], active: usize, width: f32, scale: f32) -> Overlay {
+pub fn tab_scene(
+    labels: &[String],
+    active: usize,
+    attention: &[bool],
+    flash_on: bool,
+    width: f32,
+    scale: f32,
+) -> Overlay {
     let mut out = Overlay::default();
     out.rectangles.push(Rectangle {
         rect: [0., 0., width, TAB_HEIGHT * scale],
@@ -102,17 +113,28 @@ pub fn tab_scene(labels: &[String], active: usize, width: f32, scale: f32) -> Ov
     let step = (width - plus) / visible as f32;
     for (i, label) in labels.iter().enumerate().skip(start).take(visible) {
         let x = (i - start) as f32 * step;
+        let needs_attention = attention.get(i).copied().unwrap_or(false);
         if i == active {
             out.rectangles.push(Rectangle {
                 rect: [x, 0., step - 2., TAB_HEIGHT * scale],
                 color: [0.18, 0.19, 0.28, 1.],
             });
+        } else if needs_attention && flash_on {
+            out.rectangles.push(Rectangle {
+                rect: [x, 0., step - 2., TAB_HEIGHT * scale],
+                color: [0.34, 0.28, 0.12, 1.],
+            });
         }
+        let color = if needs_attention && i != active {
+            [1.0, 0.84, 0.36, 1.]
+        } else {
+            [0.9, 0.9, 0.98, 1.]
+        };
         out.text.push(Text {
             pos: [x + 10. * scale, 5. * scale],
             width: (step - 20. * scale).max(0.),
             value: label.clone(),
-            color: [0.9, 0.9, 0.98, 1.],
+            color,
         });
     }
     out.text.push(Text {
@@ -125,6 +147,13 @@ pub fn tab_scene(labels: &[String], active: usize, width: f32, scale: f32) -> Ov
 }
 #[derive(Clone, Debug, PartialEq)]
 pub enum Action {
+    Updates,
+    UpdateChannel(String),
+    CheckUpdate,
+    DownloadUpdate,
+    InstallUpdate,
+    ConfirmUpdate,
+    CancelUpdate,
     ImportSettings,
     ExportSettings,
     ApplyImport,
@@ -179,6 +208,8 @@ pub enum Action {
 }
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Kind {
+    Updates,
+    ConfirmUpdate,
     Appearance,
     TerminalSettings,
     Tools,
@@ -286,6 +317,54 @@ impl Ui {
                     None,
                 ));
                 rows.push(row("Cancel".into(), Action::Cancel, None));
+                rows
+            }
+            Kind::ConfirmUpdate => vec![
+                row("✓ Install and restart".into(), Action::ConfirmUpdate, None),
+                row("✕ Cancel".into(), Action::Updates, None),
+                row(
+                    "Close other Juna windows first".into(),
+                    Action::Updates,
+                    None,
+                ),
+            ],
+            Kind::Updates => {
+                let mut rows = self
+                    .summary
+                    .iter()
+                    .map(|line| row(line.clone(), Action::Updates, None))
+                    .collect::<Vec<_>>();
+                rows.extend([
+                    row(
+                        format!(
+                            "[{}] Stable releases",
+                            if settings.update_channel == "stable" {
+                                "x"
+                            } else {
+                                " "
+                            }
+                        ),
+                        Action::UpdateChannel("stable".into()),
+                        None,
+                    ),
+                    row(
+                        format!(
+                            "[{}] Preview releases",
+                            if settings.update_channel == "preview" {
+                                "x"
+                            } else {
+                                " "
+                            }
+                        ),
+                        Action::UpdateChannel("preview".into()),
+                        None,
+                    ),
+                    row("Check for update".into(), Action::CheckUpdate, None),
+                    row("Download update".into(), Action::DownloadUpdate, None),
+                    row("Install and restart...".into(), Action::InstallUpdate, None),
+                    row("Cancel download/check".into(), Action::CancelUpdate, None),
+                    row("Back to settings".into(), Action::Settings, None),
+                ]);
                 rows
             }
             Kind::ConfirmClose => vec![
@@ -507,6 +586,7 @@ impl Ui {
                 row("Terminal...".into(), Action::TerminalSettings, None),
                 row("Tools...".into(), Action::Tools, None),
                 row("Import / Export...".into(), Action::ImportExport, None),
+                row("Updates...".into(), Action::Updates, None),
                 row("Close".into(), Action::Cancel, None),
             ],
             Kind::Tools => vec![
@@ -866,6 +946,8 @@ impl Ui {
             }
             Key::Named(NamedKey::Escape) => {
                 return Some(match self.kind {
+                    Kind::Updates => Action::Settings,
+                    Kind::ConfirmUpdate => Action::Updates,
                     Kind::Number => Action::CancelSetting,
                     Kind::Appearance
                     | Kind::TerminalSettings
@@ -974,7 +1056,7 @@ impl Ui {
             .theme
             .clone()
             .unwrap_or_else(crate::theme::default_theme);
-        let confirmation = self.kind == Kind::ConfirmClose;
+        let confirmation = matches!(self.kind, Kind::ConfirmClose | Kind::ConfirmUpdate);
         let bg = if confirmation {
             crate::theme::rgb(&theme.colors.background).unwrap()
         } else {
@@ -1000,6 +1082,8 @@ impl Ui {
             color: [bg[0], bg[1], bg[2], 1.],
         });
         let title = match self.kind {
+            Kind::Updates => "Updates",
+            Kind::ConfirmUpdate => "Install update and restart?",
             Kind::ImportReview => "Review settings import",
             Kind::ConfirmClose => "Close tab?",
             Kind::TabContext => "Tabs",
@@ -1068,11 +1152,12 @@ impl Ui {
                     },
                 value,
                 color: if confirmation {
-                    let index = if row.action == Action::CloseTargetTab {
-                        2
-                    } else {
-                        1
-                    };
+                    let index =
+                        if matches!(row.action, Action::CloseTargetTab | Action::ConfirmUpdate) {
+                            2
+                        } else {
+                            1
+                        };
                     readable(
                         crate::theme::rgb(&theme.colors.ansi[index]).unwrap(),
                         if selected { highlight } else { bg },
@@ -1100,7 +1185,7 @@ impl Ui {
         }
         let footer = if self.message.is_empty() {
             match self.kind {
-                Kind::Context | Kind::TabContext | Kind::ConfirmClose => {
+                Kind::Context | Kind::TabContext | Kind::ConfirmClose | Kind::ConfirmUpdate => {
                     "Enter selects | Esc closes"
                 }
                 Kind::Rename => "Enter saves | Esc cancels",
@@ -1121,6 +1206,7 @@ impl Ui {
                 | Kind::ImportExport
                 | Kind::FetchProfiles
                 | Kind::FetchArtwork => "Enter selects | Esc back",
+                Kind::Updates => "Downloads verified before install",
                 Kind::Fonts => "Search | Enter picks | Esc cancels",
                 Kind::Editor => "Ctrl+S saves | Esc cancels",
                 Kind::Number => "Enter applies | Esc returns",
@@ -1150,7 +1236,7 @@ mod tests {
     fn grouped_settings_keep_root_short_and_keyboard_returns_to_parent() {
         let settings = Settings::default();
         let rows = Ui::new(Kind::Settings, [0.; 2]).rows(&[], &settings);
-        assert_eq!(rows.len(), 5);
+        assert_eq!(rows.len(), 6);
         assert!(rows.iter().all(|row| !matches!(
             row.action,
             Action::ToggleLineNumbers | Action::Setting(_) | Action::FetchProfile(_)
@@ -1335,7 +1421,7 @@ mod tests {
     fn tab_strip_keeps_the_active_tab_reachable_and_hits_plus() {
         for active in 0..16 {
             let labels: Vec<String> = (0..16).map(|i| format!("Tab {i}")).collect();
-            let scene = tab_scene(&labels, active, 800., 1.);
+            let scene = tab_scene(&labels, active, &[], false, 800., 1.);
             assert!(scene
                 .text
                 .iter()

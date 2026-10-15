@@ -27,6 +27,8 @@ pub struct PortableSettings {
     junafetch_profile: String,
     #[serde(default = "crate::settings::default_junafetch_logo")]
     junafetch_logo: String,
+    #[serde(default = "crate::settings::default_update_channel")]
+    update_channel: String,
     #[serde(default)]
     favourite_theme_ids: Vec<String>,
 }
@@ -42,6 +44,7 @@ impl From<&Settings> for PortableSettings {
             report_shell_directory: s.report_shell_directory,
             junafetch_profile: s.junafetch_profile.clone(),
             junafetch_logo: s.junafetch_logo.clone(),
+            update_channel: s.update_channel.clone(),
             favourite_theme_ids: s.favourite_theme_ids.clone(),
         }
     }
@@ -58,6 +61,7 @@ impl PortableSettings {
             report_shell_directory: self.report_shell_directory,
             junafetch_profile: self.junafetch_profile.clone(),
             junafetch_logo: self.junafetch_logo.clone(),
+            update_channel: self.update_channel.clone(),
             favourite_theme_ids: self.favourite_theme_ids.clone(),
             ..Default::default()
         }
@@ -255,6 +259,22 @@ impl ImportPlan {
 }
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn runtime_future_fields_preserve_known_preferences_without_entering_exports() {
+        let mut value = serde_json::to_value(crate::settings::Settings::default()).unwrap();
+        value["font_family"] = "Fira Code".into();
+        value["font_size"] = 18.into();
+        value["future_private_metadata"] = "SYNTHETIC_PRIVATE_VALUE".into();
+        let settings: crate::settings::Settings = serde_json::from_value(value).unwrap();
+        settings.validate().unwrap();
+        assert_eq!(settings.font_family, "Fira Code");
+        assert_eq!(settings.font_size, 18.);
+        let bundle = super::Bundle::capture(&settings, &crate::theme::builtins());
+        let mut exported = serde_json::to_value(bundle).unwrap();
+        assert!(!exported.to_string().contains("SYNTHETIC_PRIVATE_VALUE"));
+        exported["settings"]["future_private_metadata"] = "SYNTHETIC_PRIVATE_VALUE".into();
+        assert!(super::Bundle::decode(&serde_json::to_vec(&exported).unwrap()).is_err());
+    }
     use super::*;
     #[test]
     fn failed_preference_write_rolls_back_staged_themes_and_export_omits_private_source() {

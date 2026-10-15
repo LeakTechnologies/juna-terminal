@@ -30,6 +30,18 @@ fn advance_returns_actions_applied_to_the_grid() {
 }
 
 #[test]
+fn bel_increments_the_bell_count_without_touching_the_grid() {
+    let mut s = state(20, 5);
+    assert_eq!(s.bell_count(), 0);
+    s.advance(b"a\x07b");
+    assert_eq!(s.bell_count(), 1);
+    assert_eq!(screen_text(&s, 0), "ab");
+    assert_eq!(s.grid().cursor.col, 2);
+    s.advance(b"\x07\x07");
+    assert_eq!(s.bell_count(), 3);
+}
+
+#[test]
 fn crlf_moves_to_the_next_row_column_zero() {
     let mut s = state(20, 5);
     s.advance(b"ab\r\ncd");

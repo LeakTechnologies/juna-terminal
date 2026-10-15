@@ -1,4 +1,6 @@
 pub mod app;
+pub mod release_image;
+pub mod updates;
 pub mod transport;
 pub mod gpu;
 pub mod layout;

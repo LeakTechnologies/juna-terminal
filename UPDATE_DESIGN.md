@@ -21,6 +21,11 @@ Primary API documentation: https://docs.github.com/en/rest/releases/releases
 
 Explicitly approved by the design lead on 2026-10-13, in interface → Junafetch → updates order.
 
+Reconfirmed on 2026-10-15: the current update cycle must expose the latest compatible
+GitHub Release through the menu, with verified download and explicit Install and Restart.
+The approved performance review does not postpone this requirement. Publication remains
+gated on the existing download, installation, rollback and restart acceptance criteria.
+
 The lead's later release-cadence instruction supersedes the initial tool-milestone prerequisite
 for development previews: each completed landed cycle gets a fresh sequential Juna dev version
 and verified Release assets, including the current interface cycle. Stable acceptance remains

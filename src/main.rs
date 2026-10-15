@@ -37,6 +37,27 @@ fn attach_parent_console() {}
 
 fn main() {
     attach_parent_console();
+    if let Some(busy) = juna::updates::helper::installation_state() {
+        if busy {
+            eprintln!("Juna update is in progress; please wait for the automatic restart.");
+        } else {
+            juna::app::update_error_dialog("A Juna update was interrupted. Previous files are retained in the installation folder's .juna-rollback folder. Restore the complete previous package or extract a verified GitHub release, then remove .juna-installing.");
+        }
+        std::process::exit(1);
+    }
+    if std::env::args_os()
+        .nth(1)
+        .is_some_and(|argument| argument == "--update-helper")
+    {
+        let result = std::env::args_os()
+            .nth(2)
+            .ok_or_else(|| "Updater helper plan missing".to_owned())
+            .and_then(|path| juna::app::run_update_helper(std::path::Path::new(&path)));
+        if result.is_err() {
+            std::process::exit(1);
+        }
+        return;
+    }
     if std::env::args_os()
         .nth(1)
         .is_some_and(|arg| arg == "--version")

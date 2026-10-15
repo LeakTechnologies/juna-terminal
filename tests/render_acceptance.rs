@@ -437,6 +437,8 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
     custom.source = None;
     menu_themes.push(custom);
     for kind in [
+        Kind::Updates,
+        Kind::ConfirmUpdate,
         Kind::Context,
         Kind::ConfirmClose,
         Kind::TabContext,
@@ -467,9 +469,23 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
         if matches!(kind, Kind::TabContext | Kind::Rename) {
             ui.target_tab = Some(1);
         }
-        if kind == Kind::ConfirmClose {
+        if matches!(kind, Kind::ConfirmClose | Kind::ConfirmUpdate) {
             ui.focus = 1;
-            ui.message = "Closing this tab will stop its commands".into();
+            ui.message = if kind == Kind::ConfirmUpdate {
+                "All tabs in this window will close"
+            } else {
+                "Closing this tab will stop its commands"
+            }
+            .into();
+        }
+        if kind == Kind::Updates {
+            ui.summary = vec![
+                "Installed: v0.1.1-dev12".into(),
+                "Available: v0.1.1-dev13".into(),
+                "Verified: v0.1.1-dev13".into(),
+                "Checksum, version and source".into(),
+                "verified".into(),
+            ];
         }
         if kind == Kind::Rename {
             ui.draft_value = "Project shell".into();
@@ -481,7 +497,14 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
             ui.preview_id = Some("custom-capture".into());
         }
         let rows = ui.rows(&menu_themes, &settings);
-        ui.focus_row(if kind == Kind::ConfirmClose { 1 } else { 0 }, &rows);
+        ui.focus_row(
+            if matches!(kind, Kind::ConfirmClose | Kind::ConfirmUpdate) {
+                1
+            } else {
+                0
+            },
+            &rows,
+        );
         let (_, visible, _) = ui.geometry(512., 256., 1., rows.len());
         ui.ensure_visible(visible, rows.len());
         let scene = ui.scene(&rows, 512., 256., 1.);
@@ -499,6 +522,8 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
             ppm.extend_from_slice(&pixel[..3]);
         }
         let name = match kind {
+            Kind::Updates => "updates-menu",
+            Kind::ConfirmUpdate => "update-confirmation",
             Kind::ImportReview => "settings-import",
             Kind::ConfirmClose => "confirm-close-tab",
             Kind::TabContext => "tab-context",
@@ -506,13 +531,13 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
             Kind::Context => "context-menu",
             Kind::Themes => "theme-menu",
             Kind::Settings => "settings-menu",
-            Kind::Appearance=>"appearance-menu",
-            Kind::TerminalSettings=>"terminal-settings-menu",
-            Kind::Tools=>"tools-menu",
-            Kind::ImportExport=>"import-export-menu",
-            Kind::Junafetch=>"junafetch-menu",
-            Kind::FetchProfiles=>"junafetch-profiles",
-            Kind::FetchArtwork=>"junafetch-artwork",
+            Kind::Appearance => "appearance-menu",
+            Kind::TerminalSettings => "terminal-settings-menu",
+            Kind::Tools => "tools-menu",
+            Kind::ImportExport => "import-export-menu",
+            Kind::Junafetch => "junafetch-menu",
+            Kind::FetchProfiles => "junafetch-profiles",
+            Kind::FetchArtwork => "junafetch-artwork",
             Kind::Fonts => "font-menu",
             Kind::Editor => "theme-editor",
             Kind::Number => "number-prompt",
@@ -561,7 +586,7 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
         "Command Prompt".into(),
         "PowerShell 7".into(),
     ];
-    let scene = juna::app::ui::tab_scene(&labels, 1, 1024., 1.);
+    let scene = juna::app::ui::tab_scene(&labels, 1, &[true, false, false], true, 1024., 1.);
     let pixels = render_scene_at(
         &device,
         &queue,
@@ -589,7 +614,7 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
     let inset = juna::app::gutter::width(1024., 1., true);
     numbers.set_left_inset(inset);
     numbers.set_top_inset(juna::app::ui::TAB_HEIGHT);
-    let mut scene = juna::app::ui::tab_scene(&labels, 1, 1024., 1.);
+    let mut scene = juna::app::ui::tab_scene(&labels, 1, &[true, false, false], true, 1024., 1.);
     scene
         .text
         .extend(juna::app::gutter::scene(inset, 1., 171, 8, [0.8, 0.8, 0.9, 1.]).text);

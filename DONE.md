@@ -1,3 +1,27 @@
+## Dev12 verified updater and measured redraw preparation
+
+Settings → Updates provides manual Stable/Preview checks, verified GitHub Release downloads
+and explicit Install and Restart. A hidden helper handles locked-file replacement, matching
+notices, retained rollback files and first-frame startup acknowledgement. No automatic polling
+or telemetry. Settings/custom themes remain unchanged through the isolated update rehearsal.
+Interrupted-helper/power-loss recovery and backup retention remain manual.
+
+Verified in the 2026-10-15 session: cargo check, strict all-target Clippy and all 224 standard
+tests; all five GPU acceptance tests; real-window shell output while menus are open; actual
+GitHub asset download/verification; forced partial-install rollback; and dev11-to-dev12 locked
+replacement/restart with byte-identical saved font/settings/custom theme files. The initial
+sandbox run failed on file permissions; the unsandboxed rerun passed without relaxing tests.
+The first rollback rehearsal previously failed because its 285 MB debug executable exceeded
+the production limit. Matching release fixtures fixed the rehearsal; the limit was retained.
+
+Measured release-mode redraw preparation improved from 2.119 to 0.951 ms for ASCII, 14.708
+to 0.989 ms for light boxes, and 2.086 to 0.960 ms for Unicode (200 timed samples each).
+The whole-window output comparison did not show a clear improvement; private memory remains
+approximately 435 MiB on this desktop. PERFORMANCE.md and sanitised reports record the limits.
+Existing inactive-tab BEL attention work is included; this does not infer command completion.
+Laptop, physical-input and stable acceptance remain separate. Hosted CI/assets are verified
+after publication; this local record alone does not establish a published release.
+
 ## 2026-10-13 — bundled-tool environment preparation
 
 Verified child-only SessionSpec environment overrides with spaces/Unicode and unchanged parent

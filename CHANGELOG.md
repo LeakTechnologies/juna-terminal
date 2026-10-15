@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.1-dev12 — verified updates and faster redraw preparation
+
+- Add Settings → Updates with saved Stable/Preview selection and manual checks/downloads.
+- Verify GitHub asset digests, SHA-256 manifests, restricted ZIP members and native identity.
+- Install through a hidden Rust helper with locked-file retries, rollback and startup acknowledgement.
+- Preserve settings/themes and report failure/recovery status without exposing private paths.
+- Reuse contrast results and render storage; avoid per-cell text/glyph allocation on redraw.
+- Add reproducible release-mode timing probes and document the Alacritty comparison limits.
+- Show an attention indication when an inactive tab receives a terminal bell.
+
 ## 0.1.1-dev11 — start interactive sessions at home
 
 - Normal interactive launches start in the user home directory instead of the portable folder.

@@ -83,6 +83,9 @@ pub struct TerminalState {
     modes: InputModes,
     cursor_style: u16,
     responses: Vec<u8>,
+    /// Monotonic count of BEL (0x07) bytes. The engine surfaces the signal; it
+    /// never produces sound or UI. Consumers diff successive reads.
+    bell_count: u64,
     saved_rendition: Option<(Color, Color, Attrs)>,
     last_print: Option<(u16, u16)>,
     last_scalar: Option<u32>,
@@ -117,6 +120,7 @@ impl TerminalState {
             modes: InputModes::default(),
             cursor_style: 0,
             responses: Vec::new(),
+            bell_count: 0,
             saved_rendition: None,
             last_print: None,
             last_scalar: None,
@@ -159,6 +163,11 @@ impl TerminalState {
     }
     pub fn take_responses(&mut self) -> Vec<u8> {
         std::mem::take(&mut self.responses)
+    }
+    /// Number of BEL bytes seen so far. Consumers compare against a stored value
+    /// to detect "rang since I last looked"; the engine itself stays silent.
+    pub fn bell_count(&self) -> u64 {
+        self.bell_count
     }
     pub fn finish(&mut self) {
         for action in self.parser.flush() {
@@ -450,7 +459,8 @@ impl TerminalState {
                 self.grid_mut().cursor.col = next.min(self.grid().scroll_right());
                 self.grid_mut().wrap_pending = false;
             }
-            0x07 | 0x00 => {}
+            0x07 => self.bell_count = self.bell_count.wrapping_add(1),
+            0x00 => {}
             0x0e => self.dec_graphics = self.g1_graphics,
             0x0f => self.dec_graphics = self.g0_graphics,
             0x84 => {

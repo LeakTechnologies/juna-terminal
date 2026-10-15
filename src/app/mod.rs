@@ -121,8 +121,146 @@ pub struct App {
     removed_theme: Option<(std::path::PathBuf, std::path::PathBuf)>,
     git_worker: Option<git_status::Worker>,
     git_activity: Instant,
+    update_worker: Option<crate::updates::Worker>,
+    update_candidate: Option<crate::updates::Candidate>,
+    update_stage: Option<crate::updates::Staged>,
+    update_message: String,
+    update_cancelled: bool,
+    update_progress: u64,
+    update_receipt_until: Option<Instant>,
+    last_update_receipt: Instant,
 }
 impl App {
+    fn start_update_task(
+        &mut self,
+        task: crate::updates::Task,
+        message: &str,
+    ) -> Result<(), String> {
+        if self.update_worker.is_some() || self.closing_all {
+            return Err("Wait for the current operation or cancel it first".into());
+        }
+        self.update_worker = Some(crate::updates::Worker::start(task)?);
+        self.update_cancelled = false;
+        self.update_progress = 0;
+        self.update_message = message.into();
+        self.refresh_update_panel();
+        Ok(())
+    }
+    fn refresh_update_panel(&mut self) {
+        if let Some(ui) = self.ui.as_mut().filter(|ui| ui.kind == ui::Kind::Updates) {
+            ui.summary = vec![format!("Installed: v{}", env!("CARGO_PKG_VERSION"))];
+            if let Some(candidate) = self.update_candidate.as_ref() {
+                ui.summary
+                    .push(format!("Available: v{}", candidate.version));
+            }
+            if let Some(stage) = self.update_stage.as_ref() {
+                ui.summary.push(format!("Verified: v{}", stage.version));
+            }
+            let mut line = String::new();
+            for word in self.update_message.split_whitespace() {
+                if !line.is_empty() && line.len() + word.len() + 1 > 32 {
+                    ui.summary.push(std::mem::take(&mut line));
+                }
+                if !line.is_empty() {
+                    line.push(' ');
+                }
+                line.push_str(word);
+            }
+            if !line.is_empty() {
+                ui.summary.push(line);
+            }
+            ui.message = "Manual checks; verified downloads".into();
+            self.dirty = true;
+        }
+    }
+    fn poll_updates(&mut self) {
+        if self
+            .update_receipt_until
+            .is_some_and(|deadline| Instant::now() < deadline)
+            && self.last_update_receipt.elapsed() > Duration::from_secs(1)
+        {
+            self.last_update_receipt = Instant::now();
+            if let Some(receipt) = crate::updates::helper::take_receipt(&self.store.directory) {
+                self.update_receipt_until = None;
+                self.update_message=match receipt.status {
+                    crate::updates::ReceiptStatus::Updated=>format!("Updated to v{}",receipt.version),
+                    crate::updates::ReceiptStatus::RolledBack=>"Update failed; previous version kept. Close other windows and retry.".into(),
+                    crate::updates::ReceiptStatus::Failed=>"Update failed; recover the .juna-rollback folder in the installation directory.".into(),
+                };
+                if !matches!(receipt.status, crate::updates::ReceiptStatus::Updated) {
+                    self.open_ui(ui::Kind::Updates);
+                }
+                self.refresh_update_panel();
+            }
+        }
+        let Some(worker) = self.update_worker.as_mut() else {
+            return;
+        };
+        let progress = worker.progress.load(std::sync::atomic::Ordering::Relaxed);
+        let result = worker.poll();
+        if let Some(result) = result {
+            self.update_worker.take();
+            if self.update_cancelled {
+                let root = match result {
+                    Ok(crate::updates::Outcome::Downloaded(stage)) => Some(stage.root),
+                    Ok(crate::updates::Outcome::Prepared(plan)) => {
+                        plan.parent().map(std::path::Path::to_path_buf)
+                    }
+                    _ => None,
+                };
+                if let Some(root) = root {
+                    let _ = self.start_update_task(
+                        crate::updates::Task::Discard {
+                            root,
+                            directory: self.store.directory.clone(),
+                        },
+                        "Discarding cancelled staging...",
+                    );
+                }
+                self.update_stage = None;
+                self.update_message = "Update cancelled".into();
+            } else {
+                match result {
+                    Ok(crate::updates::Outcome::Discarded) => {
+                        self.update_message = "Staged update discarded".into()
+                    }
+                    Ok(crate::updates::Outcome::Checked(candidate)) => {
+                        self.update_message = if candidate.is_some() {
+                            "New release available; download to verify"
+                        } else {
+                            "No newer compatible release in this channel"
+                        }
+                        .into();
+                        self.update_candidate = candidate;
+                    }
+                    Ok(crate::updates::Outcome::Downloaded(stage)) => {
+                        self.update_stage = Some(stage);
+                        self.update_message = "Checksum, version and source verified".into();
+                    }
+                    Ok(crate::updates::Outcome::Prepared(path)) => {
+                        match crate::updates::helper::launch(&path) {
+                            Ok(()) => {
+                                self.update_stage = None;
+                                self.close_ui();
+                                self.close_all_tabs();
+                                return;
+                            }
+                            Err(error) => self.update_message = error,
+                        }
+                    }
+                    Err(error) => self.update_message = error,
+                }
+            }
+            self.refresh_update_panel();
+        } else if progress != self.update_progress {
+            self.update_progress = progress;
+            if !self.update_cancelled {
+                self.update_message =
+                    format!("Transferred {:.1} MiB", progress as f64 / (1024. * 1024.));
+            }
+            self.refresh_update_panel();
+        }
+    }
     fn poll_git_status(&mut self) {
         if self.tabs.is_empty() {
             return;
@@ -242,6 +380,7 @@ impl App {
                 label: "Terminal".into(),
                 saved: None,
                 git: git_status::View::new(None),
+                attention: None,
             }],
             active_tab: 0,
             next_tab_id: 2,
@@ -256,6 +395,14 @@ impl App {
             removed_theme: None,
             git_worker: None,
             git_activity: Instant::now(),
+            update_worker: None,
+            update_candidate: None,
+            update_stage: None,
+            update_message: "Check GitHub Releases manually".into(),
+            update_cancelled: false,
+            update_progress: 0,
+            update_receipt_until: Some(Instant::now() + Duration::from_secs(40)),
+            last_update_receipt: Instant::now(),
         }
     }
     fn take_session(&mut self) -> tabs::SavedSession {
@@ -280,6 +427,7 @@ impl App {
         self.failure = state.failure;
         self.active_closing = state.closing;
         self.active_tab = index;
+        self.tabs[index].attention = None;
         let (revision, cwd) = self.terminal.working_directory();
         self.tabs[index].git.sync(revision, cwd);
         self.tabs[index].git.last_check = None;
@@ -343,6 +491,7 @@ impl App {
             label: tabs::label(&spec),
             saved: None,
             git: git_status::View::new(spec.cwd.clone().or_else(|| std::env::current_dir().ok())),
+            attention: None,
         });
         self.active_tab = self.tabs.len() - 1;
         self.terminal = TerminalState::new(self.cols, self.rows);
@@ -392,7 +541,11 @@ impl App {
             let batch = runtime.stream.take_up_to(64 * 1024);
             let history = state.terminal.scrollback_len();
             let dropped = state.terminal.scrollback_dropped();
+            let bell = state.terminal.bell_count();
             state.terminal.advance(&batch);
+            if state.terminal.bell_count() != bell {
+                tab.attention = Some(Instant::now());
+            }
             if state.offset > 0 {
                 state.offset = (state.offset
                     + state.terminal.scrollback_len().saturating_sub(history)
@@ -743,9 +896,24 @@ impl App {
             [color[0], color[1], color[2], 1.],
         ));
         let labels: Vec<String> = self.tabs.iter().map(|t| t.label.clone()).collect();
+        let attention: Vec<bool> = self.tabs.iter().map(|t| t.attention.is_some()).collect();
+        let now = Instant::now();
+        let flash_on = self
+            .tabs
+            .iter()
+            .filter_map(|t| t.attention)
+            .min()
+            .map(|at| {
+                let elapsed = now.duration_since(at).as_millis() as u64;
+                elapsed < ui::ATTENTION_FLASH_MS
+                    && (elapsed / ui::ATTENTION_FLASH_PERIOD_MS).is_multiple_of(2)
+            })
+            .unwrap_or(false);
         renderer.overlay(&ui::tab_scene(
             &labels,
             self.active_tab,
+            &attention,
+            flash_on,
             w as f32,
             self.scale,
         ));
@@ -771,6 +939,12 @@ impl App {
             Ok(true) => {
                 self.dirty = false;
                 self.frames += 1;
+                if self.frames == 1
+                    && self.update_receipt_until.is_some()
+                    && crate::updates::helper::acknowledge_restart().is_err()
+                {
+                    self.fail("Updated application could not acknowledge startup".into());
+                }
             }
             Ok(false) => {}
             Err(FrameSkip::Lost | FrameSkip::Outdated) => {
@@ -971,6 +1145,10 @@ impl App {
             [16. * self.scale, 16. * self.scale]
         };
         let mut ui = ui::Ui::new(kind, anchor);
+        if kind == ui::Kind::ConfirmUpdate {
+            ui.focus = 1;
+            ui.message = "All tabs in this window will close".into();
+        }
         ui.theme = Some(self.active_theme());
         if matches!(kind, ui::Kind::Themes | ui::Kind::Custom) {
             if let Some(theme) = self
@@ -1001,6 +1179,9 @@ impl App {
         let rows = ui.rows(&self.themes, &self.settings);
         ui.focus_row(ui.focus, &rows);
         self.ui = Some(ui);
+        if kind == ui::Kind::Updates {
+            self.refresh_update_panel();
+        }
         self.selecting = false;
         self.dirty = true;
     }
@@ -1577,6 +1758,113 @@ impl App {
                 }
                 Action::Settings => self.open_ui(Kind::Settings),
                 Action::Appearance => self.open_ui(Kind::Appearance),
+                Action::Updates => self.open_ui(Kind::Updates),
+                Action::UpdateChannel(channel) => {
+                    if self.update_worker.is_some() {
+                        return Err("Cancel or finish the current operation first".into());
+                    }
+                    let mut settings = self.committed_preferences();
+                    settings.update_channel = channel;
+                    self.commit_preferences(settings)?;
+                    self.update_candidate = None;
+                    let old = self.update_stage.take();
+                    self.open_ui(Kind::Updates);
+                    self.update_message = "Channel saved; check for a release".into();
+                    if let Some(stage) = old {
+                        self.start_update_task(
+                            crate::updates::Task::Discard {
+                                root: stage.root,
+                                directory: self.store.directory.clone(),
+                            },
+                            "Discarding previous staging...",
+                        )?;
+                    }
+                    self.refresh_update_panel();
+                }
+                Action::CheckUpdate => {
+                    if self.update_worker.is_some() {
+                        return Err("Wait for the current operation or cancel it first".into());
+                    }
+                    let discard = self.update_stage.take().map(|stage| stage.root);
+                    self.update_candidate = None;
+                    self.start_update_task(
+                        crate::updates::Task::Check {
+                            channel: self.settings.update_channel.clone(),
+                            current: env!("CARGO_PKG_VERSION").into(),
+                            directory: self.store.directory.clone(),
+                            discard,
+                        },
+                        "Checking GitHub Releases...",
+                    )?;
+                }
+                Action::DownloadUpdate => {
+                    if self.update_worker.is_some() {
+                        return Err("Wait for the current operation or cancel it first".into());
+                    }
+                    let candidate = self
+                        .update_candidate
+                        .clone()
+                        .ok_or("Check for an update first")?;
+                    let discard = self.update_stage.take().map(|stage| stage.root);
+                    self.start_update_task(
+                        crate::updates::Task::Download {
+                            candidate,
+                            directory: self.store.directory.clone(),
+                            discard,
+                        },
+                        "Downloading and verifying...",
+                    )?;
+                }
+                Action::InstallUpdate => {
+                    if self.update_worker.is_some() {
+                        return Err("Wait for download verification to finish".into());
+                    }
+                    self.update_stage
+                        .as_ref()
+                        .ok_or("Download and verify an update first")?;
+                    self.open_ui(Kind::ConfirmUpdate);
+                }
+                Action::ConfirmUpdate => {
+                    let stage = self
+                        .update_stage
+                        .clone()
+                        .ok_or("Download and verify an update first")?;
+                    let shell = self.shell_spec.clone().ok_or("Shell is not initialised")?;
+                    let cwd = self
+                        .terminal
+                        .working_directory()
+                        .1
+                        .map(std::path::PathBuf::from)
+                        .or_else(|| shell.cwd.clone())
+                        .or_else(|| std::env::current_dir().ok())
+                        .ok_or("Restart folder unavailable")?;
+                    let target =
+                        std::env::current_exe().map_err(|_| "Installed executable unavailable")?;
+                    self.open_ui(Kind::Updates);
+                    self.start_update_task(
+                        crate::updates::Task::Prepare {
+                            stage,
+                            target,
+                            shell,
+                            cwd,
+                            directory: self.store.directory.clone(),
+                        },
+                        "Preparing safe restart...",
+                    )?;
+                }
+                Action::CancelUpdate => {
+                    if let Some(worker) = self.update_worker.as_ref() {
+                        worker
+                            .cancel
+                            .store(true, std::sync::atomic::Ordering::Relaxed);
+                        self.update_cancelled = true;
+                        self.update_message =
+                            "Cancelling after the current HTTPS operation...".into();
+                    } else {
+                        self.update_message = "No check or download is running".into();
+                    }
+                    self.refresh_update_panel();
+                }
                 Action::TerminalSettings => self.open_ui(Kind::TerminalSettings),
                 Action::Tools => self.open_ui(Kind::Tools),
                 Action::ImportExport => self.open_ui(Kind::ImportExport),
@@ -2351,6 +2639,7 @@ impl ApplicationHandler for App {
         }
     }
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        self.poll_updates();
         self.poll_settings_files();
         self.refresh_themes();
         self.drain();
@@ -2482,6 +2771,14 @@ impl ApplicationHandler for App {
         if !sync {
             self.last_sync = Instant::now();
         }
+        let now = Instant::now();
+        if self.tabs.iter().any(|t| {
+            t.attention.is_some_and(|at| {
+                (now.duration_since(at).as_millis() as u64) < ui::ATTENTION_FLASH_MS
+            })
+        }) {
+            self.dirty = true;
+        }
         if self.dirty
             && !self.minimized
             && (!sync || self.last_sync.elapsed() > Duration::from_secs(1))
@@ -2542,9 +2839,42 @@ pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
     }
     Ok(())
 }
+pub fn run_update_helper(path: &std::path::Path) -> Result<(), String> {
+    let result = crate::updates::helper::run(path);
+    if let Err(error) = result.as_ref() {
+        clipboard::error_dialog(&format!("Juna update: {error}"));
+    }
+    result
+}
+pub fn update_error_dialog(message: &str) {
+    clipboard::error_dialog(message);
+}
 
 #[cfg(test)]
 mod option_tests {
+    #[test]
+    fn updater_channel_persists_and_install_requires_a_verified_candidate() {
+        let root = std::env::temp_dir().join(crate::settings::new_id());
+        let mut app = App::new(20, 3);
+        app.store = crate::settings::Store::new(root.clone());
+        app.settings = crate::settings::Settings::default();
+        let cells = app.terminal.snapshot(0).cells;
+        app.open_ui(ui::Kind::Updates);
+        app.ui_action(ui::Action::InstallUpdate);
+        assert_eq!(app.ui.as_ref().unwrap().kind, ui::Kind::Updates);
+        assert!(!app.closing_all);
+        assert!(app.update_worker.is_none());
+        app.ui_action(ui::Action::UpdateChannel("stable".into()));
+        assert_eq!(app.store.load().0.update_channel, "stable");
+        assert_eq!(app.terminal.snapshot(0).cells, cells);
+        app.open_ui(ui::Kind::ConfirmUpdate);
+        let ui = app.ui.as_ref().unwrap();
+        let rows = ui.rows(&app.themes, &app.settings);
+        assert_eq!(ui.focus, 1);
+        assert_eq!(rows[1].action, ui::Action::Updates);
+        assert!(app.update_worker.is_none());
+        std::fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn fetch_profile_choices_persist_and_fonts_return_to_appearance() {
         let root = std::env::temp_dir().join(crate::settings::new_id());
@@ -2709,6 +3039,7 @@ mod option_tests {
             id: 42,
             label: "Second".into(),
             git: git_status::View::new(None),
+            attention: None,
             saved: Some(tabs::SavedSession {
                 terminal: TerminalState::new(20, 3),
                 runtime: None,
@@ -2753,6 +3084,7 @@ mod option_tests {
             id: 2,
             git: git_status::View::new(None),
             label: "Second".into(),
+            attention: None,
             saved: Some(tabs::SavedSession {
                 terminal: second,
                 runtime: None,

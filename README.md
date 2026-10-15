@@ -144,3 +144,14 @@ Normal interactive launches start at home (~). To choose a folder, launch
 `juna.exe --cwd "E:\My Project"`. Custom shell arguments keep the inherited folder unless
 `--cwd` is supplied. New windows preserve the reported folder or shell launch folder.
 
+Starting with dev12: right-click inside the terminal,
+open Settings → Updates, choose Stable or Preview, and select Check for update to find the
+newest compatible release in that channel on GitHub. Select Download update, then
+Install and restart after verification. Close other Juna windows first. The installer keeps
+rollback files; it leaves settings/themes in place. Earlier builds need one manual download.
+Backup/staging retention is currently manual. For an interrupted helper or power loss, restore
+the complete retained package or extract a verified release ZIP before clearing .juna-installing.
+
+See [performance evidence](PERFORMANCE.md) for the desktop baseline, Alacritty comparison,
+redraw improvements and remaining laptop/memory work.
+

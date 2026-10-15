@@ -6,7 +6,6 @@ use std::{
     path::{Path, PathBuf},
 };
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Settings {
     pub schema_version: u32,
     pub active_theme_id: String,
@@ -23,6 +22,8 @@ pub struct Settings {
     pub junafetch_profile: String,
     #[serde(default = "default_junafetch_logo")]
     pub junafetch_logo: String,
+    #[serde(default = "default_update_channel")]
+    pub update_channel: String,
     #[serde(default)]
     pub favourite_theme_ids: Vec<String>,
 }
@@ -39,12 +40,21 @@ impl Default for Settings {
             report_shell_directory: false,
             junafetch_profile: default_junafetch_profile(),
             junafetch_logo: default_junafetch_logo(),
+            update_channel: default_update_channel(),
             favourite_theme_ids: Vec::new(),
         }
     }
 }
 pub fn default_git_status() -> bool {
     true
+}
+pub fn default_update_channel() -> String {
+    if env!("CARGO_PKG_VERSION").contains("-dev") {
+        "preview"
+    } else {
+        "stable"
+    }
+    .into()
 }
 pub fn default_junafetch_profile() -> String {
     "standard".into()
@@ -54,6 +64,9 @@ pub fn default_junafetch_logo() -> String {
 }
 impl Settings {
     pub fn validate(&self) -> Result<(), String> {
+        if !matches!(self.update_channel.as_str(), "stable" | "preview") {
+            return Err("Invalid update channel".into());
+        }
         if !matches!(
             self.junafetch_profile.as_str(),
             "brief" | "standard" | "detailed"

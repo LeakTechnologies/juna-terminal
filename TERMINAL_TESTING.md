@@ -1,5 +1,24 @@
 # Testing the repaired terminal
 
+## Dev12 evidence (2026-10-15)
+
+Required check/strict Clippy and all 224 standard tests passed. All five explicit GPU tests
+passed, including all bundled fonts, Unicode/row isolation, palette bytes, theme/menu overlays
+and footer preservation. Thirty-seven unchanged menu captures matched byte-for-byte across
+the renderer optimisation. The update-confirmation fixture was corrected to show Cancel
+selected, matching the application's verified default; those two changed captures are excluded
+from the unchanged-image comparison.
+
+Real-window testing passed for shell output with panels open and dev11-to-dev12 update/restart.
+The latter verifies retained user files, byte-identical settings/custom themes, matching new
+notices, native executable identity and first-frame acknowledgement. Explicit forced rollback
+and an actual published-release download/verification also passed. Rehearsals use a matching
+release executable rather than raising size limits for oversized debug binaries.
+
+PERFORMANCE.md records release-mode CPU timings and a limited desktop Alacritty comparison.
+Bulk output and high private memory remain open; laptop performance, battery use, physical
+input and stable acceptance are not established by these tests.
+
 The 2026-10-12 audit repair design is approved. This is a working Windows testing milestone,
 not a claim of complete developer-grade compatibility. The engine remains Juna's own implementation.
 

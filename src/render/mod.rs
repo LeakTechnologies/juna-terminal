@@ -103,6 +103,7 @@ pub struct Renderer {
     capacity: usize,
     count: usize,
     staging: Vec<Instance>,
+    foreground: Vec<Instance>,
     pub atlas: Atlas,
     pub cell_w: f32,
     pub cell_h: f32,
@@ -287,6 +288,7 @@ impl Renderer {
             capacity: 8192,
             count: 0,
             staging: Vec::with_capacity(8192),
+            foreground: Vec::with_capacity(8192),
             atlas,
             cell_w: cell.0,
             cell_h: cell.1,
@@ -318,7 +320,9 @@ impl Renderer {
         self.atlas.begin_frame();
         let default_fg = crate::theme::rgb(&self.theme.colors.foreground).unwrap();
         let default_bg = crate::theme::rgb(&self.theme.colors.background).unwrap();
-        let mut foreground = Vec::new();
+        self.foreground.clear();
+        let foreground = &mut self.foreground;
+        let mut previous_colors = None;
         let atlas_px = self.atlas.size_px() as f32;
         let text_h = self.atlas.ascent() + self.atlas.descent();
         let baseline = ((self.cell_h - text_h) * 0.5).max(0.0) + self.atlas.ascent();
@@ -331,7 +335,16 @@ impl Renderer {
                 if cell.attrs.is(crate::vt::Attrs::INVERSE) {
                     std::mem::swap(&mut fg, &mut bg);
                 }
-                fg = contrast::foreground(fg, bg, self.minimum_contrast);
+                let original_fg = fg;
+                fg = match previous_colors {
+                    Some((previous_fg, previous_bg, corrected))
+                        if previous_fg == fg && previous_bg == bg =>
+                    {
+                        corrected
+                    }
+                    _ => contrast::foreground(fg, bg, self.minimum_contrast),
+                };
+                previous_colors = Some((original_fg, bg, fg));
                 self.staging.push(Instance::fill(
                     [x, y],
                     [self.cell_w, self.cell_h],
@@ -344,11 +357,12 @@ impl Renderer {
                 {
                     continue;
                 }
-                let text = match &cell.content {
-                    CellContent::Char(c) | CellContent::WideChar(c) => {
-                        char::from_u32(*c).unwrap_or('\u{fffd}').to_string()
-                    }
-                    CellContent::Cluster(s) => s.to_string(),
+                let mut encoded = [0; 4];
+                let text: &str = match &cell.content {
+                    CellContent::Char(c) | CellContent::WideChar(c) => char::from_u32(*c)
+                        .unwrap_or('\u{fffd}')
+                        .encode_utf8(&mut encoded),
+                    CellContent::Cluster(s) => s,
                     _ => continue,
                 };
                 let alpha = if cell.attrs.is(crate::vt::Attrs::DIM) {
@@ -357,7 +371,7 @@ impl Renderer {
                     1.
                 };
                 let cell_width = cell.content.width().max(1) as f32 * self.cell_w;
-                for shaped in self.atlas.text(&text) {
+                for shaped in self.atlas.text(text) {
                     let g = shaped.glyph;
                     let mut inst = Instance::glyph(
                         [
@@ -404,7 +418,7 @@ impl Renderer {
                 }
             }
         }
-        self.staging.extend(foreground);
+        self.staging.extend(foreground.iter().copied());
         let cur = screen.cursor;
         if cur.visible {
             let x = self.pad + self.left_inset + cur.col as f32 * self.cell_w;
@@ -523,6 +537,7 @@ impl Renderer {
     pub fn overlay(&mut self, scene: &overlay::Overlay) {
         let start = self.staging.len();
         let atlas_px = self.atlas.size_px() as f32;
+        let ascent = self.atlas.ascent();
         for r in &scene.rectangles {
             self.staging.push(Instance::fill(
                 [r.rect[0], r.rect[1]],
@@ -536,7 +551,7 @@ impl Renderer {
                 let mut inst = Instance::glyph(
                     [
                         text.pos[0] + positioned.x + g.left as f32,
-                        text.pos[1] + self.atlas.ascent() - g.top as f32 - positioned.y,
+                        text.pos[1] + ascent - g.top as f32 - positioned.y,
                     ],
                     [g.w as f32, g.h as f32],
                     [g.x as f32 / atlas_px, g.y as f32 / atlas_px],

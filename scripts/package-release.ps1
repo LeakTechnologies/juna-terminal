@@ -41,6 +41,7 @@ Copy-Item -LiteralPath 'assets/fonts/manifest.json' -Destination (Join-Path $not
 Copy-Item -LiteralPath 'tools/junafetch/notices' -Destination (Join-Path $noticeRoot 'junafetch') -Recurse
 Copy-Item -LiteralPath 'tools/junafetch/assets/FASTFETCH_LICENSE.txt' -Destination (Join-Path $noticeRoot 'junafetch/FASTFETCH_LICENSE.txt')
 Copy-Item -LiteralPath 'assets/tools/manifest.json' -Destination (Join-Path $noticeRoot 'tool-manifest.json')
+Copy-Item -LiteralPath 'assets/update-notices' -Destination (Join-Path $noticeRoot 'updater') -Recurse
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $archiveName = "Juna_${version}_windows_amd64.zip"
 $archive = Join-Path $OutputDirectory $archiveName

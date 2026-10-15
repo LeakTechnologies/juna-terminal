@@ -58,6 +58,7 @@ pub struct Atlas {
     faces: Vec<Face>,
     cache: HashMap<(usize, u16), Option<Glyph>>,
     shape_cache: HashMap<String, Vec<PositionedGlyph>>,
+    uncached: Vec<PositionedGlyph>,
     shape: ShapeContext,
     scale: ScaleContext,
     pen_x: u32,
@@ -144,6 +145,7 @@ impl Atlas {
             faces,
             cache: HashMap::new(),
             shape_cache: HashMap::new(),
+            uncached: Vec::new(),
             shape: ShapeContext::new(),
             scale: ScaleContext::new(),
             pen_x: 1,
@@ -190,9 +192,9 @@ impl Atlas {
             .first()
             .map(|g| g.glyph)
     }
-    pub fn text(&mut self, text: &str) -> Vec<PositionedGlyph> {
-        if let Some(found) = self.shape_cache.get(text) {
-            return found.clone();
+    pub fn text(&mut self, text: &str) -> &[PositionedGlyph] {
+        if self.shape_cache.contains_key(text) {
+            return &self.shape_cache[text];
         }
         let face = self.faces.iter().position(|f| {
             f.font().is_some_and(|font| {
@@ -242,9 +244,12 @@ impl Atlas {
             self.shape_cache.clear();
         }
         if !self.full {
-            self.shape_cache.insert(text.to_owned(), result.clone());
+            self.shape_cache.insert(text.to_owned(), result);
+            &self.shape_cache[text]
+        } else {
+            self.uncached = result;
+            &self.uncached
         }
-        result
     }
     fn raster(&mut self, face: usize, id: u16) -> Option<Glyph> {
         if let Some(hit) = self.cache.get(&(face, id)) {
