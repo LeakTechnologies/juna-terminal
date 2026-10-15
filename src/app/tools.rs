@@ -90,6 +90,50 @@ pub fn prepare(directory: &Path, shell: &OsString) -> Result<Vec<(OsString, OsSt
 #[cfg(test)]
 mod tests {
     #[test]
+    fn conpty_preserves_truecolour_marker_cells() {
+        use crate::session::{self, Dimensions, SessionSpec};
+        let program = std::path::PathBuf::from(std::env::var_os("WINDIR").unwrap())
+            .join("System32/WindowsPowerShell/v1.0/powershell.exe");
+        let script = r#"$e=[char]27; [Console]::Write("${e}]777;JunaPrivate;0123456789abcdef0123456789abcdef${e}\░░░░░${e}]777;JunaPrivate;0${e}\`r`n${e}[38;2;17;34;51m${e}[48;2;68;85;102m░░░░░${e}[0m"); Start-Sleep -Seconds 1"#;
+        let spec = SessionSpec {
+            program: program.into_os_string(),
+            args: vec!["-NoProfile".into(), "-Command".into(), script.into()],
+            ..Default::default()
+        };
+        let mut child = session::spawn(&spec, Dimensions { cols: 80, rows: 10 }).unwrap();
+        let mut terminal = crate::vt::TerminalState::new(80, 10);
+        let mut buffer = [0; 4096];
+        loop {
+            let count = child.read(&mut buffer).unwrap();
+            if count == 0 {
+                break;
+            }
+            terminal.advance(&buffer[..count]);
+        }
+        let cells = terminal.snapshot(0).cells;
+        let rgb = cells
+            .iter()
+            .filter(|cell| {
+                cell.content.first_scalar() == Some('░' as u32)
+                    && cell.fg == crate::vt::Color::Rgb(17, 34, 51)
+                    && cell.bg == crate::vt::Color::Rgb(68, 85, 102)
+            })
+            .count();
+        let osc = cells
+            .iter()
+            .filter(|cell| {
+                cell.content.first_scalar() == Some('░' as u32)
+                    && terminal.private_token(cell.private_tag)
+                        == Some("0123456789abcdef0123456789abcdef")
+            })
+            .count();
+        eprintln!("Synthetic shaded cells retaining OSC metadata: {osc}; retaining truecolour attributes: {rgb}");
+        assert_eq!(
+            rgb, 5,
+            "ConPTY did not preserve synthetic truecolour cell attributes"
+        );
+    }
+    #[test]
     fn both_commands_work_through_conpty_without_installed_fastfetch() {
         use crate::session::{self, Dimensions, SessionSpec};
         let root = std::env::temp_dir().join(format!(
@@ -120,7 +164,7 @@ mod tests {
         env.push(("LOCALAPPDATA".into(), root.clone().into_os_string()));
         let broker = crate::privacy::ipc::Broker::new().unwrap();
         env.extend(broker.register(1).unwrap());
-        let script = r#"$a=junafetch --json|ConvertFrom-Json; if($LASTEXITCODE -ne 0 -or $a.profile -ne 'brief' -or $a.fields.Count -ne 8){exit 21}; $b=fetch --profile standard --json|ConvertFrom-Json; if($LASTEXITCODE -ne 0 -or $b.profile -ne 'standard' -or $b.fields.Count -le 8 -or @($b.fields|Where-Object {$_.name -eq 'Local IP' -and $_.value -in @('░░░░░','Unavailable')}).Count -ne 1){exit 22}; $path=Join-Path $env:LOCALAPPDATA 'Juna/settings.json'; $prefs=Get-Content -Raw $path|ConvertFrom-Json; $prefs.junafetch_profile='detailed'; [IO.File]::WriteAllText($path,($prefs|ConvertTo-Json),[Text.UTF8Encoding]::new($false)); $c=junafetch --json|ConvertFrom-Json; if($LASTEXITCODE -ne 0 -or $c.profile -ne 'detailed' -or @($c.fields|Where-Object name -eq 'BIOS').Count -ne 1){exit 23}; Write-Output 'JUNA_BUNDLED_FETCH_OK'"#;
+        let script = r#"$a=junafetch --json|ConvertFrom-Json; if($LASTEXITCODE -ne 0 -or $a.profile -ne 'brief' -or $a.fields.Count -ne 8){exit 21}; $b=fetch --profile standard --json|ConvertFrom-Json; if($LASTEXITCODE -ne 0 -or $b.profile -ne 'standard' -or $b.fields.Count -le 8 -or @($b.fields|Where-Object {$_.name -eq 'Local IP' -and ($_.value -eq 'Unavailable' -or $_.value -match '^░+$')}).Count -ne 1){exit 22}; $path=Join-Path $env:LOCALAPPDATA 'Juna/settings.json'; $prefs=Get-Content -Raw $path|ConvertFrom-Json; $prefs.junafetch_profile='detailed'; [IO.File]::WriteAllText($path,($prefs|ConvertTo-Json),[Text.UTF8Encoding]::new($false)); $c=junafetch --json|ConvertFrom-Json; if($LASTEXITCODE -ne 0 -or $c.profile -ne 'detailed' -or @($c.fields|Where-Object name -eq 'BIOS').Count -ne 1){exit 23}; Write-Output 'JUNA_BUNDLED_FETCH_OK'"#;
         let spec = SessionSpec {
             program,
             args: vec![
@@ -155,12 +199,91 @@ mod tests {
             .expect("interactive fetch registered protected fields");
         assert_eq!(report.tab, 1);
         let output = String::from_utf8_lossy(&bytes);
-        for (token, value) in report.fields {
-            assert!(output.contains(&format!("JunaPrivate;{token}")));
+        let mut terminal = crate::vt::TerminalState::new(100, 20);
+        terminal.advance(&bytes);
+        let visible = terminal.snapshot(0);
+        for (token, value) in &report.fields {
+            let [r, g, b, br, bg, bb] = crate::privacy::wire::marker(token).unwrap();
             assert!(
-                !output.contains(&value),
+                !output.contains(value),
                 "protected value entered terminal output"
             );
+            let matches = |cell: &crate::vt::Cell| {
+                cell.content.first_scalar() == Some('░' as u32)
+                    && cell.fg == crate::vt::Color::Rgb(r, g, b)
+                    && cell.bg == crate::vt::Color::Rgb(br, bg, bb)
+            };
+            let tagged = visible.cells.iter().any(matches)
+                || (0..terminal.scrollback_len()).any(|row| {
+                    terminal
+                        .scrollback_line(row)
+                        .is_some_and(|cells| cells.iter().any(matches))
+                });
+            assert!(
+                tagged,
+                "ConPTY output lost the association between a protected field and its shaded cells"
+            );
+        }
+        let mut app = super::super::App::new(100, 20);
+        app.store = crate::settings::Store::new(root.clone());
+        app.settings = crate::settings::Settings::default();
+        app.terminal = terminal;
+        app.scale = 1.5;
+        app.left_inset = 24.;
+        app.tabs[0].privacy.accept(report.fields.clone());
+        for (token, value) in &report.fields {
+            let mut found = None;
+            for offset in 0..=app.terminal.scrollback_len() {
+                app.offset = offset;
+                app.tabs[0].privacy.update(&app.terminal, offset);
+                for row in 0..20 {
+                    for col in 0..100 {
+                        if app.tabs[0].privacy.field_at(row, col) == Some(token.as_str()) {
+                            found = Some((row, col));
+                            break;
+                        }
+                    }
+                    if found.is_some() {
+                        break;
+                    }
+                }
+                if found.is_some() {
+                    break;
+                }
+            }
+            let (row, col) = found.expect("actual ConPTY cells must map to their protected field");
+            app.pointer_px = [
+                super::super::PAD * app.scale
+                    + app.left_inset
+                    + (col as f32 + 0.5) * super::super::CELL_W * app.scale,
+                (super::super::PAD + super::super::ui::TAB_HEIGHT) * app.scale
+                    + (row as f32 + 0.5) * super::super::CELL_H * app.scale,
+            ];
+            let moved = winit::event::WindowEvent::CursorMoved {
+                device_id: winit::event::DeviceId::dummy(),
+                position: winit::dpi::PhysicalPosition::new(
+                    app.pointer_px[0] as f64,
+                    app.pointer_px[1] as f64,
+                ),
+            };
+            app.privacy_event(&winit::event::WindowEvent::ModifiersChanged(
+                winit::keyboard::ModifiersState::SHIFT.into(),
+            ));
+            app.privacy_event(&moved);
+            assert!(
+                app.privacy_reveal.token.as_deref() == Some(token.as_str()),
+                "real shaded cell did not reveal through app input"
+            );
+            assert!(app.privacy_overlay(2000, 1500).is_some());
+            app.selection = Some((
+                (app.tabs[0].privacy.top() + row as usize, col),
+                (app.tabs[0].privacy.top() + row as usize, col),
+            ));
+            assert!(!app.selection_text().contains(value));
+            app.privacy_event(&winit::event::WindowEvent::ModifiersChanged(
+                winit::keyboard::ModifiersState::empty().into(),
+            ));
+            assert!(app.privacy_overlay(2000, 1500).is_none());
         }
         std::fs::remove_dir_all(root).unwrap();
     }

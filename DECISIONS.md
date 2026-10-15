@@ -1,5 +1,22 @@
 # Juna — Decision Register
 
+## 2026-10-15 — repair ConPTY protected-field markers
+
+Approved PRIVACY_REPAIR_DESIGN.md replaces new OSC span emission with standard SGR colour pairs.
+Measured host evidence: zero of five OSC-tagged shade cells retained association through ConPTY,
+while five of five truecolour-marked shade cells retained exact attributes. Retract earlier
+end-to-end reveal claims: raw-token presence and synthetic engine tests did not prove this path.
+Full random 128-bit tokens remain in IPC; display markers occupy a narrower 48-bit space, checked
+for collision and never reused during the broker lifetime. Reserve at most 65,536; fail closed
+on exhaustion or randomness failure. Retain at most 128 values per tab, with reserved expired
+marker metadata for safe normalization. The app normalizes known marker colours in an owned
+snapshot, including report-arrival invalidation. Engine/renderer/backend boundaries stay intact.
+Masks reveal ordinary display width as requested; explicitly typed passwords use eight asterisks.
+Junafetch collects no passwords and this adds no automatic password/terminal-wide detection.
+Frontend 0.4.0 is rebuilt and repinned. No dependency change or worker polling was introduced.
+Older Windows and other-machine behaviour require separate acceptance.
+
+
 ## 2026-10-15 — command-line updates
 
 Approved CLI_UPDATE_DESIGN.md adds --check-update and --update, optional temporary channel

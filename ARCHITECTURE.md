@@ -981,10 +981,16 @@ belong to the application and do not infer child-command completion.
 
 Protected Junafetch fields use a window-owned, current-user local IPC broker and per-tab
 random capabilities. Actual values live in bounded application memory; the VT byte stream
-contains only shaded cells and opaque 128-bit tokens. Juna's private OSC 777
-`JunaPrivate;<32-hex-token>` / `JunaPrivate;0` annotations select a bounded engine token-table
-entry. Four-byte cell metadata follows ordinary movement, erasure and reflow without growing
-the existing cell storage size. The engine performs no IPC and never receives protected values.
+contains only mask cells and an opaque 48-bit foreground/background colour-pair marker.
+Full 128-bit tokens and values travel only through authenticated IPC. The broker reserves
+unique markers for its entire window lifetime (65,536 maximum, failing closed at capacity).
+The application maps registered shade/asterisk cells to fields and normalizes their colours
+in its owned snapshot before rendering. Each tab retains at most 128 values; expired marker
+metadata remains reserved so old cells cannot resolve to new values. Ordinary masks follow
+terminal display width; explicitly typed password fields use exactly eight asterisks.
+Legacy OSC annotations remain understood for compatibility but new reports do not emit them:
+ConPTY did not preserve their association with shaded cells. The engine processes ordinary SGR
+and never receives protected values or performs IPC.
 Application-owned committed snapshots keep privacy redraws outside synchronized partial output;
 the renderer receives an owned read-only snapshot and a separately owned temporary reveal overlay.
 The broker blocks on I/O/stop events rather than periodic idle polling. See

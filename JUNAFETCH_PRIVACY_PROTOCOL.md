@@ -8,12 +8,19 @@ TERMINAL_PRIVACY_DESIGN.md; requested shaded masks confirmed on 2026-10-15.
   Reject remote clients, wrong capabilities, invalid messages and oversized fields. Use
   overlapped I/O with cancellation and message deadlines; idle IPC does not poll or wake
   periodically. The broker returns unpredictable 128-bit field tokens, never secret values.
-- Junafetch emits five `░` cells, tagged with Juna's private OSC 777 `JunaPrivate;<32-hex-token>`
-  annotation and a closing zero annotation. Only opaque metadata enters the engine. A
-  bounded engine-owned token table gives cells four-byte tags that follow overwrite,
-  scrolling and reflow; values remain solely
-  in bounded app-owned memory. Plain/JSON output and missing IPC remain masked. Explicit
-  privacy Off affects subsequent reports. The renderer never resolves secrets itself.
+- Junafetch emits one `░` per terminal display column of an ordinary protected value.
+  Explicitly typed password fields emit exactly `********`; no passwords are currently collected.
+  Standard SGR truecolour foreground/background pairs carry opaque 48-bit markers derived from
+  random 128-bit field tokens. The broker collision-checks and never reuses markers during its
+  lifetime, including failed requests and expired values; a 65,536-reservation limit fails closed.
+  Only registered shade/asterisk cells resolve. The app normalizes those colours in its owned
+  committed snapshot and retains at most 128 values per tab. Expired marker metadata remains
+  so old cells never identify a different value. The renderer receives no protocol or secrets
+  except the deliberate temporary overlay. Plain/JSON and missing IPC remain masked with the
+  same width policy. Explicit Off affects subsequent reports.
+  Legacy private OSC parsing remains for compatibility; new reports retire OSC emission because
+  real ConPTY did not retain its association with the painted cells. Prior raw-token checks
+  and direct-engine tests were insufficient evidence of working end-to-end reveal.
 - App-owned committed snapshots prevent UI/privacy redraws exposing synchronized partial
   output. Shift+hover is the default deliberate reveal, with no other modifiers/buttons;
   require movement after Shift and hide on release, exit, focus loss or tab change. Ordinary
@@ -34,4 +41,5 @@ request may confirm installation; the CLI also verifies the host uses the same e
 Current-user ACLs use read-only token identity queries, without impersonation or privilege
 changes. Windows security/pipes/file/overlapped-I/O features serve this concrete requirement;
 no new crate or async runtime is needed. References: Microsoft named-pipe security and
-overlapped named-pipe I/O documentation; the private annotation is Juna-owned protocol.
+overlapped named-pipe I/O documentation; the marker mapping is Juna-owned protocol. Standard SGR 38;2/48;2 is documented at
+https://learn.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences.

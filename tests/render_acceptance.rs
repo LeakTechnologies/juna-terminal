@@ -13,9 +13,10 @@ fn protected_value_overlay_hides_without_changing_terminal_cells() {
     let mut renderer = Renderer::new(&device, &queue, format, 2048, (10., 22.), 8., 16.).unwrap();
     let theme = juna::theme::default_theme();
     renderer.apply_theme(&theme, 4.5).unwrap();
-    let token = "0123456789abcdef0123456789abcdef";
     let mut terminal = TerminalState::new(48, 9);
-    terminal.advance(format!("Network\r\nLocal IP: \x1b]777;JunaPrivate;{token}\x1b\\░░░░░\x1b]777;JunaPrivate;0\x1b\\").as_bytes());
+    terminal.advance(b"Network\r\nLocal IP: \x1b[38;2;1;35;69;48;2;103;137;171m");
+    terminal.advance("░░░░░░░░░░".as_bytes());
+    terminal.advance(b"\x1b[0m");
     let cells = terminal.snapshot(0).cells;
     let hidden = render(&device, &queue, &mut renderer, &terminal, format);
     let overlay = juna::privacy::view::popup("192.0.2.55", [108., 40.], 512., 256., 1., &theme);
@@ -257,7 +258,13 @@ fn render_scene_at(
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
-    renderer.build(&term.snapshot(0), width, height);
+    let mut committed = juna::privacy::view::TabPrivacy::default();
+    committed.accept(vec![(
+        "0123456789abcdef0123456789abcdef".into(),
+        "192.0.2.55".into(),
+    )]);
+    committed.update(term, 0);
+    renderer.build(committed.snapshot().unwrap(), width, height);
     if let Some(scene) = scene {
         renderer.overlay(scene);
     }

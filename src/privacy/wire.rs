@@ -1,5 +1,19 @@
 //! Bounded local IPC infrastructure shared with the bundled frontend; no terminal semantics.
 pub const MASK: &str = "░░░░░";
+pub fn marker(token: &str) -> Option<[u8; 6]> {
+    if token.len() != 32
+        || !token
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
+        return None;
+    }
+    let mut bytes = [0; 6];
+    for (index, byte) in bytes.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&token[index * 2..index * 2 + 2], 16).ok()?;
+    }
+    Some(bytes)
+}
 pub const MAX_MESSAGE: usize = 65536;
 pub const MAX_FIELDS: usize = 32;
 pub const MAX_VALUE: usize = 2048;

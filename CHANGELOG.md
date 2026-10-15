@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1-dev15 — repair protected-field reveal
+
+- Replace fragile OSC spans with per-cell markers preserved through ConPTY.
+- Restore Shift+hover resolution while keeping output and copies censored.
+- Match ordinary mask width to the value's display columns; typed passwords use eight asterisks.
+- Prevent marker reuse and refresh mappings when protected reports arrive.
+
+
 ## 0.1.1-dev14 — command-line updates
 
 - Add --check-update, --update, temporary --channel stable/preview, and --help.

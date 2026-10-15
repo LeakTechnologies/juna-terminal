@@ -1,5 +1,32 @@
 # Testing the repaired terminal
 
+## Dev15 protected-field repair
+
+Implemented approved PRIVACY_REPAIR_DESIGN.md: ordinary masks follow display width, typed
+passwords use eight asterisks, and opaque colour-pair markers survive ConPTY before app-owned
+mapping/normalization. Actual values remain outside VT output, grid/history and copied text.
+Marker reservations never reuse during the window lifetime; expiry removes values, not marker
+identity. Late IPC invalidates the committed mapping. No dependency or engine semantics change.
+
+Verified this session: cargo check, strict all-target Clippy, all 237 standard tests and nine
+frontend tests; all six explicit GPU tests and all eight real-window tests. The strengthened
+bundled-fetch test now follows actual frontend → ConPTY → engine → app input at scaled/gutter
+coordinates and through scrollback, exercising Shift+hover, hide and censored selection copies.
+Synthetic tests cover wrapping, late registration, surviving cells after resize, marker collision,
+capacity, expiry/tab isolation, Unicode width and fixed password masks. GPU captures of the
+normalized mask and synthetic reveal were visually reviewed; see docs/acceptance/privacy-hidden.png
+and privacy-revealed.png. Byte-exact transport and ConPTY acceptance pass. The new resize test
+initially assumed live-screen reflow; corrected it to the engine's documented column clipping,
+without changing engine behaviour. Restricted Windows spawning was rerun with process access.
+
+Retraction: the earlier reveal claim relied on raw OSC tokens and direct-engine tests. Real
+ConPTY lost the association with shade cells; those tests did not establish end-to-end reveal.
+The repair's integration assertion checks actual displayed cells and production input handling.
+Junafetch collects no passwords, and arbitrary command output is not automatically recognized.
+Other-machine/human acceptance and older supported Windows remain separate from these checks.
+Hosted workflows and downloaded release assets are verified after the fresh tag is pushed.
+
+
 ## Dev14 evidence (2026-10-15)
 
 Required check/strict all-target Clippy and all 234 standard tests passed. Six explicit GPU

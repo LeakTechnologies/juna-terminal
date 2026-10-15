@@ -3,13 +3,32 @@
 mod wire;
 use crate::presentation::Section;
 use serde_json::{json, Value};
+use unicode_width::UnicodeWidthStr;
 pub use wire::MASK;
+#[derive(Clone, Copy)]
+enum FieldKind {
+    Ordinary,
+    Password,
+}
+fn mask(value: &str, kind: FieldKind) -> String {
+    match kind {
+        FieldKind::Ordinary => "░".repeat(value.width()),
+        FieldKind::Password => "********".into(),
+    }
+}
+fn kind(name: &str) -> FieldKind {
+    if name == "Password" {
+        FieldKind::Password
+    } else {
+        FieldKind::Ordinary
+    }
+}
 const FIRST: u32 = 0xF0000;
 fn safe(value: &str) -> String {
     value
         .chars()
         .filter(|c| {
-            !c.is_control() && !(FIRST..FIRST + wire::MAX_FIELDS as u32).contains(&(*c as u32))
+            !c.is_control() && !(FIRST..FIRST + 2 * wire::MAX_FIELDS as u32).contains(&(*c as u32))
         })
         .take(512)
         .collect()
@@ -113,12 +132,24 @@ pub fn prepare(
                     .position(|(label, _)| *label == name)
                     .filter(|index| *index < tokens.len())
                 {
-                    char::from_u32(FIRST + index as u32)
-                        .unwrap()
-                        .to_string()
-                        .repeat(5)
+                    char::from_u32(
+                        FIRST
+                            + index as u32
+                            + if matches!(kind(name), FieldKind::Password) {
+                                wire::MAX_FIELDS as u32
+                            } else {
+                                0
+                            },
+                    )
+                    .unwrap()
+                    .to_string()
+                    .repeat(if matches!(kind(name), FieldKind::Password) {
+                        8
+                    } else {
+                        value.width()
+                    })
                 } else {
-                    MASK.into()
+                    mask(value, kind(name))
                 };
             }
         }
@@ -130,14 +161,31 @@ pub fn annotate(line: &str, tokens: &[String]) -> String {
     for ch in line.chars() {
         if let Some(index) = (ch as u32)
             .checked_sub(FIRST)
-            .filter(|index| *index < wire::MAX_FIELDS as u32)
+            .filter(|index| *index < 2 * wire::MAX_FIELDS as u32)
         {
-            if let Some(token) = tokens.get(index as usize) {
-                out.push_str("\x1b]777;JunaPrivate;");
-                out.push_str(token);
-                out.push_str("\x1b\\░\x1b]777;JunaPrivate;0\x1b\\");
+            if let Some(token) = tokens.get(index as usize % wire::MAX_FIELDS) {
+                if let Some([r, g, b, br, bg, bb]) = wire::marker(token) {
+                    out.push_str(&format!(
+                        "\x1b[38;2;{r};{g};{b};48;2;{br};{bg};{bb}m{}\x1b[39;49m",
+                        if index >= wire::MAX_FIELDS as u32 {
+                            '*'
+                        } else {
+                            '░'
+                        }
+                    ));
+                } else {
+                    out.push(if index >= wire::MAX_FIELDS as u32 {
+                        '*'
+                    } else {
+                        '░'
+                    });
+                }
             } else {
-                out.push('░');
+                out.push(if index >= wire::MAX_FIELDS as u32 {
+                    '*'
+                } else {
+                    '░'
+                });
             }
         } else {
             out.push(ch);
@@ -220,7 +268,7 @@ mod tests {
             assert!(!text.contains("192.0.2.55"));
             assert!(!text.contains("Fixture@TestHost"));
             assert!(!text.contains("02:00"));
-            assert_eq!(sections[0].fields[1].1, MASK);
+            assert_eq!(sections[0].fields[1].1, "░".repeat(10));
             prepare(&mut sections, &values, "off", false);
             assert_eq!(sections[0].fields[1].1, "192.0.2.55");
         }
@@ -244,12 +292,41 @@ mod tests {
                 .join("\n");
             assert!(!output.contains(&placeholder));
             assert_eq!(output.matches('░').count(), 5);
-            assert_eq!(output.matches(&format!("JunaPrivate;{token}")).count(), 5);
-            assert_eq!(output.matches("JunaPrivate;0\x1b\\").count(), 5);
+            assert_eq!(output.matches("38;2;1;35;69;48;2;103;137;171m").count(), 5);
+            assert!(!output.contains("JunaPrivate"));
         }
         assert!(safe(&format!("public{placeholder}"))
             .chars()
             .all(|c| (c as u32) < FIRST));
+    }
+    #[test]
+    fn password_placeholders_remain_eight_asterisks_with_or_without_markers() {
+        let placeholder = char::from_u32(FIRST + wire::MAX_FIELDS as u32)
+            .unwrap()
+            .to_string()
+            .repeat(8);
+        assert_eq!(annotate(&placeholder, &[]), "********");
+        let annotated = annotate(&placeholder, &["0123456789abcdef0123456789abcdef".into()]);
+        assert_eq!(annotated.matches('*').count(), 8);
+        assert!(!annotated.contains('░'));
+        let mut sections = vec![Section {
+            name: "Fixture",
+            fields: vec![("Password".into(), String::new())],
+        }];
+        prepare(
+            &mut sections,
+            &[("Password", "longer than eight".into())],
+            "shift-hover",
+            false,
+        );
+        assert_eq!(sections[0].fields[0].1, "********");
+    }
+    #[test]
+    fn masks_follow_display_columns_and_passwords_hide_length() {
+        assert_eq!(mask("界e\u{301}", FieldKind::Ordinary), "░░░");
+        for value in ["x", "a much longer password", "界"] {
+            assert_eq!(mask(value, FieldKind::Password), "********");
+        }
     }
     #[test]
     fn ip_and_mac_values_come_from_detector_data_not_invented_defaults() {

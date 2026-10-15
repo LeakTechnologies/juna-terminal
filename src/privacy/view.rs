@@ -11,7 +11,9 @@ pub struct TabPrivacy {
     values: HashMap<String, String>,
     order: VecDeque<String>,
     committed: Option<RenderSnapshot>,
-    markers: HashMap<u32, String>,
+    markers: HashMap<usize, String>,
+    registered: HashMap<[u8; 6], String>,
+    registrations_changed: bool,
     revision: u64,
     offset: usize,
     top: usize,
@@ -25,6 +27,21 @@ impl TabPrivacy {
             {
                 continue;
             }
+            let Some(marker) = super::wire::marker(&token) else {
+                continue;
+            };
+            if self
+                .registered
+                .get(&marker)
+                .is_some_and(|old| old != &token)
+            {
+                continue;
+            }
+            if !self.registered.contains_key(&marker) && self.registered.len() >= 65_536 {
+                continue;
+            }
+            self.registered.insert(marker, token.clone());
+            self.registrations_changed = true;
             if !self.values.contains_key(&token) {
                 self.order.push_back(token.clone());
             }
@@ -45,18 +62,29 @@ impl TabPrivacy {
     fn update_inner(&mut self, terminal: &TerminalState, offset: usize, allow_sync: bool) {
         let changed = self.committed.as_ref().is_none_or(|view| {
             view.cols != terminal.grid().cols() || view.rows != terminal.grid().rows()
-        }) || self.revision != terminal.revision()
+        }) || self.registrations_changed
+            || self.revision != terminal.revision()
             || self.offset != offset;
         if changed && (!terminal.input_modes().synchronized_output || allow_sync) {
-            let snapshot = terminal.snapshot(offset);
+            let mut snapshot = terminal.snapshot(offset);
             self.markers.clear();
-            for cell in &snapshot.cells {
-                if cell.private_tag != 0 && !self.markers.contains_key(&cell.private_tag) {
-                    if let Some(token) = terminal.private_token(cell.private_tag) {
-                        self.markers.insert(cell.private_tag, token.to_owned());
+            for (index, cell) in snapshot.cells.iter_mut().enumerate() {
+                if !matches!(cell.content.first_scalar(), Some(0x2591 | 0x2a)) {
+                    continue;
+                }
+                let token = match (cell.fg, cell.bg) {
+                    (crate::vt::Color::Rgb(r, g, b), crate::vt::Color::Rgb(br, bg, bb)) => {
+                        self.registered.get(&[r, g, b, br, bg, bb]).cloned()
                     }
+                    _ => terminal.private_token(cell.private_tag).map(str::to_owned),
+                };
+                if let Some(token) = token {
+                    self.markers.insert(index, token);
+                    cell.fg = crate::vt::Color::Default;
+                    cell.bg = crate::vt::Color::Default;
                 }
             }
+            self.registrations_changed = false;
             self.committed = Some(snapshot);
             self.revision = terminal.revision();
             self.offset = offset;
@@ -84,10 +112,12 @@ impl TabPrivacy {
             return None;
         }
         let cell = &view.cells[row as usize * view.cols as usize + col as usize];
-        if cell.content.first_scalar() != Some('░' as u32) {
+        if !matches!(cell.content.first_scalar(), Some(0x2591 | 0x2a)) {
             return None;
         }
-        let token = self.markers.get(&cell.private_tag)?;
+        let token = self
+            .markers
+            .get(&(row as usize * view.cols as usize + col as usize))?;
         self.values.contains_key(token).then_some(token.as_str())
     }
     pub fn value(&self, token: &str) -> Option<&str> {
@@ -262,6 +292,64 @@ mod tests {
         );
     }
     #[test]
+    fn colour_markers_refresh_after_ipc_wrap_resize_and_reject_reuse() {
+        let mut terminal = TerminalState::new(7, 3);
+        terminal.advance(b"\x1b[38;2;1;35;69;48;2;103;137;171m");
+        terminal.advance("░░░░░░░░░░".as_bytes());
+        terminal.advance(b"\x1b[0m");
+        let mut view = TabPrivacy::default();
+        view.update(&terminal, 0);
+        assert!(view.field_at(0, 0).is_none());
+        view.accept(vec![(TOKEN.into(), SECRET.into())]);
+        view.update(&terminal, 0);
+        assert_eq!(view.field_at(0, 0), Some(TOKEN));
+        assert_eq!(view.field_at(1, 2), Some(TOKEN));
+        assert_eq!(
+            view.snapshot().unwrap().cells[0].fg,
+            crate::vt::Color::Default
+        );
+        view.accept(vec![(
+            "0123456789abffffffffffffffffffff".into(),
+            "different".into(),
+        )]);
+        assert_eq!(view.value(TOKEN), Some(SECRET));
+        assert!(view.value("0123456789abffffffffffffffffffff").is_none());
+        terminal.resize(5, 3);
+        view.update(&terminal, 0);
+        // Live-grid narrowing clips columns; surviving mask cells keep their mapping.
+        assert_eq!(view.field_at(1, 2), Some(TOKEN));
+        assert!(view.field_at(1, 4).is_none());
+        for index in 1..=128 {
+            view.accept(vec![(
+                format!("{index:012x}{index:020x}"),
+                "fixture".into(),
+            )]);
+        }
+        view.update(&terminal, 0);
+        assert!(view.field_at(0, 0).is_none());
+        assert_eq!(
+            view.snapshot().unwrap().cells[0].bg,
+            crate::vt::Color::Default
+        );
+        for index in 0..65_536 {
+            view.registered
+                .entry([
+                    (index >> 16) as u8,
+                    (index >> 8) as u8,
+                    index as u8,
+                    0,
+                    0,
+                    0,
+                ])
+                .or_default();
+        }
+        view.accept(vec![(
+            "ffffffffffffffffffffffffffffffff".into(),
+            "rejected".into(),
+        )]);
+        assert!(view.value("ffffffffffffffffffffffffffffffff").is_none());
+    }
+    #[test]
     fn reveal_requires_deliberate_movement_and_hides_for_every_exit_condition() {
         let mut reveal = Reveal::default();
         reveal.moved(Some(TOKEN), "shift-hover");
@@ -310,7 +398,10 @@ mod tests {
         view.accept(vec![(TOKEN.into(), SECRET.into())]);
         assert_eq!(view.field_at(0, 0), Some(TOKEN));
         for index in 0..128 {
-            view.accept(vec![(format!("{index:032x}"), "198.51.100.1".into())]);
+            view.accept(vec![(
+                format!("{index:012x}{index:020x}"),
+                "198.51.100.1".into(),
+            )]);
         }
         assert_eq!(view.field_at(0, 0), None);
         assert_eq!(view.value(TOKEN), None);

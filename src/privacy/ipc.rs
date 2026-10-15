@@ -242,6 +242,7 @@ fn server(
     let handle = Handle(HANDLE(pipe_value as *mut std::ffi::c_void));
     let stop = HANDLE(stop_value as *mut std::ffi::c_void);
     let Ok(pipe) = Pipe::new(handle) else { return };
+    let mut markers = std::collections::HashSet::new();
     loop {
         // SAFETY: borrowed stop event remains open until this worker joins; no pointer payload.
         if unsafe { WaitForSingleObject(stop, 0) } == WAIT_OBJECT_0 {
@@ -257,7 +258,7 @@ fn server(
         if !connected {
             break;
         }
-        let _ = receive(&pipe, stop, &capabilities, &sender);
+        let _ = receive(&pipe, stop, &capabilities, &sender, &mut markers);
         // SAFETY: all connection I/O is joined before disconnect; values never echo back to clients.
         unsafe {
             let _ = DisconnectNamedPipe(pipe.handle.0);
@@ -270,6 +271,7 @@ fn receive(
     stop: windows::Win32::Foundation::HANDLE,
     capabilities: &Mutex<HashMap<u64, String>>,
     sender: &mpsc::SyncSender<Report>,
+    markers: &mut std::collections::HashSet<[u8; 6]>,
 ) -> Result<(), String> {
     use std::time::{Duration, Instant};
     let deadline = Instant::now() + Duration::from_secs(3);
@@ -329,7 +331,18 @@ fn receive(
             .as_str()
             .filter(|s| !s.is_empty() && s.len() <= MAX_VALUE && !s.chars().any(char::is_control))
             .ok_or("Invalid protected value")?;
-        let id = capability()?[..32].to_owned();
+        if markers.len() >= 65_536 {
+            return Err("Privacy marker capacity reached".into());
+        }
+        let mut candidate = None;
+        for _ in 0..32 {
+            let id = capability()?[..32].to_owned();
+            if reserve_marker(markers, &id) {
+                candidate = Some(id);
+                break;
+            }
+        }
+        let id = candidate.ok_or("Privacy marker collision")?;
         fields.push((id.clone(), text.to_owned()));
         ids.push(id);
     }
@@ -351,6 +364,13 @@ fn receive(
     Ok(())
 }
 #[cfg(any(windows, test))]
+fn reserve_marker(markers: &mut std::collections::HashSet<[u8; 6]>, token: &str) -> bool {
+    if markers.len() >= 65_536 {
+        return false;
+    }
+    super::wire::marker(token).is_some_and(|marker| markers.insert(marker))
+}
+#[cfg(any(windows, test))]
 fn constant_equal(a: &[u8], b: &[u8]) -> bool {
     if a.len() != 64 || b.len() != 64 {
         return false;
@@ -360,6 +380,33 @@ fn constant_equal(a: &[u8], b: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn display_markers_never_reuse_and_fail_closed_at_capacity() {
+        let mut reserved = std::collections::HashSet::new();
+        assert!(super::reserve_marker(
+            &mut reserved,
+            "0123456789abcdef0123456789abcdef"
+        ));
+        assert!(!super::reserve_marker(
+            &mut reserved,
+            "0123456789abffffffffffffffffffff"
+        ));
+        assert!(!super::reserve_marker(&mut reserved, "invalid"));
+        for index in 0..65_536 {
+            reserved.insert([
+                (index >> 16) as u8,
+                (index >> 8) as u8,
+                index as u8,
+                0,
+                0,
+                0,
+            ]);
+        }
+        assert!(!super::reserve_marker(
+            &mut reserved,
+            "ffffffffffffffffffffffffffffffff"
+        ));
+    }
     #[test]
     fn capabilities_are_fixed_length_and_compared_completely() {
         assert!(super::constant_equal(&[b'a'; 64], &[b'a'; 64]));
