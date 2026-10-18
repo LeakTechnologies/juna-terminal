@@ -1,0 +1,906 @@
+{
+  "schema_version": 1,
+  "benchmark_version": "0.1.1-dev20",
+  "benchmark_build_base_commit": "e2612ebf80bb2ab8a82ae89e087286db6d6f1ebc",
+  "benchmark_sources_sha256": "c15f134bfc2b860915046468f00647f60a3c4e6573d9371b93e1f280320ed8b8",
+  "target_sha256": "6e0939c0a61c934918e233335e2cca9b50d826b1d413a4cb567b7b5e1a5417a2",
+  "target_version": "0.1.1-dev20",
+  "profile": "quick",
+  "summaries": [
+    {
+      "workload": "idle",
+      "startup_ms": {
+        "samples": [
+          1555.4719000000002,
+          1524.7765,
+          1586.0582000000002
+        ],
+        "median": 1555.4719000000002,
+        "p95": 1586.0582000000002
+      },
+      "idle_private_mib": {
+        "samples": [
+          417.01953125,
+          417.5625,
+          415.66015625
+        ],
+        "median": 417.01953125,
+        "p95": 417.5625
+      },
+      "after_private_mib": {
+        "samples": [
+          417.89453125,
+          417.5625,
+          415.66015625
+        ],
+        "median": 417.5625,
+        "p95": 417.89453125
+      },
+      "parent_cpu_seconds": {
+        "samples": [
+          0.0625,
+          0.0,
+          0.015625
+        ],
+        "median": 0.015625,
+        "p95": 0.0625
+      },
+      "elapsed_seconds": {
+        "samples": [
+          0.3800605,
+          0.3334783,
+          0.33433
+        ],
+        "median": 0.33433,
+        "p95": 0.3800605
+      },
+      "response_proxy_ms": {
+        "samples": [
+          37.5844,
+          27.2754,
+          44.3246,
+          28.8141,
+          44.1043,
+          27.5033,
+          26.9348,
+          29.5155,
+          27.858,
+          30.0244,
+          28.053,
+          26.3274,
+          28.3502,
+          28.6227,
+          25.7521
+        ],
+        "median": 28.3502,
+        "p95": 44.3246
+      }
+    },
+    {
+      "workload": "ascii",
+      "startup_ms": {
+        "samples": [
+          1509.5524,
+          1539.5755,
+          1528.5045
+        ],
+        "median": 1528.5045,
+        "p95": 1539.5755
+      },
+      "idle_private_mib": {
+        "samples": [
+          417.06640625,
+          417.109375,
+          417.1796875
+        ],
+        "median": 417.109375,
+        "p95": 417.1796875
+      },
+      "after_private_mib": {
+        "samples": [
+          437.46484375,
+          437.796875,
+          436.7265625
+        ],
+        "median": 437.46484375,
+        "p95": 437.796875
+      },
+      "parent_cpu_seconds": {
+        "samples": [
+          0.09375,
+          0.09375,
+          0.09375
+        ],
+        "median": 0.09375,
+        "p95": 0.09375
+      },
+      "elapsed_seconds": {
+        "samples": [
+          0.1369328,
+          0.139069,
+          0.1343953
+        ],
+        "median": 0.1369328,
+        "p95": 0.139069
+      },
+      "response_proxy_ms": null
+    },
+    {
+      "workload": "unicode",
+      "startup_ms": {
+        "samples": [
+          1521.8281,
+          1504.8994,
+          1526.5534
+        ],
+        "median": 1521.8281,
+        "p95": 1526.5534
+      },
+      "idle_private_mib": {
+        "samples": [
+          416.5703125,
+          418.03515625,
+          416.21484375
+        ],
+        "median": 416.5703125,
+        "p95": 418.03515625
+      },
+      "after_private_mib": {
+        "samples": [
+          436.80078125,
+          438.88671875,
+          436.91015625
+        ],
+        "median": 436.91015625,
+        "p95": 438.88671875
+      },
+      "parent_cpu_seconds": {
+        "samples": [
+          0.09375,
+          0.125,
+          0.09375
+        ],
+        "median": 0.09375,
+        "p95": 0.125
+      },
+      "elapsed_seconds": {
+        "samples": [
+          0.1522265,
+          0.1223394,
+          0.1525963
+        ],
+        "median": 0.1522265,
+        "p95": 0.1525963
+      },
+      "response_proxy_ms": null
+    },
+    {
+      "workload": "colour",
+      "startup_ms": {
+        "samples": [
+          1506.065,
+          1514.3784999999998,
+          1513.5985999999998
+        ],
+        "median": 1513.5985999999998,
+        "p95": 1514.3784999999998
+      },
+      "idle_private_mib": {
+        "samples": [
+          419.3671875,
+          416.81640625,
+          417.8046875
+        ],
+        "median": 417.8046875,
+        "p95": 419.3671875
+      },
+      "after_private_mib": {
+        "samples": [
+          439.07421875,
+          436.6796875,
+          437.7890625
+        ],
+        "median": 437.7890625,
+        "p95": 439.07421875
+      },
+      "parent_cpu_seconds": {
+        "samples": [
+          0.078125,
+          0.0625,
+          0.078125
+        ],
+        "median": 0.078125,
+        "p95": 0.078125
+      },
+      "elapsed_seconds": {
+        "samples": [
+          0.1075902,
+          0.1040541,
+          0.1217648
+        ],
+        "median": 0.1075902,
+        "p95": 0.1217648
+      },
+      "response_proxy_ms": null
+    },
+    {
+      "workload": "flood",
+      "startup_ms": {
+        "samples": [
+          1791.2492,
+          1549.3928,
+          1552.7174000000002
+        ],
+        "median": 1552.7174000000002,
+        "p95": 1791.2492
+      },
+      "idle_private_mib": {
+        "samples": [
+          417.45703125,
+          419.50390625,
+          418.65625
+        ],
+        "median": 418.65625,
+        "p95": 419.50390625
+      },
+      "after_private_mib": {
+        "samples": [
+          417.45703125,
+          419.4921875,
+          418.65625
+        ],
+        "median": 418.65625,
+        "p95": 419.4921875
+      },
+      "parent_cpu_seconds": {
+        "samples": [
+          0.140625,
+          0.21875,
+          0.171875
+        ],
+        "median": 0.171875,
+        "p95": 0.21875
+      },
+      "elapsed_seconds": {
+        "samples": [
+          1.3114721,
+          1.7839594,
+          1.3831422
+        ],
+        "median": 1.3831422,
+        "p95": 1.7839594
+      },
+      "response_proxy_ms": {
+        "samples": [
+          89.2141,
+          243.6613,
+          241.6825,
+          142.1302,
+          144.1128,
+          61.835,
+          225.5107,
+          173.7649,
+          663.2831,
+          209.6794,
+          108.2465,
+          211.683,
+          163.8163,
+          157.2619,
+          295.4409
+        ],
+        "median": 173.7649,
+        "p95": 663.2831
+      }
+    }
+  ],
+  "limitations": [
+    "Windows x64 Juna adapter only; cross-terminal equivalence is not yet established.",
+    "Input timing is posted A key -> unique colour observed through window capture plus local coordination I/O/polling; not physical keyboard/display latency. Child receipt is timestamped before output with the same-machine performance counter; cross-process ordering uncertainty is one tick. Only deltas are exported.",
+    "Fresh isolated settings: IBM Plex Mono 16, Catppuccin Mocha, Git bar disabled; default window dimensions and host DPI. Keep desktop/GPU/power settings fixed. No private path/transcript/pixel export.",
+    "One warm-up excluded. Executable hashing warms file cache. Startup ends at synthetic child ready, not first paint. Memory is parent-process only; excludes capture helper, shell and GPU. Region categories are not allocation call-stack attribution.",
+    "Output bytes are producer bytes, not a byte-exact ConPTY transport counter. Final marker proves final response observed, not every intermediate frame. Trials include coordination overhead; small-sample p95 is exploratory.",
+    "True Ctrl+C response, scroll latency, multiple tabs, battery/power and PresentMon/WPR comparisons remain unmeasured."
+  ],
+  "trials": [
+    {
+      "workload": "idle",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1555.4719000000002,
+      "idle": {
+        "private_bytes": 437276672,
+        "working_set_bytes": 223277056,
+        "peak_working_set_bytes": 223281152,
+        "cpu_seconds": 1.25,
+        "committed_private_bytes": 397967360,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 438194176,
+        "working_set_bytes": 223756288,
+        "peak_working_set_bytes": 223756288,
+        "cpu_seconds": 1.3125,
+        "committed_private_bytes": 398884864,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "parent_cpu_delta_seconds": 0.0625,
+      "elapsed_seconds": 0.3800605,
+      "producer_bytes": null,
+      "response_proxy_ms": {
+        "samples": [
+          37.5844,
+          27.2754,
+          44.3246,
+          28.8141,
+          44.1043
+        ],
+        "median": 37.5844,
+        "p95": 44.3246
+      },
+      "child_received_ms": {
+        "samples": [
+          0.849,
+          0.2793,
+          0.3124,
+          1.6981,
+          0.3014
+        ],
+        "median": 0.3124,
+        "p95": 1.6981
+      },
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "idle",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1524.7765,
+      "idle": {
+        "private_bytes": 437846016,
+        "working_set_bytes": 225136640,
+        "peak_working_set_bytes": 225136640,
+        "cpu_seconds": 1.234375,
+        "committed_private_bytes": 398544896,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 437846016,
+        "working_set_bytes": 225202176,
+        "peak_working_set_bytes": 225202176,
+        "cpu_seconds": 1.234375,
+        "committed_private_bytes": 398544896,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "parent_cpu_delta_seconds": 0.0,
+      "elapsed_seconds": 0.3334783,
+      "producer_bytes": null,
+      "response_proxy_ms": {
+        "samples": [
+          27.5033,
+          26.9348,
+          29.5155,
+          27.858,
+          30.0244
+        ],
+        "median": 27.858,
+        "p95": 30.0244
+      },
+      "child_received_ms": {
+        "samples": [
+          1.7174,
+          0.3098,
+          0.2813,
+          0.2621,
+          0.2868
+        ],
+        "median": 0.2868,
+        "p95": 1.7174
+      },
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "idle",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1586.0582000000002,
+      "idle": {
+        "private_bytes": 435851264,
+        "working_set_bytes": 224133120,
+        "peak_working_set_bytes": 224133120,
+        "cpu_seconds": 1.21875,
+        "committed_private_bytes": 396550144,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 435851264,
+        "working_set_bytes": 224210944,
+        "peak_working_set_bytes": 224210944,
+        "cpu_seconds": 1.234375,
+        "committed_private_bytes": 396550144,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "parent_cpu_delta_seconds": 0.015625,
+      "elapsed_seconds": 0.33433,
+      "producer_bytes": null,
+      "response_proxy_ms": {
+        "samples": [
+          28.053,
+          26.3274,
+          28.3502,
+          28.6227,
+          25.7521
+        ],
+        "median": 28.053,
+        "p95": 28.6227
+      },
+      "child_received_ms": {
+        "samples": [
+          1.3929,
+          0.2785,
+          0.2682,
+          0.2813,
+          0.8451
+        ],
+        "median": 0.2813,
+        "p95": 1.3929
+      },
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "ascii",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1509.5524,
+      "idle": {
+        "private_bytes": 437325824,
+        "working_set_bytes": 224104448,
+        "peak_working_set_bytes": 224104448,
+        "cpu_seconds": 1.3125,
+        "committed_private_bytes": 397950976,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 458715136,
+        "working_set_bytes": 245186560,
+        "peak_working_set_bytes": 247033856,
+        "cpu_seconds": 1.40625,
+        "committed_private_bytes": 419303424,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "parent_cpu_delta_seconds": 0.09375,
+      "elapsed_seconds": 0.1369328,
+      "producer_bytes": 270336,
+      "response_proxy_ms": null,
+      "child_received_ms": null,
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "ascii",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1539.5755,
+      "idle": {
+        "private_bytes": 437370880,
+        "working_set_bytes": 225857536,
+        "peak_working_set_bytes": 225857536,
+        "cpu_seconds": 1.28125,
+        "committed_private_bytes": 398057472,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 459063296,
+        "working_set_bytes": 247537664,
+        "peak_working_set_bytes": 250478592,
+        "cpu_seconds": 1.375,
+        "committed_private_bytes": 419713024,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "parent_cpu_delta_seconds": 0.09375,
+      "elapsed_seconds": 0.139069,
+      "producer_bytes": 270336,
+      "response_proxy_ms": null,
+      "child_received_ms": null,
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "ascii",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1528.5045,
+      "idle": {
+        "private_bytes": 437444608,
+        "working_set_bytes": 225603584,
+        "peak_working_set_bytes": 225603584,
+        "cpu_seconds": 1.203125,
+        "committed_private_bytes": 398057472,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 457940992,
+        "working_set_bytes": 246517760,
+        "peak_working_set_bytes": 248680448,
+        "cpu_seconds": 1.296875,
+        "committed_private_bytes": 418516992,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "parent_cpu_delta_seconds": 0.09375,
+      "elapsed_seconds": 0.1343953,
+      "producer_bytes": 270336,
+      "response_proxy_ms": null,
+      "child_received_ms": null,
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "unicode",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1521.8281,
+      "idle": {
+        "private_bytes": 436805632,
+        "working_set_bytes": 225984512,
+        "peak_working_set_bytes": 225988608,
+        "cpu_seconds": 1.21875,
+        "committed_private_bytes": 397438976,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 458018816,
+        "working_set_bytes": 247103488,
+        "peak_working_set_bytes": 248344576,
+        "cpu_seconds": 1.3125,
+        "committed_private_bytes": 418611200,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "parent_cpu_delta_seconds": 0.09375,
+      "elapsed_seconds": 0.1522265,
+      "producer_bytes": 184320,
+      "response_proxy_ms": null,
+      "child_received_ms": null,
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "unicode",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1504.8994,
+      "idle": {
+        "private_bytes": 438341632,
+        "working_set_bytes": 223883264,
+        "peak_working_set_bytes": 223883264,
+        "cpu_seconds": 1.21875,
+        "committed_private_bytes": 398954496,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 460206080,
+        "working_set_bytes": 245526528,
+        "peak_working_set_bytes": 247549952,
+        "cpu_seconds": 1.34375,
+        "committed_private_bytes": 420786176,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "parent_cpu_delta_seconds": 0.125,
+      "elapsed_seconds": 0.1223394,
+      "producer_bytes": 184320,
+      "response_proxy_ms": null,
+      "child_received_ms": null,
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "unicode",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1526.5534,
+      "idle": {
+        "private_bytes": 436432896,
+        "working_set_bytes": 225701888,
+        "peak_working_set_bytes": 225701888,
+        "cpu_seconds": 1.125,
+        "committed_private_bytes": 397053952,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 458133504,
+        "working_set_bytes": 247230464,
+        "peak_working_set_bytes": 248356864,
+        "cpu_seconds": 1.21875,
+        "committed_private_bytes": 418717696,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "parent_cpu_delta_seconds": 0.09375,
+      "elapsed_seconds": 0.1525963,
+      "producer_bytes": 184320,
+      "response_proxy_ms": null,
+      "child_received_ms": null,
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "colour",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1506.065,
+      "idle": {
+        "private_bytes": 439738368,
+        "working_set_bytes": 224198656,
+        "peak_working_set_bytes": 224198656,
+        "cpu_seconds": 1.203125,
+        "committed_private_bytes": 400338944,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 460402688,
+        "working_set_bytes": 244736000,
+        "peak_working_set_bytes": 246607872,
+        "cpu_seconds": 1.28125,
+        "committed_private_bytes": 420966400,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "parent_cpu_delta_seconds": 0.078125,
+      "elapsed_seconds": 0.1075902,
+      "producer_bytes": 196608,
+      "response_proxy_ms": null,
+      "child_received_ms": null,
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "colour",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1514.3784999999998,
+      "idle": {
+        "private_bytes": 437063680,
+        "working_set_bytes": 224165888,
+        "peak_working_set_bytes": 224165888,
+        "cpu_seconds": 1.203125,
+        "committed_private_bytes": 397750272,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 457891840,
+        "working_set_bytes": 244912128,
+        "peak_working_set_bytes": 246988800,
+        "cpu_seconds": 1.265625,
+        "committed_private_bytes": 418541568,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "parent_cpu_delta_seconds": 0.0625,
+      "elapsed_seconds": 0.1040541,
+      "producer_bytes": 196608,
+      "response_proxy_ms": null,
+      "child_received_ms": null,
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "colour",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1513.5985999999998,
+      "idle": {
+        "private_bytes": 438099968,
+        "working_set_bytes": 225742848,
+        "peak_working_set_bytes": 225742848,
+        "cpu_seconds": 1.203125,
+        "committed_private_bytes": 398778368,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 459055104,
+        "working_set_bytes": 246448128,
+        "peak_working_set_bytes": 248643584,
+        "cpu_seconds": 1.28125,
+        "committed_private_bytes": 419692544,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "parent_cpu_delta_seconds": 0.078125,
+      "elapsed_seconds": 0.1217648,
+      "producer_bytes": 196608,
+      "response_proxy_ms": null,
+      "child_received_ms": null,
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "flood",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1791.2492,
+      "idle": {
+        "private_bytes": 437735424,
+        "working_set_bytes": 225837056,
+        "peak_working_set_bytes": 225837056,
+        "cpu_seconds": 1.390625,
+        "committed_private_bytes": 398413824,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 437735424,
+        "working_set_bytes": 226070528,
+        "peak_working_set_bytes": 226070528,
+        "cpu_seconds": 1.53125,
+        "committed_private_bytes": 398405632,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 10
+      },
+      "parent_cpu_delta_seconds": 0.140625,
+      "elapsed_seconds": 1.3114721,
+      "producer_bytes": null,
+      "response_proxy_ms": {
+        "samples": [
+          89.2141,
+          243.6613,
+          241.6825,
+          142.1302,
+          144.1128
+        ],
+        "median": 144.1128,
+        "p95": 243.6613
+      },
+      "child_received_ms": {
+        "samples": [
+          0.454,
+          0.2454,
+          3.0597,
+          4.5018,
+          5.4357
+        ],
+        "median": 3.0597,
+        "p95": 5.4357
+      },
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "flood",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1549.3928,
+      "idle": {
+        "private_bytes": 439881728,
+        "working_set_bytes": 223776768,
+        "peak_working_set_bytes": 223776768,
+        "cpu_seconds": 1.1875,
+        "committed_private_bytes": 400564224,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 439869440,
+        "working_set_bytes": 224047104,
+        "peak_working_set_bytes": 224047104,
+        "cpu_seconds": 1.40625,
+        "committed_private_bytes": 400551936,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 9
+      },
+      "parent_cpu_delta_seconds": 0.21875,
+      "elapsed_seconds": 1.7839594,
+      "producer_bytes": null,
+      "response_proxy_ms": {
+        "samples": [
+          61.835,
+          225.5107,
+          173.7649,
+          663.2831,
+          209.6794
+        ],
+        "median": 209.6794,
+        "p95": 663.2831
+      },
+      "child_received_ms": {
+        "samples": [
+          0.4257,
+          0.2549,
+          0.327,
+          0.2619,
+          5.4004
+        ],
+        "median": 0.327,
+        "p95": 5.4004
+      },
+      "performance_counter_hz": 10000000
+    },
+    {
+      "workload": "flood",
+      "client_width": 1016,
+      "client_height": 708,
+      "warm_fixture_startup_ms": 1552.7174000000002,
+      "idle": {
+        "private_bytes": 438992896,
+        "working_set_bytes": 225009664,
+        "peak_working_set_bytes": 225009664,
+        "cpu_seconds": 1.203125,
+        "committed_private_bytes": 399622144,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "after": {
+        "private_bytes": 438992896,
+        "working_set_bytes": 225239040,
+        "peak_working_set_bytes": 225239040,
+        "cpu_seconds": 1.375,
+        "committed_private_bytes": 399622144,
+        "committed_mapped_bytes": 17088512,
+        "committed_image_bytes": 392908800,
+        "private_regions_over_16_mib": 11
+      },
+      "parent_cpu_delta_seconds": 0.171875,
+      "elapsed_seconds": 1.3831422,
+      "producer_bytes": null,
+      "response_proxy_ms": {
+        "samples": [
+          108.2465,
+          211.683,
+          163.8163,
+          157.2619,
+          295.4409
+        ],
+        "median": 163.8163,
+        "p95": 295.4409
+      },
+      "child_received_ms": {
+        "samples": [
+          0.4154,
+          0.2252,
+          0.3535,
+          0.3791,
+          7.6562
+        ],
+        "median": 0.3791,
+        "p95": 7.6562
+      },
+      "performance_counter_hz": 10000000
+    }
+  ]
+}

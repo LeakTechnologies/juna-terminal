@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1-dev20 — separate native performance measurements
+
+- Add the source-built `juna-bench` developer utility; normal terminal sessions do not run it.
+- Measure owned synthetic windows with CPU/memory/region counters and uniquely observed input responses.
+- Add quick/full profiles, raw JSON, escaped standalone HTML, bounded capture supervision and cleanup.
+- Document measurement overhead, unsupported comparisons and the remaining laptop/performance work.
+
 ## 0.1.1-dev19 — reduce ordinary output allocation overhead
 
 - Avoid grapheme-text allocation for adjacent printable ASCII scalars, preserving the existing Unicode path.

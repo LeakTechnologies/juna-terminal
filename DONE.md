@@ -1,3 +1,23 @@
+## Dev20 native benchmark utility (2026-10-18)
+
+Completed the approved first owned-Juna measurement slice as a separate source-built binary.
+Quick/full profiles measure synthetic output, parent CPU/private memory/working set/regions,
+warm fixture startup and targeted input with independently timestamped receipt/unique visible
+response. Reports are local JSON and escaped standalone HTML; ordinary Juna sessions do not
+run capture or benchmarks. No terminal-engine implementation or new crate was imported.
+
+Verified this session: check, strict all-target Clippy, all 250 executed standard tests,
+release builds, native x64/version/seven-icon checks and bundled-tool pins. The restricted
+test attempt failed on temp/native fixture permissions; unchanged native rerun passed.
+Final full/quick profiles passed in 42 owned windows including warm-ups, with 330 measured
+input responses and clean shutdown. Deliberately closing the owned test child rejected the
+run, removed staging and wrote no success report. See docs/performance/dev20 for raw evidence.
+
+This is a measurement release, not a memory/performance fix or laptop/stable acceptance.
+Cross-terminal equivalence, true Ctrl+C, scrolling and multiple sessions remain unmeasured.
+The developer utility is not added to the normal ZIP or menus. Hosted CI and downloadable
+assets are verified after tagging; local checks alone do not establish publication.
+
 ## Dev19 output allocation repair (2026-10-18)
 
 Use a printable-ASCII pair boundary fast path under the approved performance design; all

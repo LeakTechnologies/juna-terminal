@@ -1,0 +1,906 @@
+<!doctype html><html lang="en-CA"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Juna benchmark</title><style>body{background:#1e1e2e;color:#cdd6f4;font:16px system-ui;max-width:1100px;margin:3rem auto;padding:1rem}pre{white-space:pre-wrap;overflow-wrap:anywhere}h1{color:#cba6f7}table{border-collapse:collapse;width:100%}th,td{padding:.6rem;text-align:left;border-bottom:1px solid #585b70}.table{overflow-x:auto}</style><h1>Juna benchmark evidence</h1><p>Median values. Response times include software capture and coordination overhead. They do not establish physical display latency. Small sample counts are exploratory.</p><div class="table"><table><thead><tr><th>Workload</th><th>Warm startup ms</th><th>Idle private MiB</th><th>After private MiB</th><th>Parent CPU s</th><th>Elapsed s</th><th>Response proxy ms</th></tr></thead><tbody><tr><th scope="row">idle</th><td>1555.47</td><td>417.02</td><td>417.56</td><td>0.02</td><td>0.33</td><td>28.35</td></tr><tr><th scope="row">ascii</th><td>1528.50</td><td>417.11</td><td>437.46</td><td>0.09</td><td>0.14</td><td>unmeasured</td></tr><tr><th scope="row">unicode</th><td>1521.83</td><td>416.57</td><td>436.91</td><td>0.09</td><td>0.15</td><td>unmeasured</td></tr><tr><th scope="row">colour</th><td>1513.60</td><td>417.80</td><td>437.79</td><td>0.08</td><td>0.11</td><td>unmeasured</td></tr><tr><th scope="row">flood</th><td>1552.72</td><td>418.66</td><td>418.66</td><td>0.17</td><td>1.38</td><td>173.76</td></tr></tbody></table></div><details><summary>Raw samples, p95 and limitations</summary><pre>{
+  &quot;schema_version&quot;: 1,
+  &quot;benchmark_version&quot;: &quot;0.1.1-dev20&quot;,
+  &quot;benchmark_build_base_commit&quot;: &quot;e2612ebf80bb2ab8a82ae89e087286db6d6f1ebc&quot;,
+  &quot;benchmark_sources_sha256&quot;: &quot;c15f134bfc2b860915046468f00647f60a3c4e6573d9371b93e1f280320ed8b8&quot;,
+  &quot;target_sha256&quot;: &quot;6e0939c0a61c934918e233335e2cca9b50d826b1d413a4cb567b7b5e1a5417a2&quot;,
+  &quot;target_version&quot;: &quot;0.1.1-dev20&quot;,
+  &quot;profile&quot;: &quot;quick&quot;,
+  &quot;summaries&quot;: [
+    {
+      &quot;workload&quot;: &quot;idle&quot;,
+      &quot;startup_ms&quot;: {
+        &quot;samples&quot;: [
+          1555.4719000000002,
+          1524.7765,
+          1586.0582000000002
+        ],
+        &quot;median&quot;: 1555.4719000000002,
+        &quot;p95&quot;: 1586.0582000000002
+      },
+      &quot;idle_private_mib&quot;: {
+        &quot;samples&quot;: [
+          417.01953125,
+          417.5625,
+          415.66015625
+        ],
+        &quot;median&quot;: 417.01953125,
+        &quot;p95&quot;: 417.5625
+      },
+      &quot;after_private_mib&quot;: {
+        &quot;samples&quot;: [
+          417.89453125,
+          417.5625,
+          415.66015625
+        ],
+        &quot;median&quot;: 417.5625,
+        &quot;p95&quot;: 417.89453125
+      },
+      &quot;parent_cpu_seconds&quot;: {
+        &quot;samples&quot;: [
+          0.0625,
+          0.0,
+          0.015625
+        ],
+        &quot;median&quot;: 0.015625,
+        &quot;p95&quot;: 0.0625
+      },
+      &quot;elapsed_seconds&quot;: {
+        &quot;samples&quot;: [
+          0.3800605,
+          0.3334783,
+          0.33433
+        ],
+        &quot;median&quot;: 0.33433,
+        &quot;p95&quot;: 0.3800605
+      },
+      &quot;response_proxy_ms&quot;: {
+        &quot;samples&quot;: [
+          37.5844,
+          27.2754,
+          44.3246,
+          28.8141,
+          44.1043,
+          27.5033,
+          26.9348,
+          29.5155,
+          27.858,
+          30.0244,
+          28.053,
+          26.3274,
+          28.3502,
+          28.6227,
+          25.7521
+        ],
+        &quot;median&quot;: 28.3502,
+        &quot;p95&quot;: 44.3246
+      }
+    },
+    {
+      &quot;workload&quot;: &quot;ascii&quot;,
+      &quot;startup_ms&quot;: {
+        &quot;samples&quot;: [
+          1509.5524,
+          1539.5755,
+          1528.5045
+        ],
+        &quot;median&quot;: 1528.5045,
+        &quot;p95&quot;: 1539.5755
+      },
+      &quot;idle_private_mib&quot;: {
+        &quot;samples&quot;: [
+          417.06640625,
+          417.109375,
+          417.1796875
+        ],
+        &quot;median&quot;: 417.109375,
+        &quot;p95&quot;: 417.1796875
+      },
+      &quot;after_private_mib&quot;: {
+        &quot;samples&quot;: [
+          437.46484375,
+          437.796875,
+          436.7265625
+        ],
+        &quot;median&quot;: 437.46484375,
+        &quot;p95&quot;: 437.796875
+      },
+      &quot;parent_cpu_seconds&quot;: {
+        &quot;samples&quot;: [
+          0.09375,
+          0.09375,
+          0.09375
+        ],
+        &quot;median&quot;: 0.09375,
+        &quot;p95&quot;: 0.09375
+      },
+      &quot;elapsed_seconds&quot;: {
+        &quot;samples&quot;: [
+          0.1369328,
+          0.139069,
+          0.1343953
+        ],
+        &quot;median&quot;: 0.1369328,
+        &quot;p95&quot;: 0.139069
+      },
+      &quot;response_proxy_ms&quot;: null
+    },
+    {
+      &quot;workload&quot;: &quot;unicode&quot;,
+      &quot;startup_ms&quot;: {
+        &quot;samples&quot;: [
+          1521.8281,
+          1504.8994,
+          1526.5534
+        ],
+        &quot;median&quot;: 1521.8281,
+        &quot;p95&quot;: 1526.5534
+      },
+      &quot;idle_private_mib&quot;: {
+        &quot;samples&quot;: [
+          416.5703125,
+          418.03515625,
+          416.21484375
+        ],
+        &quot;median&quot;: 416.5703125,
+        &quot;p95&quot;: 418.03515625
+      },
+      &quot;after_private_mib&quot;: {
+        &quot;samples&quot;: [
+          436.80078125,
+          438.88671875,
+          436.91015625
+        ],
+        &quot;median&quot;: 436.91015625,
+        &quot;p95&quot;: 438.88671875
+      },
+      &quot;parent_cpu_seconds&quot;: {
+        &quot;samples&quot;: [
+          0.09375,
+          0.125,
+          0.09375
+        ],
+        &quot;median&quot;: 0.09375,
+        &quot;p95&quot;: 0.125
+      },
+      &quot;elapsed_seconds&quot;: {
+        &quot;samples&quot;: [
+          0.1522265,
+          0.1223394,
+          0.1525963
+        ],
+        &quot;median&quot;: 0.1522265,
+        &quot;p95&quot;: 0.1525963
+      },
+      &quot;response_proxy_ms&quot;: null
+    },
+    {
+      &quot;workload&quot;: &quot;colour&quot;,
+      &quot;startup_ms&quot;: {
+        &quot;samples&quot;: [
+          1506.065,
+          1514.3784999999998,
+          1513.5985999999998
+        ],
+        &quot;median&quot;: 1513.5985999999998,
+        &quot;p95&quot;: 1514.3784999999998
+      },
+      &quot;idle_private_mib&quot;: {
+        &quot;samples&quot;: [
+          419.3671875,
+          416.81640625,
+          417.8046875
+        ],
+        &quot;median&quot;: 417.8046875,
+        &quot;p95&quot;: 419.3671875
+      },
+      &quot;after_private_mib&quot;: {
+        &quot;samples&quot;: [
+          439.07421875,
+          436.6796875,
+          437.7890625
+        ],
+        &quot;median&quot;: 437.7890625,
+        &quot;p95&quot;: 439.07421875
+      },
+      &quot;parent_cpu_seconds&quot;: {
+        &quot;samples&quot;: [
+          0.078125,
+          0.0625,
+          0.078125
+        ],
+        &quot;median&quot;: 0.078125,
+        &quot;p95&quot;: 0.078125
+      },
+      &quot;elapsed_seconds&quot;: {
+        &quot;samples&quot;: [
+          0.1075902,
+          0.1040541,
+          0.1217648
+        ],
+        &quot;median&quot;: 0.1075902,
+        &quot;p95&quot;: 0.1217648
+      },
+      &quot;response_proxy_ms&quot;: null
+    },
+    {
+      &quot;workload&quot;: &quot;flood&quot;,
+      &quot;startup_ms&quot;: {
+        &quot;samples&quot;: [
+          1791.2492,
+          1549.3928,
+          1552.7174000000002
+        ],
+        &quot;median&quot;: 1552.7174000000002,
+        &quot;p95&quot;: 1791.2492
+      },
+      &quot;idle_private_mib&quot;: {
+        &quot;samples&quot;: [
+          417.45703125,
+          419.50390625,
+          418.65625
+        ],
+        &quot;median&quot;: 418.65625,
+        &quot;p95&quot;: 419.50390625
+      },
+      &quot;after_private_mib&quot;: {
+        &quot;samples&quot;: [
+          417.45703125,
+          419.4921875,
+          418.65625
+        ],
+        &quot;median&quot;: 418.65625,
+        &quot;p95&quot;: 419.4921875
+      },
+      &quot;parent_cpu_seconds&quot;: {
+        &quot;samples&quot;: [
+          0.140625,
+          0.21875,
+          0.171875
+        ],
+        &quot;median&quot;: 0.171875,
+        &quot;p95&quot;: 0.21875
+      },
+      &quot;elapsed_seconds&quot;: {
+        &quot;samples&quot;: [
+          1.3114721,
+          1.7839594,
+          1.3831422
+        ],
+        &quot;median&quot;: 1.3831422,
+        &quot;p95&quot;: 1.7839594
+      },
+      &quot;response_proxy_ms&quot;: {
+        &quot;samples&quot;: [
+          89.2141,
+          243.6613,
+          241.6825,
+          142.1302,
+          144.1128,
+          61.835,
+          225.5107,
+          173.7649,
+          663.2831,
+          209.6794,
+          108.2465,
+          211.683,
+          163.8163,
+          157.2619,
+          295.4409
+        ],
+        &quot;median&quot;: 173.7649,
+        &quot;p95&quot;: 663.2831
+      }
+    }
+  ],
+  &quot;limitations&quot;: [
+    &quot;Windows x64 Juna adapter only; cross-terminal equivalence is not yet established.&quot;,
+    &quot;Input timing is posted A key -&gt; unique colour observed through window capture plus local coordination I/O/polling; not physical keyboard/display latency. Child receipt is timestamped before output with the same-machine performance counter; cross-process ordering uncertainty is one tick. Only deltas are exported.&quot;,
+    &quot;Fresh isolated settings: IBM Plex Mono 16, Catppuccin Mocha, Git bar disabled; default window dimensions and host DPI. Keep desktop/GPU/power settings fixed. No private path/transcript/pixel export.&quot;,
+    &quot;One warm-up excluded. Executable hashing warms file cache. Startup ends at synthetic child ready, not first paint. Memory is parent-process only; excludes capture helper, shell and GPU. Region categories are not allocation call-stack attribution.&quot;,
+    &quot;Output bytes are producer bytes, not a byte-exact ConPTY transport counter. Final marker proves final response observed, not every intermediate frame. Trials include coordination overhead; small-sample p95 is exploratory.&quot;,
+    &quot;True Ctrl+C response, scroll latency, multiple tabs, battery/power and PresentMon/WPR comparisons remain unmeasured.&quot;
+  ],
+  &quot;trials&quot;: [
+    {
+      &quot;workload&quot;: &quot;idle&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1555.4719000000002,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 437276672,
+        &quot;working_set_bytes&quot;: 223277056,
+        &quot;peak_working_set_bytes&quot;: 223281152,
+        &quot;cpu_seconds&quot;: 1.25,
+        &quot;committed_private_bytes&quot;: 397967360,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 438194176,
+        &quot;working_set_bytes&quot;: 223756288,
+        &quot;peak_working_set_bytes&quot;: 223756288,
+        &quot;cpu_seconds&quot;: 1.3125,
+        &quot;committed_private_bytes&quot;: 398884864,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.0625,
+      &quot;elapsed_seconds&quot;: 0.3800605,
+      &quot;producer_bytes&quot;: null,
+      &quot;response_proxy_ms&quot;: {
+        &quot;samples&quot;: [
+          37.5844,
+          27.2754,
+          44.3246,
+          28.8141,
+          44.1043
+        ],
+        &quot;median&quot;: 37.5844,
+        &quot;p95&quot;: 44.3246
+      },
+      &quot;child_received_ms&quot;: {
+        &quot;samples&quot;: [
+          0.849,
+          0.2793,
+          0.3124,
+          1.6981,
+          0.3014
+        ],
+        &quot;median&quot;: 0.3124,
+        &quot;p95&quot;: 1.6981
+      },
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;idle&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1524.7765,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 437846016,
+        &quot;working_set_bytes&quot;: 225136640,
+        &quot;peak_working_set_bytes&quot;: 225136640,
+        &quot;cpu_seconds&quot;: 1.234375,
+        &quot;committed_private_bytes&quot;: 398544896,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 437846016,
+        &quot;working_set_bytes&quot;: 225202176,
+        &quot;peak_working_set_bytes&quot;: 225202176,
+        &quot;cpu_seconds&quot;: 1.234375,
+        &quot;committed_private_bytes&quot;: 398544896,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.0,
+      &quot;elapsed_seconds&quot;: 0.3334783,
+      &quot;producer_bytes&quot;: null,
+      &quot;response_proxy_ms&quot;: {
+        &quot;samples&quot;: [
+          27.5033,
+          26.9348,
+          29.5155,
+          27.858,
+          30.0244
+        ],
+        &quot;median&quot;: 27.858,
+        &quot;p95&quot;: 30.0244
+      },
+      &quot;child_received_ms&quot;: {
+        &quot;samples&quot;: [
+          1.7174,
+          0.3098,
+          0.2813,
+          0.2621,
+          0.2868
+        ],
+        &quot;median&quot;: 0.2868,
+        &quot;p95&quot;: 1.7174
+      },
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;idle&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1586.0582000000002,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 435851264,
+        &quot;working_set_bytes&quot;: 224133120,
+        &quot;peak_working_set_bytes&quot;: 224133120,
+        &quot;cpu_seconds&quot;: 1.21875,
+        &quot;committed_private_bytes&quot;: 396550144,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 435851264,
+        &quot;working_set_bytes&quot;: 224210944,
+        &quot;peak_working_set_bytes&quot;: 224210944,
+        &quot;cpu_seconds&quot;: 1.234375,
+        &quot;committed_private_bytes&quot;: 396550144,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.015625,
+      &quot;elapsed_seconds&quot;: 0.33433,
+      &quot;producer_bytes&quot;: null,
+      &quot;response_proxy_ms&quot;: {
+        &quot;samples&quot;: [
+          28.053,
+          26.3274,
+          28.3502,
+          28.6227,
+          25.7521
+        ],
+        &quot;median&quot;: 28.053,
+        &quot;p95&quot;: 28.6227
+      },
+      &quot;child_received_ms&quot;: {
+        &quot;samples&quot;: [
+          1.3929,
+          0.2785,
+          0.2682,
+          0.2813,
+          0.8451
+        ],
+        &quot;median&quot;: 0.2813,
+        &quot;p95&quot;: 1.3929
+      },
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;ascii&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1509.5524,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 437325824,
+        &quot;working_set_bytes&quot;: 224104448,
+        &quot;peak_working_set_bytes&quot;: 224104448,
+        &quot;cpu_seconds&quot;: 1.3125,
+        &quot;committed_private_bytes&quot;: 397950976,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 458715136,
+        &quot;working_set_bytes&quot;: 245186560,
+        &quot;peak_working_set_bytes&quot;: 247033856,
+        &quot;cpu_seconds&quot;: 1.40625,
+        &quot;committed_private_bytes&quot;: 419303424,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.09375,
+      &quot;elapsed_seconds&quot;: 0.1369328,
+      &quot;producer_bytes&quot;: 270336,
+      &quot;response_proxy_ms&quot;: null,
+      &quot;child_received_ms&quot;: null,
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;ascii&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1539.5755,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 437370880,
+        &quot;working_set_bytes&quot;: 225857536,
+        &quot;peak_working_set_bytes&quot;: 225857536,
+        &quot;cpu_seconds&quot;: 1.28125,
+        &quot;committed_private_bytes&quot;: 398057472,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 459063296,
+        &quot;working_set_bytes&quot;: 247537664,
+        &quot;peak_working_set_bytes&quot;: 250478592,
+        &quot;cpu_seconds&quot;: 1.375,
+        &quot;committed_private_bytes&quot;: 419713024,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.09375,
+      &quot;elapsed_seconds&quot;: 0.139069,
+      &quot;producer_bytes&quot;: 270336,
+      &quot;response_proxy_ms&quot;: null,
+      &quot;child_received_ms&quot;: null,
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;ascii&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1528.5045,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 437444608,
+        &quot;working_set_bytes&quot;: 225603584,
+        &quot;peak_working_set_bytes&quot;: 225603584,
+        &quot;cpu_seconds&quot;: 1.203125,
+        &quot;committed_private_bytes&quot;: 398057472,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 457940992,
+        &quot;working_set_bytes&quot;: 246517760,
+        &quot;peak_working_set_bytes&quot;: 248680448,
+        &quot;cpu_seconds&quot;: 1.296875,
+        &quot;committed_private_bytes&quot;: 418516992,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.09375,
+      &quot;elapsed_seconds&quot;: 0.1343953,
+      &quot;producer_bytes&quot;: 270336,
+      &quot;response_proxy_ms&quot;: null,
+      &quot;child_received_ms&quot;: null,
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;unicode&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1521.8281,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 436805632,
+        &quot;working_set_bytes&quot;: 225984512,
+        &quot;peak_working_set_bytes&quot;: 225988608,
+        &quot;cpu_seconds&quot;: 1.21875,
+        &quot;committed_private_bytes&quot;: 397438976,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 458018816,
+        &quot;working_set_bytes&quot;: 247103488,
+        &quot;peak_working_set_bytes&quot;: 248344576,
+        &quot;cpu_seconds&quot;: 1.3125,
+        &quot;committed_private_bytes&quot;: 418611200,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.09375,
+      &quot;elapsed_seconds&quot;: 0.1522265,
+      &quot;producer_bytes&quot;: 184320,
+      &quot;response_proxy_ms&quot;: null,
+      &quot;child_received_ms&quot;: null,
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;unicode&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1504.8994,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 438341632,
+        &quot;working_set_bytes&quot;: 223883264,
+        &quot;peak_working_set_bytes&quot;: 223883264,
+        &quot;cpu_seconds&quot;: 1.21875,
+        &quot;committed_private_bytes&quot;: 398954496,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 460206080,
+        &quot;working_set_bytes&quot;: 245526528,
+        &quot;peak_working_set_bytes&quot;: 247549952,
+        &quot;cpu_seconds&quot;: 1.34375,
+        &quot;committed_private_bytes&quot;: 420786176,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.125,
+      &quot;elapsed_seconds&quot;: 0.1223394,
+      &quot;producer_bytes&quot;: 184320,
+      &quot;response_proxy_ms&quot;: null,
+      &quot;child_received_ms&quot;: null,
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;unicode&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1526.5534,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 436432896,
+        &quot;working_set_bytes&quot;: 225701888,
+        &quot;peak_working_set_bytes&quot;: 225701888,
+        &quot;cpu_seconds&quot;: 1.125,
+        &quot;committed_private_bytes&quot;: 397053952,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 458133504,
+        &quot;working_set_bytes&quot;: 247230464,
+        &quot;peak_working_set_bytes&quot;: 248356864,
+        &quot;cpu_seconds&quot;: 1.21875,
+        &quot;committed_private_bytes&quot;: 418717696,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.09375,
+      &quot;elapsed_seconds&quot;: 0.1525963,
+      &quot;producer_bytes&quot;: 184320,
+      &quot;response_proxy_ms&quot;: null,
+      &quot;child_received_ms&quot;: null,
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;colour&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1506.065,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 439738368,
+        &quot;working_set_bytes&quot;: 224198656,
+        &quot;peak_working_set_bytes&quot;: 224198656,
+        &quot;cpu_seconds&quot;: 1.203125,
+        &quot;committed_private_bytes&quot;: 400338944,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 460402688,
+        &quot;working_set_bytes&quot;: 244736000,
+        &quot;peak_working_set_bytes&quot;: 246607872,
+        &quot;cpu_seconds&quot;: 1.28125,
+        &quot;committed_private_bytes&quot;: 420966400,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.078125,
+      &quot;elapsed_seconds&quot;: 0.1075902,
+      &quot;producer_bytes&quot;: 196608,
+      &quot;response_proxy_ms&quot;: null,
+      &quot;child_received_ms&quot;: null,
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;colour&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1514.3784999999998,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 437063680,
+        &quot;working_set_bytes&quot;: 224165888,
+        &quot;peak_working_set_bytes&quot;: 224165888,
+        &quot;cpu_seconds&quot;: 1.203125,
+        &quot;committed_private_bytes&quot;: 397750272,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 457891840,
+        &quot;working_set_bytes&quot;: 244912128,
+        &quot;peak_working_set_bytes&quot;: 246988800,
+        &quot;cpu_seconds&quot;: 1.265625,
+        &quot;committed_private_bytes&quot;: 418541568,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.0625,
+      &quot;elapsed_seconds&quot;: 0.1040541,
+      &quot;producer_bytes&quot;: 196608,
+      &quot;response_proxy_ms&quot;: null,
+      &quot;child_received_ms&quot;: null,
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;colour&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1513.5985999999998,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 438099968,
+        &quot;working_set_bytes&quot;: 225742848,
+        &quot;peak_working_set_bytes&quot;: 225742848,
+        &quot;cpu_seconds&quot;: 1.203125,
+        &quot;committed_private_bytes&quot;: 398778368,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 459055104,
+        &quot;working_set_bytes&quot;: 246448128,
+        &quot;peak_working_set_bytes&quot;: 248643584,
+        &quot;cpu_seconds&quot;: 1.28125,
+        &quot;committed_private_bytes&quot;: 419692544,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.078125,
+      &quot;elapsed_seconds&quot;: 0.1217648,
+      &quot;producer_bytes&quot;: 196608,
+      &quot;response_proxy_ms&quot;: null,
+      &quot;child_received_ms&quot;: null,
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;flood&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1791.2492,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 437735424,
+        &quot;working_set_bytes&quot;: 225837056,
+        &quot;peak_working_set_bytes&quot;: 225837056,
+        &quot;cpu_seconds&quot;: 1.390625,
+        &quot;committed_private_bytes&quot;: 398413824,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 437735424,
+        &quot;working_set_bytes&quot;: 226070528,
+        &quot;peak_working_set_bytes&quot;: 226070528,
+        &quot;cpu_seconds&quot;: 1.53125,
+        &quot;committed_private_bytes&quot;: 398405632,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 10
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.140625,
+      &quot;elapsed_seconds&quot;: 1.3114721,
+      &quot;producer_bytes&quot;: null,
+      &quot;response_proxy_ms&quot;: {
+        &quot;samples&quot;: [
+          89.2141,
+          243.6613,
+          241.6825,
+          142.1302,
+          144.1128
+        ],
+        &quot;median&quot;: 144.1128,
+        &quot;p95&quot;: 243.6613
+      },
+      &quot;child_received_ms&quot;: {
+        &quot;samples&quot;: [
+          0.454,
+          0.2454,
+          3.0597,
+          4.5018,
+          5.4357
+        ],
+        &quot;median&quot;: 3.0597,
+        &quot;p95&quot;: 5.4357
+      },
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;flood&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1549.3928,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 439881728,
+        &quot;working_set_bytes&quot;: 223776768,
+        &quot;peak_working_set_bytes&quot;: 223776768,
+        &quot;cpu_seconds&quot;: 1.1875,
+        &quot;committed_private_bytes&quot;: 400564224,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 439869440,
+        &quot;working_set_bytes&quot;: 224047104,
+        &quot;peak_working_set_bytes&quot;: 224047104,
+        &quot;cpu_seconds&quot;: 1.40625,
+        &quot;committed_private_bytes&quot;: 400551936,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 9
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.21875,
+      &quot;elapsed_seconds&quot;: 1.7839594,
+      &quot;producer_bytes&quot;: null,
+      &quot;response_proxy_ms&quot;: {
+        &quot;samples&quot;: [
+          61.835,
+          225.5107,
+          173.7649,
+          663.2831,
+          209.6794
+        ],
+        &quot;median&quot;: 209.6794,
+        &quot;p95&quot;: 663.2831
+      },
+      &quot;child_received_ms&quot;: {
+        &quot;samples&quot;: [
+          0.4257,
+          0.2549,
+          0.327,
+          0.2619,
+          5.4004
+        ],
+        &quot;median&quot;: 0.327,
+        &quot;p95&quot;: 5.4004
+      },
+      &quot;performance_counter_hz&quot;: 10000000
+    },
+    {
+      &quot;workload&quot;: &quot;flood&quot;,
+      &quot;client_width&quot;: 1016,
+      &quot;client_height&quot;: 708,
+      &quot;warm_fixture_startup_ms&quot;: 1552.7174000000002,
+      &quot;idle&quot;: {
+        &quot;private_bytes&quot;: 438992896,
+        &quot;working_set_bytes&quot;: 225009664,
+        &quot;peak_working_set_bytes&quot;: 225009664,
+        &quot;cpu_seconds&quot;: 1.203125,
+        &quot;committed_private_bytes&quot;: 399622144,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;after&quot;: {
+        &quot;private_bytes&quot;: 438992896,
+        &quot;working_set_bytes&quot;: 225239040,
+        &quot;peak_working_set_bytes&quot;: 225239040,
+        &quot;cpu_seconds&quot;: 1.375,
+        &quot;committed_private_bytes&quot;: 399622144,
+        &quot;committed_mapped_bytes&quot;: 17088512,
+        &quot;committed_image_bytes&quot;: 392908800,
+        &quot;private_regions_over_16_mib&quot;: 11
+      },
+      &quot;parent_cpu_delta_seconds&quot;: 0.171875,
+      &quot;elapsed_seconds&quot;: 1.3831422,
+      &quot;producer_bytes&quot;: null,
+      &quot;response_proxy_ms&quot;: {
+        &quot;samples&quot;: [
+          108.2465,
+          211.683,
+          163.8163,
+          157.2619,
+          295.4409
+        ],
+        &quot;median&quot;: 163.8163,
+        &quot;p95&quot;: 295.4409
+      },
+      &quot;child_received_ms&quot;: {
+        &quot;samples&quot;: [
+          0.4154,
+          0.2252,
+          0.3535,
+          0.3791,
+          7.6562
+        ],
+        &quot;median&quot;: 0.3791,
+        &quot;p95&quot;: 7.6562
+      },
+      &quot;performance_counter_hz&quot;: 10000000
+    }
+  ]
+}</pre></details></html>

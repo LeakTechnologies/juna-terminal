@@ -1,5 +1,19 @@
 # Performance evidence
 
+## Dev20 native measurement baseline (2026-10-18)
+
+The separate `juna-bench` developer utility now records parent CPU/memory/committed regions
+and targeted input with independent child-receipt and observed-frame timestamps. Quick/full
+profiles, raw reports and limitations are documented in [BENCHMARKS.md](BENCHMARKS.md) and
+[retained evidence](docs/performance/dev20/README.md). Ordinary terminal sessions do not run it.
+
+In the full published-dev19 desktop run, idle private memory was about 418 MiB. Median child
+receipt rose from 0.30 to 5.96 ms during continuous fixed-row output; the visible-response
+proxy rose from 28.70 to 210.74 ms (capture/polling overhead included). This motivates isolating
+post-receipt delay, without attributing it to a specific layer. No memory or performance fix
+is claimed in this measurement cycle. Different workload sizes/methods are not directly
+comparable with the earlier script results or the quick local-dev20 smoke report.
+
 ## Dev19 output allocation improvement (2026-10-18)
 
 The lead accepted this reliability/performance continuation under PERFORMANCE_DESIGN.md.

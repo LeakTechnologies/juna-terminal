@@ -169,6 +169,10 @@ the complete retained package or extract a verified release ZIP before clearing 
 See [performance evidence](PERFORMANCE.md) for the desktop baseline, Alacritty comparison,
 redraw improvements and remaining laptop/memory work.
 
+Developers can build the separate `juna-bench` utility for repeatable local measurements.
+See [benchmark usage and limits](BENCHMARKS.md). It opens isolated synthetic test windows;
+normal Juna sessions do not run benchmarks or capture windows.
+
 
 File drops are quoted for the configured PowerShell shell. Safe cmd paths use double quotes;
 cmd paths containing percent/exclamation expansion or trailing backslashes require manual entry.

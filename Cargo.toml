@@ -1,6 +1,6 @@
 [package]
 name = "juna"
-version = "0.1.1-dev19"
+version = "0.1.1-dev20"
 edition = "2021"
 rust-version = "1.97"
 description = "A terminal emulator with an original VT engine"
@@ -41,6 +41,19 @@ bytemuck = { version = "1", features = ["derive"] }
 version = "0.61"
 features = [
     "Win32_Foundation",
+    # Separate benchmark utility: owned-window capture and read-only process counters.
+    "Graphics_Capture",
+    "Graphics_DirectX",
+    "Graphics_DirectX_Direct3D11",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_System_ProcessStatus",
+    "Win32_System_SystemInformation",
+    "Win32_System_WinRT",
+    "Win32_System_WinRT_Direct3D11",
+    "Win32_System_WinRT_Graphics_Capture",
     # Native drop-point conversion from screen to client coordinates.
     "Win32_Graphics_Gdi",
     "Win32_System_Console",

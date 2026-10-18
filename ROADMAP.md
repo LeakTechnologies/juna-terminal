@@ -45,6 +45,12 @@ No translations or Language tab are claimed as implemented at this stage.
 
 ## Further terminal work
 
+- Performance measurement: the separate native benchmark starts with owned Juna windows,
+  parent memory/CPU, varied output and observed input response under continuous output.
+  Next add equivalent Windows Terminal/Alacritty adapters, scroll interaction, multiple
+  sessions and verified Ctrl+C timing. Retest on the affected laptop before declaring its
+  performance resolved. See BENCHMARKS.md; no borrowed terminal implementation is permitted.
+
 - Low-priority investigation: Windows versions older than 10 1809, including 1803.
   Assess a separate legacy console backend without replacing the primary ConPTY path
   or borrowing terminal-engine semantics. Review dependency provenance, platform/API

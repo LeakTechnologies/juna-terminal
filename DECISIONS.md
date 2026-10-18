@@ -1600,3 +1600,32 @@ an overbroad ASCII shortcut. This removes allocation churn, not retained scrollb
 memory. No dependency, architecture or byte-transport change. See PERFORMANCE.md for measured
 benefit and limitations. The standalone measurement-only allocator probe forwards valid calls
 to System with atomic counters; it is not linked into Juna or its normal test executables.
+
+## 2026-10-18 — separate native benchmark utility
+
+The lead accepted BENCHMARK_DESIGN.md's plan in the conversation before implementation.
+Use the existing Windows infrastructure crate's Graphics Capture/DirectX/Direct3D11/WinRT
+features for window-specific ephemeral frame capture, and ProcessStatus for read-only owned
+child memory counters. Existing process-memory and window APIs provide bounded region
+classification and message delivery. These features serve measurement only; no terminal
+semantics, new crate, async runtime, privilege/token operation or app state hook is added.
+Only freshly owned test windows are driven. Never treat shell acknowledgments as paint proof.
+The initial GDI PrintWindow probe returned no synthetic marker and was rejected. WPR/WPA and
+PresentMon remain optional external profilers. System-wide traces/installations and release
+workflow changes are outside this implementation. The initial utility is a separate local
+release build; it is not added to the normal terminal package or menus.
+
+SystemInformation supplies the native application-address range for VirtualQueryEx rather
+than guessing a fixed address ceiling. WinRT remains initialised for the supervised capture
+process lifetime because factory caches outlive local objects; balancing RoUninitialize at
+local scope caused a recorded GraphicsCapture.dll_unloaded access violation. Session/pool
+objects still close, and parent supervision rejects failed cleanup. Microsoft's cached-factory
+guidance describes keeping COM alive until process exit:
+https://devblogs.microsoft.com/oldnewthing/20211105-00/?p=105878
+Initial scope is documented explicitly in BENCHMARKS.md; unmeasured features stay unclaimed.
+
+The fixture timestamps receipt before output via the documented Kernel32 performance-counter
+ABI, shared across processes on supported Windows. Two narrow Juna-owned FFI declarations
+provide QPC/frequency without another dependency; each call has its native-storage invariant.
+Only deltas are exported, with the documented one-tick cross-process ordering uncertainty.
+https://learn.microsoft.com/en-us/windows/win32/sysinfo/acquiring-high-resolution-time-stamps
