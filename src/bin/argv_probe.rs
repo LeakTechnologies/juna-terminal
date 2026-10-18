@@ -15,8 +15,8 @@ fn main() {
     #[cfg(windows)]
     if args.first().map(String::as_str) == Some("--control-bytes") {
         use windows::Win32::System::Console::{
-            GetConsoleMode, GetStdHandle, SetConsoleMode, CONSOLE_MODE, ENABLE_ECHO_INPUT,
-            ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT, STD_INPUT_HANDLE,
+            GetConsoleMode, GetStdHandle, ReadConsoleW, SetConsoleMode, CONSOLE_MODE,
+            ENABLE_ECHO_INPUT, ENABLE_LINE_INPUT, ENABLE_PROCESSED_INPUT, STD_INPUT_HANDLE,
         };
         let mut mode = CONSOLE_MODE::default();
         // SAFETY: the borrowed console input handle is live for this fixture; mode is writable.
@@ -30,18 +30,32 @@ fn main() {
             .unwrap();
             handle
         };
-        println!("CONTROL_READY original_mode={:#x}", mode.0);
+        let mut raw_mode = CONSOLE_MODE::default();
+        // SAFETY: the same live console handle and a writable mode value are used synchronously.
+        unsafe { GetConsoleMode(handle, &mut raw_mode).unwrap() };
+        assert_eq!(
+            raw_mode.0 & (ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT | ENABLE_PROCESSED_INPUT).0,
+            0
+        );
+        println!(
+            "CONTROL_READY api=ReadConsoleW original_mode={:#x} raw_mode={:#x}",
+            mode.0, raw_mode.0
+        );
         std::io::stdout().flush().unwrap();
-        let mut bytes = [0; 2];
+        let mut units = [0u16; 2];
         let mut received = 0;
-        while received < bytes.len() {
+        while received < units.len() {
             let mut count = 0;
-            // SAFETY: a writable bounded buffer and count are live for this synchronous console read.
+            // Read one character per call so Ctrl+Z is tested at the start of its own read.
+            // ReadFile can convert leading Ctrl+Z to EOF even in raw mode on supported Windows hosts.
+            // SAFETY: at least one writable UTF-16 unit and count are live for this synchronous read;
+            // the console handle was checked above and no input-control structure is supplied.
             unsafe {
-                windows::Win32::Storage::FileSystem::ReadFile(
+                ReadConsoleW(
                     handle,
-                    Some(&mut bytes[received..]),
-                    Some(&mut count),
+                    units[received..].as_mut_ptr().cast(),
+                    1,
+                    &mut count,
                     None,
                 )
                 .unwrap();
@@ -55,9 +69,9 @@ fn main() {
         unsafe {
             SetConsoleMode(handle, mode).unwrap();
         }
-        println!("CONTROL_READ count={received} bytes={bytes:?}");
+        println!("CONTROL_READ count={received} utf16_units={units:?}");
         assert_eq!(received, 2);
-        assert_eq!(bytes, [3, 26]);
+        assert_eq!(units, [3, 26]);
         println!("CONTROL_BYTES_OK");
         return;
     }

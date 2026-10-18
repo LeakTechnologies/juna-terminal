@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1-dev18 — correct Windows control-input acceptance
+
+- Use ReadConsoleW in the controlled raw-input child instead of ReadFile, which can treat
+  leading Ctrl+Z as EOF on Windows even when processed input is disabled.
+- Read one control character per call and retain exact Ctrl+C/Ctrl+Z, exit and lifecycle assertions.
+- Include all dev16/dev17 repairs and diagnostics; neither previous tag produced a release.
+- Keep the application's actual input/transport implementation unchanged.
+
 ## 0.1.1-dev17 — interrupt diagnostics
 
 - Carry forward dev16 file drops, versioned titles and launcher-console isolation.

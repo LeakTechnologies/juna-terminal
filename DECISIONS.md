@@ -1569,3 +1569,22 @@ Report only fixed fixture output (bounded to 4096 bytes), mode, readiness and ch
 Runtime logs add build identity, queued interrupt labels and final-session closure. A panic hook
 logs only source location and flushes before invoking the existing hook; no panic payload or
 command text is added to diagnostic files. No dependency, engine or transport change.
+
+## Dev18 control-input fixture repair (2026-10-18)
+
+Hosted dev17 diagnostics showed sent=true, child exit 101 and CONTROL_READ count=1 with
+values [3,0]. The second ReadFile returned zero for leading Ctrl+Z. This matches the Windows
+console behaviour documented in microsoft/terminal issue 4958; it is a fixture API error,
+not evidence that Juna dropped the byte or crashed. Correct the child to ReadConsoleW with
+one UTF-16 character per call, explicitly testing Ctrl+Z at the start of its own read. Keep
+exact values [3,26], successful child exit, existing deadlines and process cleanup assertions.
+Raw console mode is read back and verified. Product input/transport are unchanged.
+
+Retraction: the dev16/dev17 raw fixture's local pass was not portable evidence across Windows
+console versions. Dev16 and dev17 tags exist, but neither published downloadable release assets.
+This cycle carries their file drops, versioned titles, GUI console isolation and diagnostics.
+The exact reported OpenCode interaction and physical Explorer drops still need human testing.
+
+References: https://github.com/microsoft/terminal/issues/4958 and
+https://learn.microsoft.com/en-us/windows/console/readconsole. Only published behaviour/API
+documentation was consulted; no terminal implementation was copied. No dependency changed.
