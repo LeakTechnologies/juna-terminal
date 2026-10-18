@@ -30,7 +30,7 @@ fn main() {
             .unwrap();
             handle
         };
-        println!("CONTROL_READY");
+        println!("CONTROL_READY original_mode={:#x}", mode.0);
         std::io::stdout().flush().unwrap();
         let mut bytes = [0; 2];
         let mut received = 0;
@@ -55,6 +55,7 @@ fn main() {
         unsafe {
             SetConsoleMode(handle, mode).unwrap();
         }
+        println!("CONTROL_READ count={received} bytes={bytes:?}");
         assert_eq!(received, 2);
         assert_eq!(bytes, [3, 26]);
         println!("CONTROL_BYTES_OK");

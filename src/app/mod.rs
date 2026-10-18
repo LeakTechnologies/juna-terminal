@@ -814,6 +814,13 @@ impl App {
             }
             if let Err(e) = r.write(bytes) {
                 self.fail(format!("Session write failed: {e}"));
+            } else if matches!(bytes, [3] | [26]) {
+                log::info!(
+                    "Control input queued: key={}; tab={}; alternate={}",
+                    if bytes[0] == 3 { "Ctrl+C" } else { "Ctrl+Z" },
+                    self.active_tab,
+                    self.terminal.alternate_active()
+                );
             }
         }
     }
@@ -2876,6 +2883,7 @@ impl ApplicationHandler for App {
             }
             self.tabs.remove(self.active_tab);
             if self.tabs.is_empty() {
+                log::info!("Window closing: final terminal session completed");
                 self.runtime.take();
                 event_loop.exit();
                 return;
@@ -2950,6 +2958,27 @@ pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
     builder
         .target(env_logger::Target::Pipe(Box::new(log)))
         .try_init()?;
+    let previous_panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        if let Some(location) = info.location() {
+            log::error!(
+                "Application panic at {}:{}:{}",
+                location.file(),
+                location.line(),
+                location.column()
+            );
+        } else {
+            log::error!("Application panic at unknown source location");
+        }
+        // Panic payloads can contain user data; record location only in the diagnostic file.
+        log::logger().flush();
+        previous_panic_hook(info);
+    }));
+    log::info!(
+        "Juna version={} commit={}",
+        env!("CARGO_PKG_VERSION"),
+        env!("JUNA_BUILD_COMMIT")
+    );
     log::info!(
         "Diagnostic file: {}",
         log_path.file_name().unwrap_or_default().to_string_lossy()

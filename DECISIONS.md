@@ -1560,3 +1560,12 @@ Protocol references: [Git porcelain v2](https://git-scm.com/docs/git-status), [G
 PowerShell path quoting follows Microsoft about_Quoting_Rules, including typographic quotes;
 controlled Windows PowerShell round trips verified U+0027/U+2018/U+2019/U+201A/U+201B.
 https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_quoting_rules
+
+## 2026-10-18 — dev17 interrupt evidence
+
+The design lead requested dev17 diagnostics after dev16's hosted raw-control-byte probe failed.
+Local acceptance does not establish hosted correctness; do not weaken the assertion or timeout.
+Report only fixed fixture output (bounded to 4096 bytes), mode, readiness and child exit in CI.
+Runtime logs add build identity, queued interrupt labels and final-session closure. A panic hook
+logs only source location and flushes before invoking the existing hook; no panic payload or
+command text is added to diagnostic files. No dependency, engine or transport change.

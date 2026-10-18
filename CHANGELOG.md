@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1-dev17 — interrupt diagnostics
+
+- Carry forward dev16 file drops, versioned titles and launcher-console isolation.
+- Record queued Ctrl+C/Ctrl+Z events, session exit and final-session window closure without command text.
+- Record build identity and panic source location without logging panic payloads.
+- Expand the controlled CI fixture failure report with child exit, input mode and bounded fixture output.
+- Dev16 Windows CI failed in the new raw-control-byte probe despite local acceptance passing;
+  its cause remains unverified. The superseded retry was cancelled; no dev16 release was published.
+
 ## 0.1.1-dev16 — file drops, visible version and console isolation
 
 - Insert dropped file/folder paths as text into the active terminal, without Enter or execution.

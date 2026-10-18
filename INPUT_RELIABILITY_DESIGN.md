@@ -30,3 +30,8 @@ and process cleanup. Run required check/lint/tests and updater/title acceptance;
 mouse-drop testing or explicitly leave physical drag/drop acceptance to human review. No new
 dependency or terminal-engine borrowing. Keep unrelated completed cycles separately versioned;
 each shipped cycle receives the next unused dev tag, matching notes and verified release assets.
+
+Dev17 diagnostic extension authorised 2026-10-18: preserve dev16 repairs, record only build
+identity, queued interrupt labels/tab/alternate state, final-session closure and panic source
+location in runtime logs. Never log commands or panic payloads. The fixed control-byte fixture
+may report its own bounded output, input mode and child exit to diagnose the hosted failure.

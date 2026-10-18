@@ -52,15 +52,20 @@ fn interrupt_and_eof_bytes_reach_a_raw_foreground_child_without_killing_transpor
         }
     }
     reader.join().unwrap();
-    assert!(sent && String::from_utf8_lossy(&bytes).contains("CONTROL_BYTES_OK"));
-    loop {
+    let status = loop {
         if let Some(status) = parts.control.try_wait().unwrap() {
-            assert_eq!(status.code(), 0);
-            break;
+            break status;
         }
         assert!(Instant::now() < deadline);
         std::thread::sleep(Duration::from_millis(5));
-    }
+    };
+    // Output belongs solely to argv_probe's fixed fixture, never to a user command.
+    let diagnostic = String::from_utf8_lossy(&bytes[..bytes.len().min(4096)]);
+    assert!(
+        sent && String::from_utf8_lossy(&bytes).contains("CONTROL_BYTES_OK") && status.code() == 0,
+        "control-byte fixture: sent={sent}; exit={status:?}; output_bytes={}; controlled_output={diagnostic:?}",
+        bytes.len()
+    );
 }
 
 #[test]

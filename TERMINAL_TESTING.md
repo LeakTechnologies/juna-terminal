@@ -1,5 +1,24 @@
 # Testing the repaired terminal
 
+## Dev17 diagnostic candidate (2026-10-18)
+
+The design lead requested that the existing repairs ship as dev17 with focused diagnostics.
+Dev16 local checks passed, but hosted Windows CI failed the new raw-control-byte assertion;
+its output was absent from the original assertion. No root cause has been established.
+The unchanged retry was cancelled at the lead's request; dev16 was not published.
+
+Dev17 reports fixed probe readiness/input mode/received bytes/exit and bounded fixture output
+on failure. Runtime logs record build identity, queued Ctrl+C/Ctrl+Z labels, existing session
+exit/fault evidence and final-session closure; panics add source location without payloads.
+No command text, arbitrary child output or sensitive values are added to application logs.
+Checks retain their deadlines and assertions. Physical Explorer dragging and the original
+OpenCode case remain human acceptance; hosted results are reported separately after push.
+
+
+Dev17 local evidence: cargo check, strict all-target Clippy and all 243 standard tests passed,
+including the diagnostic raw-control-byte probe and all six ConPTY tests. Hosted Windows
+behaviour and published assets remain separate verification after this push.
+
 ## Dev16 input reliability (2026-10-18)
 
 Implemented approved INPUT_RELIABILITY_DESIGN.md: bounded file/folder drops insert quoted
