@@ -1,5 +1,59 @@
 # Performance evidence
 
+## Dev19 output allocation improvement (2026-10-18)
+
+The lead accepted this reliability/performance continuation under PERFORMANCE_DESIGN.md.
+Published dev18 was measured with three isolated no-profile PowerShell runs, Consolas 16px,
+Git footer off and no compilation during measurement. The candidate was measured the same
+way; its raw executable hash identifies the working-tree build (still labelled dev18 during
+measurement). Sanitised raw counters and the standalone allocation probe are retained under
+`docs/performance/dev19`. No reference-terminal engine source was used.
+
+| Three-run median | Published dev18 | Candidate |
+| --- | ---: | ---: |
+| Parent CPU, 4,096,000 bytes | 3,515.62 ms | 2,500.00 ms |
+| Output launch to exit | 4,572.29 ms | 3,538.76 ms |
+| Idle private memory | 435.4 MiB | 436.1 MiB |
+| Sampled idle CPU, approximately 3 seconds | 0 ms | 15.62 ms |
+| Instrumented engine allocations | 12,084,179 | 256,979 |
+| Instrumented engine time | 2,045.81 ms | 988.91 ms |
+
+The parent output CPU reduction is about 28.9%; launch-to-exit is about 22.6% lower in this
+small probe. The isolated allocation probe uses the standard System allocator with atomic
+counters, which affects timings; it is not uninstrumented application throughput. It processes
+4 MiB in 64 KiB chunks at 100x30 cells, retaining identical history length (13,981) and revision
+(63). The baseline linked an existing optimised library; `git diff v0.1.1-dev15..v0.1.1-dev18
+-- src/vt` is empty, so its engine source matches the published baseline. Both probes use the
+same compiler/allocator and synthetic input. Candidate probe source is supplied for reproduction;
+compile against the chosen Cargo release library and its dependency/native import-library paths.
+
+The narrowly bounded fast path skips clone/string/grapheme work only for printable ASCII
+scalar pairs, which have a boundary under Unicode 17 UAX #29 GB999. Non-ASCII Prepend, Extend,
+ZWJ, emoji, wide characters and controls keep existing handling. The regression checks all
+9,025 printable pairs against the existing Unicode segmentation data and byte-split Unicode
+examples, including a Prepend followed by ASCII. No engine ownership, parser/transport,
+renderer snapshot, scrollback policy or dependency changes.
+
+No idle-memory improvement is demonstrated. Short idle CPU samples vary at timer resolution
+and do not show an idle/battery benefit. These are desktop parent-process measurements,
+excluding child-shell and GPU memory; power mode/background activity is uncontrolled. Window
+handle timing is not first presentation/input latency. No general terminal ranking or laptop
+acceptance is claimed. Physical Explorer drops and the exact OpenCode interaction still need
+human retesting; automated startup/interrupt tests cannot establish that exact scenario.
+
+The candidate's CPU-only scrollback probe measured median owned-snapshot construction of
+8.0–8.1 microseconds (p95 8.2) at 100x30 cells, across offsets 0, 128, 4,096 and 13,981, with
+10 warmups and 500 samples each. Source and raw counters are retained alongside the other
+reports. This excludes snapshot destruction, rendering, GPU presentation and mouse/input
+latency; it is a current baseline, not a measured scrolling improvement.
+
+Validation: check, strict all-target Clippy, all 244 standard tests, all nine real-window
+checks and the isolated OpenCode startup-cancellation probe passed. Native resource and tool
+pin verification passed. Full OpenCode interaction, physical drops and laptop performance
+remain human acceptance; hosted release evidence follows the fresh tag.
+
+Specification: https://www.unicode.org/reports/tr29/tr29-47.html#Grapheme_Cluster_Boundary_Rules
+
 ## Dev13 privacy regression probe (2026-10-15)
 
 Repeated the isolated-window probe against the published dev12 executable and the dev13

@@ -64,3 +64,18 @@ Set numeric improvement targets after measuring the baseline, not before.
 - https://sw.kovidgoyal.net/kitty/performance/ — latency, scrolling, CPU and benchmark tool.
 - https://github.com/alacritty/vtebench — throughput workloads; explicitly insufficient
   alone for frame-rate or latency conclusions. No reference engine source is required.
+
+## Dev19 implementation scope (2026-10-18)
+
+The lead accepted the reliability/performance continuation on 2026-10-18. This follows the
+existing approved measured-optimisation design without changing architecture or dependencies.
+
+- Refresh the published-dev18 idle/output baseline and attribute bulk-output allocations with
+  a fixed synthetic engine probe. No command text, user output or environment data is recorded.
+- Test a printable-ASCII pair fast path before cloning/allocating grapheme text. Unicode UAX #29
+  GB999 separates these scalar pairs; CR/LF and all non-ASCII cases retain existing processing.
+  Preserve pure deterministic engine ownership, ordered transport and owned renderer snapshots.
+- Require exhaustive printable-ASCII pair equivalence, Unicode Prepend/combining/emoji and
+  chunk-boundary checks, existing conformance/byte-exact checks and real-window acceptance.
+  Retain only if repeated probe and output measurements show a benefit; target at least 10%
+  lower synthetic engine time, with no claim of laptop acceptance or solved idle memory.

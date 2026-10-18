@@ -1588,3 +1588,15 @@ The exact reported OpenCode interaction and physical Explorer drops still need h
 References: https://github.com/microsoft/terminal/issues/4958 and
 https://learn.microsoft.com/en-us/windows/console/readconsole. Only published behaviour/API
 documentation was consulted; no terminal implementation was copied. No dependency changed.
+
+## 2026-10-18 — dev19 printable ASCII boundary fast path
+
+Measured synthetic output exposed repeated clone/string/grapheme allocations per ordinary
+ASCII scalar. Under the approved performance design, return early only for adjacent printable
+ASCII scalar cells (U+0020..U+007E) and printable ASCII input. Unicode 17 UAX #29 GB999 and the
+existing segmentation data establish that boundary; all non-ASCII/cluster/control cases retain
+the complete path. Exhaustive pairs and Unicode Prepend/combining/emoji/chunking guard against
+an overbroad ASCII shortcut. This removes allocation churn, not retained scrollback or GPU
+memory. No dependency, architecture or byte-transport change. See PERFORMANCE.md for measured
+benefit and limitations. The standalone measurement-only allocator probe forwards valid calls
+to System with atomic counters; it is not linked into Juna or its normal test executables.

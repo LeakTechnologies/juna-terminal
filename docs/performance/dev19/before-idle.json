@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "executable_sha256": "7f2f5c4954b756bb2ff6d0096b0e5ca39598812c61e651301f837d882871d994",
+  "os_version": "10.0.26200.0",
+  "logical_processors": 12,
+  "workload": "Idle",
+  "terminal": "Juna",
+  "font_family": "Consolas",
+  "conditions": "Release fixture; fresh isolated config/cache per run; font 16px (12pt in Alacritty); Git footer off; PowerShell without profile. Viewport geometry requires separate verification. Window handle is a startup proxy, not first presentation or input latency. Parent process memory/CPU only; no GPU or child-shell accounting. First run may warm OS caches. Flood duration includes startup and shutdown, not pure parser throughput.",
+  "samples": [
+    {
+      "run": 1,
+      "window_handle_ms": 51.32,
+      "idle_cpu_ms": 15.62,
+      "idle_elapsed_ms": 3001.82,
+      "private_bytes": 456527872,
+      "working_set_bytes": 262627328,
+      "peak_working_set_bytes": 262627328
+    },
+    {
+      "run": 2,
+      "window_handle_ms": 44.46,
+      "idle_cpu_ms": 0.0,
+      "idle_elapsed_ms": 3008.43,
+      "private_bytes": 457744384,
+      "working_set_bytes": 262541312,
+      "peak_working_set_bytes": 262549504
+    },
+    {
+      "run": 3,
+      "window_handle_ms": 47.56,
+      "idle_cpu_ms": 0.0,
+      "idle_elapsed_ms": 3001.77,
+      "private_bytes": 437305344,
+      "working_set_bytes": 224546816,
+      "peak_working_set_bytes": 224546816
+    }
+  ]
+}

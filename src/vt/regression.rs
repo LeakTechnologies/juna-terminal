@@ -1,4 +1,35 @@
 use super::*;
+
+#[test]
+fn printable_ascii_pairs_preserve_unicode_boundaries_and_chunking() {
+    for first in 0x20u8..=0x7e {
+        for second in 0x20u8..=0x7e {
+            let base = (first as char).to_string();
+            assert!(!width::joins(&base, second as char));
+            let mut terminal = TerminalState::new(4, 2);
+            terminal.advance(&[first]);
+            terminal.advance(&[second]);
+            let cells = terminal.snapshot(0).cells;
+            assert_eq!(cells[0].content, CellContent::Char(first as u32));
+            assert_eq!(cells[1].content, CellContent::Char(second as u32));
+        }
+    }
+    for text in ["\u{600}A", "e\u{301}x", "👩\u{200d}💻x", "界x", "A\r\nB"] {
+        let mut whole = TerminalState::new(12, 3);
+        whole.advance(text.as_bytes());
+        let mut split = TerminalState::new(12, 3);
+        for byte in text.bytes() {
+            split.advance(&[byte]);
+        }
+        assert_eq!(whole.snapshot(0).cells, split.snapshot(0).cells);
+        assert_eq!(whole.snapshot(0).cursor, split.snapshot(0).cursor);
+    }
+    let mut prepend = TerminalState::new(8, 2);
+    prepend.advance("\u{600}A".as_bytes());
+    assert!(
+        matches!(&prepend.snapshot(0).cells[0].content, CellContent::Cluster(s) if s.as_ref() == "\u{600}A")
+    );
+}
 fn line(s: &TerminalState, r: u16) -> String {
     s.grid()
         .row_slice(r)

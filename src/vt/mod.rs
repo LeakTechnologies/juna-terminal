@@ -414,9 +414,17 @@ impl TerminalState {
         let Some((row, col)) = self.last_print else {
             return false;
         };
-        let Some(cell) = self.grid().cell(row, col).cloned() else {
+        let Some(cell) = self.grid().cell(row, col) else {
             return false;
         };
+        // UAX #29 GB999: printable ASCII scalar pairs always have a grapheme boundary.
+        // Keep non-ASCII Prepend/Extend/ZWJ cases on the complete Unicode path.
+        if (' '..='~').contains(&c)
+            && matches!(cell.content, CellContent::Char(cp) if (0x20..=0x7e).contains(&cp))
+        {
+            return false;
+        }
+        let cell = cell.clone();
         let mut text = match &cell.content {
             CellContent::Char(cp) | CellContent::WideChar(cp) => {
                 char::from_u32(*cp).unwrap_or('\u{FFFD}').to_string()

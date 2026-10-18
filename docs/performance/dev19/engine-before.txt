@@ -1,0 +1,3 @@
+run=1 bytes=4096000 allocations=12084179 elapsed_us=1883228 history=13981 revision=63
+run=2 bytes=4096000 allocations=12084179 elapsed_us=2045805 history=13981 revision=63
+run=3 bytes=4096000 allocations=12084179 elapsed_us=2050400 history=13981 revision=63

@@ -1,5 +1,18 @@
 # Testing the repaired terminal
 
+## Dev19 output allocation repair (2026-10-18)
+
+Use a printable-ASCII pair boundary fast path under the approved performance design; all
+Unicode cases retain the existing segmentation path. Exhaustive pair/chunking regression
+passed. Three-run isolated desktop medians show parent output CPU 3.52 -> 2.50 seconds for
+4 MiB; the instrumented engine probe records 12,084,179 -> 256,979 allocations. See PERFORMANCE.md
+and docs/performance/dev19 for exact counters, source, methodology and limitations. Idle
+memory is unchanged; laptop and physical Explorer/OpenCode acceptance remain unverified.
+Verified this session: check, strict all-target Clippy, all 244 standard tests, all nine
+real-window tests and the isolated OpenCode startup-interrupt probe. Native x64/version/seven
+icon and bundled-tool pin checks passed. Hosted CI and downloaded assets are verified after
+tagging; these local results do not establish human/laptop acceptance.
+
 ## Dev18 control-input fixture repair (2026-10-18)
 
 Hosted dev17 diagnostics showed sent=true, child exit 101 and CONTROL_READ count=1 with

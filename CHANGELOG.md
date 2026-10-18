@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.1-dev19 — reduce ordinary output allocation overhead
+
+- Avoid grapheme-text allocation for adjacent printable ASCII scalars, preserving the existing Unicode path.
+- Add exhaustive printable-ASCII pairs and Unicode prefix/combining/emoji/chunk-boundary regression coverage.
+- Retain measured desktop evidence: about 29% lower parent CPU in the fixed 4 MiB output probe.
+- High idle memory, laptop/battery acceptance and the exact OpenCode interaction remain open.
+
 ## 0.1.1-dev18 — correct Windows control-input acceptance
 
 - Use ReadConsoleW in the controlled raw-input child instead of ReadFile, which can treat
