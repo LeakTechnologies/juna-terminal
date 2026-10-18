@@ -81,6 +81,13 @@ No translations or Language tab are claimed as implemented at this stage.
   session ownership, output fairness and per-tile shutdown before implementation. The layout
   foundation exists; interactive panes are not implemented. Prepare a separate approved design.
 - Export custom themes for other terminals, including VS Code.
+- Detach an existing terminal tab into its own window by clicking, holding and dragging it
+  outside the tab strip. Also consider a tab-strip context-menu action labelled "Move to
+  new window". Preserve the running session, terminal contents/scrollback, working directory
+  and tab name without restarting commands or losing output. Define drag thresholds,
+  cancellation, session ownership, privacy reveal reset and last-tab behaviour in a separate
+  approved design before implementation. This is roadmap work, distinct from opening a fresh
+  shell with Ctrl+Shift+N and from splitting a tab into terminal tiles.
 - Further privacy controls for outputs beyond Junafetch, with an explicit scope and test plan.
 - Mixed-DPI and additional GPU backend acceptance; Unicode/contextual layout improvements.
 

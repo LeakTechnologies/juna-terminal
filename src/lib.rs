@@ -13,3 +13,5 @@ pub mod theme_library;
 pub mod transport;
 pub mod updates;
 pub mod vt;
+
+pub mod window_identity;

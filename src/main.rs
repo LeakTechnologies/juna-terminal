@@ -15,9 +15,9 @@
 
 /// Re-attach to the console we were launched from, if there is one.
 ///
-/// Without this a GUI-subsystem binary has no stdout/stderr at all, so a GPU
-/// failure would show as a blank window with no explanation — which the
-/// diagnostics requirements in `DECISIONS.md` 5 explicitly reject.
+/// CLI-only: retain terminal output without attaching GUI sessions to their launcher
+/// and exposing the application to that console's interrupt/close events. GUI errors
+/// use the existing diagnostic file and visible error dialog.
 #[cfg(all(windows, not(debug_assertions)))]
 fn attach_parent_console() {
     use windows::Win32::{
@@ -56,9 +56,9 @@ fn attach_parent_console() {
 fn attach_parent_console() {}
 
 fn main() {
-    attach_parent_console();
     match juna::updates::cli::parse(std::env::args_os().skip(1)) {
         Ok(Some(action)) => {
+            attach_parent_console();
             let code = match juna::updates::cli::run(action) {
                 Ok(()) => 0,
                 Err(error) => {
@@ -69,6 +69,7 @@ fn main() {
             std::process::exit(code);
         }
         Err(error) => {
+            attach_parent_console();
             eprintln!("juna: {error}");
             std::process::exit(2);
         }
@@ -76,7 +77,9 @@ fn main() {
     }
     if let Some(busy) = juna::updates::helper::installation_state() {
         if busy {
-            eprintln!("Juna update is in progress; please wait for the automatic restart.");
+            juna::app::update_error_dialog(
+                "Juna update is in progress; please wait for the automatic restart.",
+            );
         } else {
             juna::app::update_error_dialog("A Juna update was interrupted. Previous files are retained in the installation folder's .juna-rollback folder. Restore the complete previous package or extract a verified GitHub release, then remove .juna-installing.");
         }
@@ -99,6 +102,7 @@ fn main() {
         .nth(1)
         .is_some_and(|arg| arg == "--version")
     {
+        attach_parent_console();
         println!(
             "juna {} ({})",
             env!("CARGO_PKG_VERSION"),
@@ -108,6 +112,7 @@ fn main() {
     }
     if let Err(e) = juna::app::run(100, 30) {
         eprintln!("juna: {e}");
+        juna::app::update_error_dialog(&format!("Juna: {e}"));
         std::process::exit(1);
     }
 }

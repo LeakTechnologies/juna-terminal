@@ -1,5 +1,27 @@
 # Juna — Decision Register
 
+## 2026-10-18 — approved input reliability repairs
+
+INPUT_RELIABILITY_DESIGN.md is approved. Use the actual Cargo build version in the native
+window title and retain legacy/versioned-title recognition in update preflight with executable
+identity checks. File drops insert bounded text at the active terminal caret without Enter,
+execution, clipboard changes or path logging. Native screen-to-client pointer conversion uses
+the existing Windows infrastructure crate's Win32_Graphics_Gdi feature; its concrete requirement
+is rejecting drops over tabs/settings/gutters using the real drop-time cursor position. No new
+crate, async runtime or VT semantics is added. Quote PowerShell literals including all five recognized single-quote characters, support safe cmd
+paths while rejecting expansion-sensitive forms, and use literal paths for unknown/alternate-
+screen contexts. Nested/remote shell context cannot be inferred reliably.
+
+Verified baseline defect: dev15 attached its GUI to the launcher's console; an isolated
+CTRL_BREAK event terminated the application with 0xC000013A. Release GUI startup now avoids
+parent-console attachment; CLI/help/version/error output retains the established attachment
+and redirected-handle preservation. Do not swallow child Ctrl+C/Ctrl+Z. The available older
+user log recorded a shell exit, not a panic. This does not establish that the identified
+launcher-console defect is the exact OpenCode-specific failure reported by the user.
+See Microsoft AttachConsole and SetConsoleCtrlHandler documentation; regression fixtures
+verify console isolation before sending any event and never signal the user's console.
+
+
 ## 2026-10-15 — repair ConPTY protected-field markers
 
 Approved PRIVACY_REPAIR_DESIGN.md replaces new OSC span emission with standard SGR colour pairs.
@@ -1534,3 +1556,7 @@ Initial-directory fallback is labelled and retired on input or reported metadata
 is not stored/exported/logged. Only display/reporting preferences enter portable settings.
 
 Protocol references: [Git porcelain v2](https://git-scm.com/docs/git-status), [Git filters](https://git-scm.com/docs/gitattributes), and [published OSC 7 behaviour](https://wezterm.org/config/lua/pane/get_current_working_dir.html). These are specification/behaviour references; no terminal-engine implementation was copied.
+
+PowerShell path quoting follows Microsoft about_Quoting_Rules, including typographic quotes;
+controlled Windows PowerShell round trips verified U+0027/U+2018/U+2019/U+201A/U+201B.
+https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_quoting_rules

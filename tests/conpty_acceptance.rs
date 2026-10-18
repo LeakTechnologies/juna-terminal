@@ -6,6 +6,64 @@ const PROBE: &str = env!("CARGO_BIN_EXE_argv_probe");
 const BOUND: Duration = Duration::from_secs(30);
 
 #[test]
+fn interrupt_and_eof_bytes_reach_a_raw_foreground_child_without_killing_transport() {
+    use juna::session::{self, Dimensions, SessionSpec};
+    let child = session::spawn(
+        &SessionSpec {
+            program: PROBE.into(),
+            args: vec!["--control-bytes".into()],
+            ..Default::default()
+        },
+        Dimensions::default(),
+    )
+    .unwrap();
+    let mut parts = child.split().unwrap();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let reader = std::thread::spawn(move || {
+        let mut buffer = [0; 4096];
+        loop {
+            match parts.reader.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if sender.send(buffer[..n].to_vec()).is_err() {
+                        break;
+                    }
+                }
+                Err(error) => panic!("controlled reader: {error}"),
+            }
+        }
+    });
+    let mut bytes = Vec::new();
+    let deadline = Instant::now() + BOUND;
+    let mut sent = false;
+    loop {
+        if Instant::now() > deadline {
+            let _ = parts.control.kill();
+            panic!("control-byte fixture timed out");
+        }
+        match receiver.recv_timeout(Duration::from_millis(25)) {
+            Ok(chunk) => bytes.extend(chunk),
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+        }
+        if !sent && String::from_utf8_lossy(&bytes).contains("CONTROL_READY") {
+            parts.writer.write(&[3, 26]).unwrap();
+            sent = true;
+        }
+    }
+    reader.join().unwrap();
+    assert!(sent && String::from_utf8_lossy(&bytes).contains("CONTROL_BYTES_OK"));
+    loop {
+        if let Some(status) = parts.control.try_wait().unwrap() {
+            assert_eq!(status.code(), 0);
+            break;
+        }
+        assert!(Instant::now() < deadline);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
 fn session_environment_overrides_are_child_only_and_unicode_safe() {
     use juna::session::{self, Dimensions, SessionSpec};
     let before = std::env::var_os("JUNA_ENV_PROBE");

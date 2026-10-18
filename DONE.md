@@ -1,3 +1,27 @@
+## Dev16 input reliability (2026-10-18)
+
+Implemented approved INPUT_RELIABILITY_DESIGN.md: bounded file/folder drops insert quoted
+local path text without Enter, versioned native titles retain updater identity checks, and
+release GUI startup no longer attaches to the launcher console. CLI redirection remains intact.
+No engine/backend semantics or pinned ConPTY dependency changed. Tab detachment is roadmap work.
+
+Verified: cargo check, strict all-target Clippy and all 243 standard tests, including six
+ConPTY acceptance tests, exact control bytes, Unicode/smart-quote literal paths and live
+input routing. Dropped input immediately hides private reveals. Eight existing real-window
+checks passed; the separate release-console regression confirms dev16 stays detached and
+survives an isolated launcher interrupt, then exits normally. Baseline dev15 attached and
+terminated with 0xC000013A. This establishes that defect, not the exact reported OpenCode cause.
+The installed OpenCode 2.0.31 startup-cancellation probe passed with shell recovery and no
+transport faults in an isolated profile; its local managed-service port was already occupied,
+so this is not full TUI/model-interruption acceptance. Physical Explorer dragging and the
+user's original OpenCode interaction remain human acceptance checks.
+
+Fixture corrections: Windows PowerShell's OEM850 ReadLine replaced a Unicode character;
+the controlled peer now selects UTF-8 explicitly before input. Its JSON writer also adds a
+BOM, which the report reader now accepts. The first OpenCode probe used unsupported v1 flags;
+the passing probe invokes the installed v2 wrapper without those flags. These failures did
+not establish product defects. Hosted release and downloaded-asset verification follow tagging.
+
 ## Dev15 protected-field repair
 
 Implemented approved PRIVACY_REPAIR_DESIGN.md: ordinary masks follow display width, typed

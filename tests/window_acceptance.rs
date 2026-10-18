@@ -428,7 +428,7 @@ fn real_window_presents_then_closes_on_shell_exit() {
         assert!(log.contains("Taskbar application ID: LeakTechnologies.Juna.Terminal"), "{log}");
         assert!(log.contains("Window icons verified: small and taskbar"), "{log}");
         assert!(
-            log.contains("Window title: \"Juna Terminal\""),
+            log.contains(&format!("Window title: {:?}", juna::window_identity::title())),
             "Shell output overwrote the application title: {log}"
         );
         assert!(!log.contains("frames=0"), "No frame was presented: {log}");
@@ -474,4 +474,52 @@ fn options_overlays_keep_shell_output_flowing() {
         assert!(log.contains("Acceptance marker present=true"), "{log}");
         assert!(!log.contains("frames=0"), "{log}");
     }
+}
+
+#[test]
+#[ignore = "Windows desktop; isolated launcher console control event against a release GUI executable"]
+fn release_gui_survives_its_launcher_console_interrupt() {
+    use std::{os::windows::process::CommandExt, process::Command};
+    let exe = std::env::var_os("JUNA_CONSOLE_ACCEPTANCE_EXE")
+        .expect("Set JUNA_CONSOLE_ACCEPTANCE_EXE to the optimized GUI executable");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("target/acceptance")
+        .join(juna::settings::new_id());
+    std::fs::create_dir_all(&root).unwrap();
+    let report = root.join("console.json");
+    // The script starts a hidden isolated console and verifies membership before sending any event.
+    let mut child = Command::new("powershell.exe")
+        .args(["-NoProfile", "-File"])
+        .arg(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/console_interrupt.ps1"
+        ))
+        .arg("-Executable")
+        .arg(exe)
+        .arg("-Report")
+        .arg(&report)
+        .creation_flags(0x0800_0000)
+        .spawn()
+        .unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(40);
+    let status = loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            break status;
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("isolated helper exceeded deadline");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    assert!(status.success());
+    // Windows PowerShell's UTF-8 file encoding includes a byte-order mark.
+    let report = std::fs::read_to_string(report).unwrap();
+    let result: serde_json::Value =
+        serde_json::from_str(report.trim_start_matches('\u{feff}')).unwrap();
+    assert_eq!(result["attached"], false);
+    assert_eq!(result["exited_before_event"], false);
+    assert_eq!(result["exited_after_event"], false);
+    assert_eq!(result["final_exit_code"], 0);
 }

@@ -1003,3 +1003,10 @@ only confirmation invokes session teardown and the helper. Outside Juna the CLI 
 interactive confirmation and uses that same helper transaction. Process-image/window preflight
 and parent-console redirection remain app/platform concerns. The engine receives no commands
 or update state and its byte transport is unchanged.
+
+Native file-drop events remain application input: query the live client pointer, validate
+terminal-body routing and a bounded control-free path, then enqueue one text insertion using
+the existing writer/bracketed-paste path. No file contents are read or executed. Window titles
+come from build identity rather than child OSC output; updater recognition shares this policy.
+Release GUI sessions do not attach to the launcher console, keeping launcher control events
+separate from ConPTY child input. CLI modes retain parent-console diagnostics.

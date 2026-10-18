@@ -247,6 +247,21 @@ pub fn mouse(
 #[cfg(test)]
 mod tests {
     #[test]
+    fn interrupt_keys_keep_child_control_semantics() {
+        use super::*;
+        for (key, byte) in [("c", 3), ("z", 26)] {
+            assert_eq!(
+                encode(
+                    &Key::Character(key.into()),
+                    None,
+                    ModifiersState::CONTROL,
+                    InputModes::default()
+                ),
+                Some(vec![byte])
+            );
+        }
+    }
+    #[test]
     fn zoom_shortcuts_respect_altgr_and_keypad() {
         use super::*;
         use winit::keyboard::{KeyCode, PhysicalKey};

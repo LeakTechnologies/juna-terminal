@@ -1,8 +1,11 @@
 //! Single-owner window, input, engine and rendering integration.
 mod clipboard;
+mod file_drop;
 mod git_status;
 pub mod gutter;
 mod input;
+#[cfg(all(test, windows))]
+mod interrupt_acceptance;
 #[doc(hidden)]
 pub mod new_window;
 mod privacy_input;
@@ -2303,7 +2306,7 @@ impl ApplicationHandler for App {
         }
         let result = (|| -> Result<(), String> {
             let attributes = Window::default_attributes()
-                .with_title("Juna Terminal")
+                .with_title(crate::window_identity::title())
                 .with_visible(false)
                 .with_inner_size(winit::dpi::LogicalSize::new(
                     self.cols as f32 * CELL_W + PAD * 2.,
@@ -2489,6 +2492,10 @@ impl ApplicationHandler for App {
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + FRAME));
     }
     fn window_event(&mut self, _event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        if let WindowEvent::DroppedFile(path) = &event {
+            self.dropped_file(path);
+            return;
+        }
         self.privacy_event(&event);
         if self.tab_controls(&event) {
             return;
@@ -2956,7 +2963,6 @@ pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
     let mut app = App::new(cols, rows);
     event_loop.run_app(&mut app)?;
     if let Some(failure) = app.failure.take() {
-        clipboard::error_dialog(&failure);
         return Err(failure.into());
     }
     Ok(())

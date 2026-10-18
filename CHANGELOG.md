@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1-dev16 — file drops, visible version and console isolation
+
+- Insert dropped file/folder paths as text into the active terminal, without Enter or execution.
+- Show `Juna - v<actual build version>` and preserve updater recognition of legacy windows.
+- Keep release GUI sessions independent of launcher-console interrupts; retain CLI output.
+- Add controlled Ctrl+C/Ctrl+Z byte, drop-routing and isolated console-event acceptance.
+- Record drag-out tab detachment and Move to new window as future roadmap work.
+
+
 ## 0.1.1-dev15 — repair protected-field reveal
 
 - Replace fragile OSC spans with per-cell markers preserved through ConPTY.

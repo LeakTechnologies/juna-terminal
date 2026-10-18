@@ -246,7 +246,7 @@ pub fn installation_in_use(target: &Path) -> Result<bool, String> {
         }
         let length = title.iter().position(|c| *c == 0).unwrap_or(title.len());
         if pid != std::process::id()
-            && String::from_utf16_lossy(&title[..length]) == "Juna Terminal"
+            && crate::window_identity::recognized(&String::from_utf16_lossy(&title[..length]))
         {
             match image_path(pid).and_then(|path| {
                 std::fs::canonicalize(path).map_err(|_| "Cannot verify Juna path".into())

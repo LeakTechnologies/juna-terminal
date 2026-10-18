@@ -48,6 +48,7 @@ Pass shell arguments after `--`; they retain their individual argument boundarie
 | Action | Control |
 |---|---|
 | Options | Right-click |
+| Drop a file or folder | Insert its local path at the active terminal caret; Enter is never added |
 | New tab | Ctrl+Shift+T, plus button, or right-click the tab strip |
 | Close tab | Ctrl+Shift+W or right-click its tab |
 | Middle-click a tab | Confirm Close tab, or Cancel |
@@ -168,3 +169,9 @@ the complete retained package or extract a verified release ZIP before clearing 
 See [performance evidence](PERFORMANCE.md) for the desktop baseline, Alacritty comparison,
 redraw improvements and remaining laptop/memory work.
 
+
+File drops are quoted for the configured PowerShell shell. Safe cmd paths use double quotes;
+cmd paths containing percent/exclamation expansion or trailing backslashes require manual entry.
+Unknown shells and alternate-screen apps receive literal local paths; Juna cannot infer nested
+or remote shell quoting or translate Windows paths to remote systems. Drops are ignored while settings are open,
+over tabs/the gutter, or in closing sessions. Native titles show the actual build version.

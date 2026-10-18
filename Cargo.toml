@@ -1,6 +1,6 @@
 [package]
 name = "juna"
-version = "0.1.1-dev15"
+version = "0.1.1-dev16"
 edition = "2021"
 rust-version = "1.97"
 description = "A terminal emulator with an original VT engine"
@@ -41,6 +41,8 @@ bytemuck = { version = "1", features = ["derive"] }
 version = "0.61"
 features = [
     "Win32_Foundation",
+    # Native drop-point conversion from screen to client coordinates.
+    "Win32_Graphics_Gdi",
     "Win32_System_Console",
     "Win32_System_DataExchange",
     "Win32_System_Memory",
