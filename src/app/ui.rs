@@ -6,6 +6,8 @@ use crate::{
 };
 use winit::keyboard::{Key, NamedKey};
 pub const TAB_HEIGHT: f32 = 32.;
+/// Pointer travel before a tab press becomes a drag rather than a click.
+pub const TAB_DRAG_THRESHOLD: f32 = 4.;
 pub const STATUS_HEIGHT: f32 = 26.;
 /// Total duration of the attention flash before it settles to a steady accent.
 pub const ATTENTION_FLASH_MS: u64 = 1200;
@@ -66,6 +68,30 @@ pub enum TabHit {
     Select(usize),
     New,
 }
+/// Shared strip geometry used by hit-testing, rendering and drag reordering.
+pub struct Strip {
+    pub start: usize,
+    pub visible: usize,
+    pub step: f32,
+    pub plus: f32,
+}
+/// `start` overrides the window origin while a tab is being dragged so hidden
+/// tabs can be reached by scrolling at the strip edges.
+pub fn strip(width: f32, scale: f32, count: usize, active: usize, start: Option<usize>) -> Strip {
+    let plus = 40. * scale;
+    let visible = (((width - plus) / (160. * scale)).floor() as usize)
+        .max(1)
+        .min(count.max(1));
+    let start = start
+        .unwrap_or_else(|| active.saturating_sub(visible - 1))
+        .min(count.saturating_sub(visible));
+    Strip {
+        start,
+        visible,
+        step: (width - plus) / visible as f32,
+        plus,
+    }
+}
 pub fn tab_hit(
     point: [f32; 2],
     width: f32,
@@ -76,20 +102,43 @@ pub fn tab_hit(
     if point[1] < 0. || point[1] >= TAB_HEIGHT * scale {
         return None;
     }
-    let plus = 40. * scale;
-    if point[0] >= width - plus {
+    let strip = strip(width, scale, count, active, None);
+    if point[0] >= width - strip.plus {
         return Some(TabHit::New);
     }
-    let visible = (((width - plus) / (160. * scale)).floor() as usize)
-        .max(1)
-        .min(count.max(1));
-    let start = active
-        .saturating_sub(visible - 1)
-        .min(count.saturating_sub(visible));
-    let step = (width - plus) / visible as f32;
-    let index = (point[0].max(0.) / step) as usize + start;
+    let index = (point[0].max(0.) / strip.step) as usize + strip.start;
     (index < count).then_some(TabHit::Select(index))
 }
+/// Insertion gap for a pointer position, in pre-removal indexing. The right half
+/// of a tab's slot targets the gap after it.
+pub fn drop_gap(point_x: f32, strip: &Strip, count: usize) -> usize {
+    if count == 0 {
+        return 0;
+    }
+    let slot = (point_x.max(0.) / strip.step) as usize;
+    let index = (strip.start + slot).min(count - 1);
+    let offset = point_x - (index.saturating_sub(strip.start)) as f32 * strip.step;
+    let gap = if offset > strip.step / 2. {
+        index + 1
+    } else {
+        index
+    };
+    gap.min(count)
+}
+/// Advance the drag window one tab when the pointer reaches a strip edge.
+pub fn drag_start(point_x: f32, width: f32, scale: f32, strip: &Strip, count: usize) -> usize {
+    let edge = 24. * scale;
+    if point_x < edge && strip.start > 0 {
+        strip.start - 1
+    } else if point_x > width - strip.plus - edge
+        && strip.start + strip.visible < count
+    {
+        strip.start + 1
+    } else {
+        strip.start
+    }
+}
+/// `drag` carries the window origin and insertion gap while a drag is active.
 pub fn tab_scene(
     labels: &[String],
     active: usize,
@@ -97,20 +146,26 @@ pub fn tab_scene(
     flash_on: bool,
     width: f32,
     scale: f32,
+    drag: Option<(usize, usize)>,
 ) -> Overlay {
     let mut out = Overlay::default();
     out.rectangles.push(Rectangle {
         rect: [0., 0., width, TAB_HEIGHT * scale],
         color: [0.06, 0.06, 0.09, 1.],
     });
-    let plus = 40. * scale;
-    let visible = (((width - plus) / (160. * scale)).floor() as usize)
-        .max(1)
-        .min(labels.len().max(1));
-    let start = active
-        .saturating_sub(visible - 1)
-        .min(labels.len().saturating_sub(visible));
-    let step = (width - plus) / visible as f32;
+    let strip = strip(
+        width,
+        scale,
+        labels.len(),
+        active,
+        drag.map(|(start, _)| start),
+    );
+    let Strip {
+        start,
+        visible,
+        step,
+        plus,
+    } = strip;
     for (i, label) in labels.iter().enumerate().skip(start).take(visible) {
         let x = (i - start) as f32 * step;
         let needs_attention = attention.get(i).copied().unwrap_or(false);
@@ -135,6 +190,19 @@ pub fn tab_scene(
             width: (step - 20. * scale).max(0.),
             value: label.clone(),
             color,
+        });
+    }
+    if let Some((_, gap)) = drag {
+        let x = if gap <= start {
+            0.
+        } else if gap >= start + visible {
+            width - plus
+        } else {
+            (gap - start) as f32 * step
+        };
+        out.rectangles.push(Rectangle {
+            rect: [(x - scale).max(0.), 0., 2. * scale, TAB_HEIGHT * scale],
+            color: [0.42, 0.55, 0.95, 1.],
         });
     }
     out.text.push(Text {
@@ -166,6 +234,8 @@ pub enum Action {
     ToggleGitStatus,
     ToggleDirectoryReporting,
     RefreshGitStatus,
+    Shells,
+    PickShell(String),
     Appearance,
     TerminalSettings,
     Tools,
@@ -215,6 +285,7 @@ pub enum Kind {
     ConfirmUpdate,
     Appearance,
     TerminalSettings,
+    Shells,
     Tools,
     ImportExport,
     Junafetch,
@@ -708,7 +779,7 @@ impl Ui {
                 ),
                 row(
                     format!(
-                        "[{}] PowerShell folder (new tabs)",
+                        "[{}] Track current folder in tab name",
                         if settings.report_shell_directory {
                             "x"
                         } else {
@@ -719,12 +790,41 @@ impl Ui {
                     None,
                 ),
                 row(
+                    format!("Shell (new tabs): {}", super::shells::display(&settings.shell)),
+                    Action::Shells,
+                    None,
+                ),
+                row(
                     "Refresh local Git status".into(),
                     Action::RefreshGitStatus,
                     None,
                 ),
                 row("Back to settings".into(), Action::Settings, None),
             ],
+            Kind::Shells => crate::settings::SHELL_CHOICES
+                .iter()
+                .map(|name| {
+                    row(
+                        format!(
+                            "[{}] {}{}",
+                            if settings.shell == *name { "x" } else { " " },
+                            super::shells::display(name),
+                            if super::shells::available(name) {
+                                ""
+                            } else {
+                                " (not found)"
+                            }
+                        ),
+                        Action::PickShell((*name).into()),
+                        None,
+                    )
+                })
+                .chain([row(
+                    "Back to terminal".into(),
+                    Action::TerminalSettings,
+                    None,
+                )])
+                .collect(),
             Kind::Appearance => vec![
                 row(
                     format!("Font: {}", settings.font_family),
@@ -1132,6 +1232,7 @@ impl Ui {
             Kind::Settings => "Settings - saved automatically",
             Kind::Appearance => "Appearance - live preview",
             Kind::TerminalSettings => "Terminal - saved automatically",
+            Kind::Shells => "Shell - applies to new tabs",
             Kind::Tools => "Tools",
             Kind::ImportExport => "Import / Export",
             Kind::Junafetch => "Junafetch - next command",
@@ -1240,6 +1341,7 @@ impl Ui {
                 Kind::Junafetch => "Protected values: Settings > Privacy",
                 Kind::Settings
                 | Kind::TerminalSettings
+                | Kind::Shells
                 | Kind::Tools
                 | Kind::ImportExport
                 | Kind::FetchProfiles
@@ -1459,7 +1561,7 @@ mod tests {
     fn tab_strip_keeps_the_active_tab_reachable_and_hits_plus() {
         for active in 0..16 {
             let labels: Vec<String> = (0..16).map(|i| format!("Tab {i}")).collect();
-            let scene = tab_scene(&labels, active, &[], false, 800., 1.);
+            let scene = tab_scene(&labels, active, &[], false, 800., 1., None);
             assert!(scene
                 .text
                 .iter()
@@ -1478,6 +1580,34 @@ mod tests {
             );
         }
         assert_eq!(tab_hit([10., 40.], 800., 1., 1, 0), None);
+    }
+    #[test]
+    fn drag_gap_and_scroll_follow_the_shared_strip_geometry() {
+        let geometry = strip(800., 1., 16, 0, Some(0));
+        assert_eq!(geometry.visible, 4);
+        assert_eq!(geometry.step, 190.);
+        assert_eq!(drop_gap(10., &geometry, 16), 0);
+        assert_eq!(drop_gap(50., &geometry, 16), 0);
+        assert_eq!(drop_gap(100., &geometry, 16), 1);
+        assert_eq!(drop_gap(150., &geometry, 16), 1);
+        assert_eq!(drop_gap(400., &geometry, 16), 2);
+        assert_eq!(drop_gap(760., &geometry, 16), 4);
+        // Edge positions scroll the window one tab at a time.
+        assert_eq!(drag_start(5., 800., 1., &geometry, 16), 0);
+        assert_eq!(drag_start(790., 800., 1., &geometry, 16), 1);
+        let held = strip(800., 1., 16, 0, Some(2));
+        assert_eq!(drag_start(5., 800., 1., &held, 16), 1);
+        let scene = tab_scene(
+            &["a".into(), "b".into(), "c".into()],
+            0,
+            &[],
+            false,
+            800.,
+            1.,
+            Some((0, 2)),
+        );
+        // Strip background, active-tab fill, and the insertion marker.
+        assert_eq!(scene.rectangles.len(), 3);
     }
     #[test]
     fn font_search_and_size_arrow_actions() {

@@ -43,6 +43,16 @@ impl SessionSpec {
             home,
         )
     }
+    /// True when the launch named its own shell. An explicit choice outranks the
+    /// stored preference for the lifetime of this process.
+    pub fn shell_is_explicit() -> bool {
+        std::env::var_os("JUNA_SHELL").is_some()
+            || std::env::var_os("JUNA_SHELL_ARGS").is_some()
+            || std::env::args_os()
+                .skip(1)
+                .take_while(|argument| argument != "--")
+                .any(|argument| argument == "--shell")
+    }
 }
 fn launch_options(
     arguments: impl IntoIterator<Item = OsString>,

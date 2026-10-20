@@ -21,8 +21,10 @@ pub struct PortableSettings {
     show_line_numbers: bool,
     #[serde(default = "crate::settings::default_git_status")]
     show_git_status: bool,
-    #[serde(default)]
+    #[serde(default = "crate::settings::default_report_shell_directory")]
     report_shell_directory: bool,
+    #[serde(default = "crate::settings::default_shell")]
+    shell: String,
     #[serde(default = "crate::settings::default_junafetch_profile")]
     junafetch_profile: String,
     #[serde(default = "crate::settings::default_junafetch_logo")]
@@ -44,6 +46,7 @@ impl From<&Settings> for PortableSettings {
             show_line_numbers: s.show_line_numbers,
             show_git_status: s.show_git_status,
             report_shell_directory: s.report_shell_directory,
+            shell: s.shell.clone(),
             junafetch_profile: s.junafetch_profile.clone(),
             junafetch_logo: s.junafetch_logo.clone(),
             update_channel: s.update_channel.clone(),
@@ -62,6 +65,7 @@ impl PortableSettings {
             show_line_numbers: self.show_line_numbers,
             show_git_status: self.show_git_status,
             report_shell_directory: self.report_shell_directory,
+            shell: self.shell.clone(),
             junafetch_profile: self.junafetch_profile.clone(),
             junafetch_logo: self.junafetch_logo.clone(),
             update_channel: self.update_channel.clone(),

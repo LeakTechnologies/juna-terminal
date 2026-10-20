@@ -1,3 +1,24 @@
+## Dev21 tab reordering, directory titles and shell selection (2026-10-20)
+
+Implemented the approved TAB_REORDER_TITLE_SHELL_DESIGN. Left-drag reorders tab records with a
+shared insertion-marker geometry and edge scrolling; the active engine stays with its tab because
+the active index is re-derived from the stable tab ID. Titles compose the OSC 7 directory basename
+with the shell name and fall back to the launch directory; rename pins a label. Directory
+tracking now defaults on, while an explicit stored `false` is preserved. `cmd`/`bash` show the
+launch directory until an equivalent OSC 7 integration exists.
+
+The shell preference accepts only powershell/pwsh/cmd/bash tokens; the executable is resolved at
+launch so imported settings cannot name an arbitrary program. An explicit `--shell`/`JUNA_SHELL`
+launch outranks it, and changes apply to new tabs only. Portable settings carry the token with a
+back-compatible default.
+
+Verified this session: `cargo check --all-targets`, strict all-target Clippy with `-D warnings`,
+and `cargo test` (234 lib tests plus 6 bench, 1 release-verify, 1 CLI, 6 ConPTY, 4 elevation,
+5 shell round-trip and 1 update identity passing; 2 lib and 22 desktop/network/GPU tests ignored
+by their existing markers). Drag is a pointer gesture: geometry and state are unit-tested, but
+recorded manual visual evidence is still required before claiming the gesture feels correct.
+No dependency, VT semantic, byte-transport or engine-ownership change was made.
+
 ## Dev20 native benchmark utility (2026-10-18)
 
 Completed the approved first owned-Juna measurement slice as a separate source-built binary.

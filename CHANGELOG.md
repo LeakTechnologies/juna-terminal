@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1-dev21 — tab reordering, directory titles and shell selection
+
+- Drag a tab left or right to reorder it; the active session and engine stay with the tab.
+- Name tabs `Directory (Shell)`, e.g. `VideoTools (PowerShell)`, and follow `cd` via OSC 7.
+- Default directory tracking on, with the existing toggle retained and relabelled.
+- Keep manually renamed tabs pinned to their chosen name.
+- Add a validated shell preference (Windows PowerShell, PowerShell 7, Command Prompt, Bash)
+  that applies to new tabs; the setting is a token, never a path.
+
 ## 0.1.1-dev20 — separate native performance measurements
 
 - Add the source-built `juna-bench` developer utility; normal terminal sessions do not run it.

@@ -956,6 +956,13 @@ The UI thread alone mutates every engine. Each output stream receives a bounded 
 per event-loop turn, including inactive tabs; bytes remain ordered and backpressure remains intact.
 Each tab reaps its process independently, and the window closes only after its final session ends.
 The tab header is a presentation inset; the renderer still consumes owned snapshots and UI scenes.
+Tab reordering permutes the tab vector and re-derives the active index from the active tab's stable
+ID; engine/session values never move between records. Strip geometry (`start`, `visible`, `step`,
+drop gaps, edge scrolling) is one pure function shared by rendering and input. Automatic titles
+compose the basename of the engine's OSC 7 directory with the shell display name; rename pins a
+label. The `shell` preference is an allowlisted token resolved to a known executable at launch,
+never a path. When panes exist, the tab title follows the focused pane; tabs remain a level above
+the pane tree.
 
 Theme discovery uses a bounded standard-library worker with generation-tagged owned results.
 It reads validated JSON only, skips linked folders, limits depth/files/bytes, and never sees engines.

@@ -582,6 +582,7 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
             Kind::Settings => "settings-menu",
             Kind::Appearance => "appearance-menu",
             Kind::TerminalSettings => "terminal-settings-menu",
+            Kind::Shells => "shell-menu",
             Kind::Tools => "tools-menu",
             Kind::ImportExport => "import-export-menu",
             Kind::Junafetch => "junafetch-menu",
@@ -635,7 +636,7 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
         "Command Prompt".into(),
         "PowerShell 7".into(),
     ];
-    let scene = juna::app::ui::tab_scene(&labels, 1, &[true, false, false], true, 1024., 1.);
+    let scene = juna::app::ui::tab_scene(&labels, 1, &[true, false, false], true, 1024., 1., None);
     let pixels = render_scene_at(
         &device,
         &queue,
@@ -663,7 +664,7 @@ fn theme_previews_and_ui_overlays_render_without_mutating_terminal_state() {
     let inset = juna::app::gutter::width(1024., 1., true);
     numbers.set_left_inset(inset);
     numbers.set_top_inset(juna::app::ui::TAB_HEIGHT);
-    let mut scene = juna::app::ui::tab_scene(&labels, 1, &[true, false, false], true, 1024., 1.);
+    let mut scene = juna::app::ui::tab_scene(&labels, 1, &[true, false, false], true, 1024., 1., None);
     scene
         .text
         .extend(juna::app::gutter::scene(inset, 1., 171, 8, [0.8, 0.8, 0.9, 1.]).text);

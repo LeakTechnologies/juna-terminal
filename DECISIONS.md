@@ -1629,3 +1629,19 @@ ABI, shared across processes on supported Windows. Two narrow Juna-owned FFI dec
 provide QPC/frequency without another dependency; each call has its native-storage invariant.
 Only deltas are exported, with the documented one-tick cross-process ordering uncertainty.
 https://learn.microsoft.com/en-us/windows/win32/sysinfo/acquiring-high-resolution-time-stamps
+
+## 2026-10-20 — tab reordering, directory titles and shell allowlist
+
+Implemented the approved TAB_REORDER_TITLE_SHELL_DESIGN. Left-drag reorders tab records with a
+shared insertion-marker geometry; the active record keeps its engine because the index is
+re-derived from its stable ID. Automatic titles use `Directory (Shell)` from OSC 7 metadata and
+fall back to the launch directory. `report_shell_directory` now defaults to on so titles follow
+`cd`; an explicit stored `false` is retained, and cmd/bash remain launch-directory titles until a
+per-shell OSC 7 integration exists. Rename pins a label for the tab's lifetime.
+
+`Settings::shell` accepts only powershell/pwsh/cmd/bash tokens. The executable is resolved at
+launch, so imported settings cannot name an arbitrary program to execute; a missing executable is
+reported in the panel rather than failing a tab. An explicit `--shell`/`JUNA_SHELL` launch wins
+for that process, and changes apply to new tabs only. Portable export/import carries the token
+with a back-compatible default. No dependency, VT semantic, byte-transport or engine-ownership
+change was made. Drag feel still requires recorded visual acceptance.

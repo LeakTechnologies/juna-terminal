@@ -16,8 +16,10 @@ pub struct Settings {
     pub show_line_numbers: bool,
     #[serde(default = "default_git_status")]
     pub show_git_status: bool,
-    #[serde(default)]
+    #[serde(default = "default_report_shell_directory")]
     pub report_shell_directory: bool,
+    #[serde(default = "default_shell")]
+    pub shell: String,
     #[serde(default = "default_junafetch_profile")]
     pub junafetch_profile: String,
     #[serde(default = "default_junafetch_logo")]
@@ -39,7 +41,8 @@ impl Default for Settings {
             minimum_contrast: 4.5,
             show_line_numbers: false,
             show_git_status: true,
-            report_shell_directory: false,
+            report_shell_directory: default_report_shell_directory(),
+            shell: default_shell(),
             junafetch_profile: default_junafetch_profile(),
             junafetch_logo: default_junafetch_logo(),
             update_channel: default_update_channel(),
@@ -53,6 +56,21 @@ pub fn default_privacy_mode() -> String {
 }
 pub fn default_git_status() -> bool {
     true
+}
+/// Directory tracking is on by default so tab names follow `cd`. Users who do not
+/// want the PowerShell prompt wrapper can turn it off; an explicit stored value
+/// continues to win.
+pub fn default_report_shell_directory() -> bool {
+    true
+}
+/// Only these tokens are accepted. They map to known executables at launch, so an
+/// imported settings file can never name an arbitrary program to run.
+pub const SHELL_CHOICES: [&str; 4] = ["powershell", "pwsh", "cmd", "bash"];
+pub fn default_shell() -> String {
+    "powershell".into()
+}
+pub fn valid_shell(shell: &str) -> bool {
+    SHELL_CHOICES.contains(&shell)
 }
 pub fn default_update_channel() -> String {
     if env!("CARGO_PKG_VERSION").contains("-dev") {
@@ -78,6 +96,9 @@ impl Settings {
         }
         if !matches!(self.update_channel.as_str(), "stable" | "preview") {
             return Err("Invalid update channel".into());
+        }
+        if !valid_shell(&self.shell) {
+            return Err("Invalid shell".into());
         }
         if !matches!(
             self.junafetch_profile.as_str(),
@@ -217,6 +238,32 @@ pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), Str
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shell_choices_are_validated_and_directory_tracking_defaults_on() {
+        let settings = Settings::default();
+        assert!(settings.validate().is_ok());
+        assert_eq!(settings.shell, "powershell");
+        assert!(settings.report_shell_directory);
+        for shell in SHELL_CHOICES {
+            let candidate = Settings {
+                shell: shell.into(),
+                ..Default::default()
+            };
+            assert!(candidate.validate().is_ok(), "{shell}");
+        }
+        let invalid = Settings {
+            shell: "C:/Windows/System32/calc.exe".into(),
+            ..Default::default()
+        };
+        assert!(invalid.validate().is_err());
+        // Older files without the field keep accepting the default, while an
+        // explicit `false` still wins over the new default.
+        let legacy: Settings = serde_json::from_str(r#"{"schema_version":1,"active_theme_id":"catppuccin-mocha","font_family":"IBM Plex Mono","font_size":16.0,"minimum_contrast":4.5}"#).unwrap();
+        assert_eq!(legacy.shell, "powershell");
+        assert!(legacy.report_shell_directory);
+        let opted_out: Settings = serde_json::from_str(r#"{"schema_version":1,"active_theme_id":"catppuccin-mocha","font_family":"IBM Plex Mono","font_size":16.0,"minimum_contrast":4.5,"report_shell_directory":false}"#).unwrap();
+        assert!(!opted_out.report_shell_directory);
+    }
     #[test]
     fn custom_themes_round_trip_and_corruption_does_not_overwrite_source() {
         let dir = std::env::temp_dir().join(new_id());

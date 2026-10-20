@@ -930,7 +930,7 @@ dependencies = [
 
 [[package]]
 name = "juna"
-version = "0.1.1-dev20"
+version = "0.1.1-dev21"
 dependencies = [
  "bytemuck",
  "conpty-oxide",

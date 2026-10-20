@@ -12,6 +12,7 @@ mod privacy_input;
 mod runtime;
 mod settings_files;
 mod shell_reporting;
+mod shells;
 mod tabs;
 #[cfg(windows)]
 mod tools;
@@ -77,6 +78,16 @@ fn taskbar_properties(hwnd: windows::Win32::Foundation::HWND) -> Result<(), Stri
     log::info!("Taskbar relaunch icon configured");
     Ok(())
 }
+/// In-progress tab drag. Index and window origin are captured at press so the
+/// permutation is resolved against a stable order; only the geometry scrolls.
+#[derive(Clone, Copy)]
+struct TabDrag {
+    from: usize,
+    press_x: f32,
+    /// Strip window origin, advanced when the pointer reaches a strip edge.
+    start: usize,
+    moved: bool,
+}
 pub struct App {
     window: Option<Arc<Window>>,
     gpu: Option<Gpu>,
@@ -114,7 +125,9 @@ pub struct App {
     tabs: Vec<tabs::Tab>,
     active_tab: usize,
     next_tab_id: u64,
+    tab_drag: Option<TabDrag>,
     shell_spec: Option<SessionSpec>,
+    shell_explicit: bool,
     active_closing: bool,
     closing_all: bool,
     theme_worker: Option<crate::theme_library::Worker>,
@@ -318,10 +331,19 @@ impl App {
             return;
         }
         let (revision, cwd) = self.terminal.working_directory();
-        let tab = &mut self.tabs[self.active_tab];
+        let active = self.active_tab;
+        let tab = &mut self.tabs[active];
         let old = tab.git.generation;
         tab.git.sync(revision, cwd);
-        if old != tab.git.generation {
+        let mut changed = old != tab.git.generation;
+        if !tab.pinned {
+            let title = tabs::title(cwd.map(std::path::Path::new), &tab.shell);
+            if title != tab.label {
+                tab.label = title;
+                changed = true;
+            }
+        }
+        if changed {
             self.dirty = true;
         }
         let Some(worker) = self.git_worker.as_ref() else {
@@ -430,6 +452,8 @@ impl App {
             tabs: vec![tabs::Tab {
                 id: 1,
                 label: "Terminal".into(),
+                pinned: false,
+                shell: String::new(),
                 saved: None,
                 git: git_status::View::new(None),
                 attention: None,
@@ -437,7 +461,9 @@ impl App {
             }],
             active_tab: 0,
             next_tab_id: 2,
+            tab_drag: None,
             shell_spec: None,
+            shell_explicit: false,
             active_closing: false,
             closing_all: false,
             theme_worker: None,
@@ -499,6 +525,29 @@ impl App {
             self.fit(size.width, size.height);
         }
     }
+    fn window_width(&self) -> f32 {
+        self.window
+            .as_ref()
+            .map(|window| window.inner_size().width as f32)
+            .unwrap_or(1024.)
+    }
+    /// Reorder tab records only. The active record keeps its engine/session
+    /// fields, so the `saved: None` invariant follows the tab, not the index.
+    fn move_tab(&mut self, from: usize, gap: usize) {
+        let Some(to) = tabs::reorder_target(from, gap, self.tabs.len()) else {
+            return;
+        };
+        let active_id = self.tabs[self.active_tab].id;
+        let tab = self.tabs.remove(from);
+        self.tabs.insert(to, tab);
+        self.active_tab = self
+            .tabs
+            .iter()
+            .position(|tab| tab.id == active_id)
+            .unwrap_or(to);
+        log::info!("Moved tab {active_id}; index={}; count={}", self.active_tab, self.tabs.len());
+        self.dirty = true;
+    }
     fn switch_tab(&mut self, index: usize) {
         if index == self.active_tab || index >= self.tabs.len() {
             return;
@@ -550,6 +599,8 @@ impl App {
         self.tabs.push(tabs::Tab {
             id,
             label: tabs::label(&spec),
+            pinned: false,
+            shell: tabs::shell_name(&spec),
             saved: None,
             git: git_status::View::new(spec.cwd.clone().or_else(|| std::env::current_dir().ok())),
             attention: None,
@@ -605,6 +656,7 @@ impl App {
         }
     }
     fn drain_inactive(&mut self) {
+        let mut titles_changed = false;
         for tab in &mut self.tabs {
             let Some(state) = tab.saved.as_mut() else {
                 continue;
@@ -637,9 +689,45 @@ impl App {
                     runtime.request_close();
                 }
             }
+            if !tab.pinned {
+                let cwd = state.terminal.working_directory().1.map(str::to_owned);
+                let title = tabs::title(cwd.as_deref().map(std::path::Path::new), &tab.shell);
+                if title != tab.label {
+                    tab.label = title;
+                    titles_changed = true;
+                }
+            }
+        }
+        if titles_changed {
+            self.dirty = true;
         }
     }
     fn tab_controls(&mut self, event: &WindowEvent) -> bool {
+        // Finish a drag before the panel guard: releasing over a panel or outside
+        // the strip must not leave the gesture latched forever.
+        if let WindowEvent::MouseInput {
+            state: ElementState::Released,
+            button: MouseButton::Left,
+            ..
+        } = event
+        {
+            if let Some(drag) = self.tab_drag.take() {
+                self.ui_mouse_latch.retain(|button| *button != MouseButton::Left);
+                if drag.moved {
+                    let strip = ui::strip(
+                        self.window_width(),
+                        self.scale,
+                        self.tabs.len(),
+                        self.active_tab,
+                        Some(drag.start),
+                    );
+                    let gap = ui::drop_gap(self.pointer_px[0], &strip, self.tabs.len());
+                    self.move_tab(drag.from, gap);
+                }
+                self.dirty = true;
+                return true;
+            }
+        }
         if self.ui.is_some() {
             return false;
         }
@@ -709,6 +797,30 @@ impl App {
         }
         if let WindowEvent::CursorMoved { position, .. } = event {
             self.pointer_px = [position.x as f32, position.y as f32];
+        }
+        if matches!(event, WindowEvent::CursorMoved { .. }) {
+            let width = self.window_width();
+            if let Some(drag) = self.tab_drag.as_mut() {
+                if !drag.moved
+                    && (self.pointer_px[0] - drag.press_x).abs()
+                        > ui::TAB_DRAG_THRESHOLD * self.scale
+                {
+                    drag.moved = true;
+                }
+                if drag.moved {
+                    let strip = ui::strip(
+                        width,
+                        self.scale,
+                        self.tabs.len(),
+                        self.active_tab,
+                        Some(drag.start),
+                    );
+                    drag.start =
+                        ui::drag_start(self.pointer_px[0], width, self.scale, &strip, self.tabs.len());
+                    self.dirty = true;
+                }
+                return true;
+            }
         }
         if self.pointer_px[1] < ui::TAB_HEIGHT * self.scale {
             if let WindowEvent::MouseInput {
@@ -785,7 +897,22 @@ impl App {
                     self.active_tab,
                 ) {
                     Some(ui::TabHit::New) => self.ui_action(ui::Action::NewTab),
-                    Some(ui::TabHit::Select(i)) => self.switch_tab(i),
+                    Some(ui::TabHit::Select(index)) => {
+                        self.switch_tab(index);
+                        let strip = ui::strip(
+                            width,
+                            self.scale,
+                            self.tabs.len(),
+                            self.active_tab,
+                            None,
+                        );
+                        self.tab_drag = Some(TabDrag {
+                            from: index,
+                            press_x: self.pointer_px[0],
+                            start: strip.start,
+                            moved: false,
+                        });
+                    }
                     _ => {}
                 }
                 return true;
@@ -998,6 +1125,19 @@ impl App {
                     && (elapsed / ui::ATTENTION_FLASH_PERIOD_MS).is_multiple_of(2)
             })
             .unwrap_or(false);
+        let drag = self.tab_drag.filter(|drag| drag.moved).map(|drag| {
+            let strip = ui::strip(
+                w as f32,
+                self.scale,
+                self.tabs.len(),
+                self.active_tab,
+                Some(drag.start),
+            );
+            (
+                drag.start,
+                ui::drop_gap(self.pointer_px[0], &strip, self.tabs.len()),
+            )
+        });
         renderer.overlay(&ui::tab_scene(
             &labels,
             self.active_tab,
@@ -1005,6 +1145,7 @@ impl App {
             flash_on,
             w as f32,
             self.scale,
+            drag,
         ));
         if self.settings.show_git_status && show_numbers {
             renderer.overlay(&ui::status_scene(
@@ -1753,11 +1894,15 @@ impl App {
                         target.and_then(|id| self.tabs.iter_mut().find(|t| t.id == id))
                     {
                         tab.label = label;
+                        tab.pinned = true;
                     }
                     self.close_ui();
                 }
                 Action::NewTab => {
-                    let spec = self.shell_spec.clone().ok_or("Shell is not initialized")?;
+                    let mut spec = self.shell_spec.clone().ok_or("Shell is not initialized")?;
+                    if !self.shell_explicit {
+                        shells::apply(&mut spec, &self.settings.shell);
+                    }
                     self.add_tab(spec)?;
                 }
                 Action::CloseTab => self.close_tab(),
@@ -1980,6 +2125,29 @@ impl App {
                     self.refresh_update_panel();
                 }
                 Action::TerminalSettings => self.open_ui(Kind::TerminalSettings),
+                Action::Shells => self.open_ui(Kind::Shells),
+                Action::PickShell(name) => {
+                    if !crate::settings::valid_shell(&name) {
+                        return Err("Unknown shell".into());
+                    }
+                    if !shells::available(&name) {
+                        return Err(format!(
+                            "{} was not found on PATH",
+                            shells::display(&name)
+                        ));
+                    }
+                    let mut settings = self.committed_preferences();
+                    settings.shell = name;
+                    self.commit_preferences(settings)?;
+                    self.open_ui(Kind::Shells);
+                    if let Some(ui) = self.ui.as_mut() {
+                        ui.message = if self.shell_explicit {
+                            "Saved; this launch's --shell still wins".into()
+                        } else {
+                            "Applies to new tabs".into()
+                        };
+                    }
+                }
                 Action::Tools => self.open_ui(Kind::Tools),
                 Action::ImportExport => self.open_ui(Kind::ImportExport),
                 Action::Junafetch => self.open_ui(Kind::Junafetch),
@@ -2415,7 +2583,11 @@ impl ApplicationHandler for App {
                     log::warn!("Theme discovery: {error}");
                     None
                 });
-            let spec = SessionSpec::from_environment().map_err(|e| e.to_string())?;
+            let mut spec = SessionSpec::from_environment().map_err(|e| e.to_string())?;
+            self.shell_explicit = SessionSpec::shell_is_explicit();
+            if !self.shell_explicit {
+                shells::apply(&mut spec, &self.settings.shell);
+            }
             #[cfg(windows)]
             let spec = {
                 let mut spec = spec;
@@ -2426,6 +2598,7 @@ impl ApplicationHandler for App {
                 spec
             };
             self.tabs[self.active_tab].label = tabs::label(&spec);
+            self.tabs[self.active_tab].shell = tabs::shell_name(&spec);
             self.shell_spec = Some(spec.clone());
             self.tabs[self.active_tab].git =
                 git_status::View::new(spec.cwd.clone().or_else(|| std::env::current_dir().ok()));
@@ -3261,6 +3434,8 @@ mod option_tests {
         app.tabs.push(tabs::Tab {
             id: 42,
             label: "Second".into(),
+            pinned: false,
+            shell: "PowerShell".into(),
             git: git_status::View::new(None),
             attention: None,
             privacy: Default::default(),
@@ -3285,6 +3460,7 @@ mod option_tests {
         app.ui.as_mut().unwrap().paste_text("Work 日本語");
         app.ui_action(ui::Action::SaveTabName);
         assert_eq!(app.tabs[1].label, "Work 日本語");
+        assert!(app.tabs[1].pinned);
         assert_eq!(app.active_tab, 0);
         app.open_ui(ui::Kind::TabContext);
         app.ui.as_mut().unwrap().target_tab = Some(42);
@@ -3295,6 +3471,47 @@ mod option_tests {
         app.ui.as_mut().unwrap().target_tab = Some(999);
         app.ui_action(ui::Action::CloseTargetTab);
         assert!(!app.active_closing);
+    }
+    #[test]
+    fn reordering_keeps_the_active_engine_with_its_tab_record() {
+        let mut app = App::new(20, 3);
+        app.terminal.advance(b"active");
+        let active = app.terminal.snapshot(0).cells;
+        for id in [2, 3] {
+            app.tabs.push(tabs::Tab {
+                id,
+                label: format!("Tab {id}"),
+                pinned: false,
+                shell: "PowerShell".into(),
+                git: git_status::View::new(None),
+                attention: None,
+                privacy: Default::default(),
+                saved: Some(tabs::SavedSession {
+                    terminal: TerminalState::new(20, 3),
+                    runtime: None,
+                    offset: 0,
+                    selection: None,
+                    failure: None,
+                    closing: false,
+                }),
+            });
+        }
+        app.move_tab(0, 3);
+        assert_eq!(
+            app.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
+            [2, 3, 1]
+        );
+        assert_eq!(app.active_tab, 2);
+        assert_eq!(app.tabs[app.active_tab].id, 1);
+        assert!(app.tabs[app.active_tab].saved.is_none());
+        assert!(app.tabs[0].saved.is_some() && app.tabs[1].saved.is_some());
+        assert_eq!(app.terminal.snapshot(0).cells, active);
+        // Dropping into either adjacent gap leaves the order unchanged.
+        app.move_tab(2, 2);
+        assert_eq!(
+            app.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
+            [2, 3, 1]
+        );
     }
     #[test]
     fn switching_tabs_moves_complete_screen_and_view_state() {
@@ -3308,6 +3525,8 @@ mod option_tests {
             id: 2,
             git: git_status::View::new(None),
             label: "Second".into(),
+            pinned: false,
+            shell: "PowerShell".into(),
             attention: None,
             privacy: Default::default(),
             saved: Some(tabs::SavedSession {
