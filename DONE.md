@@ -1,3 +1,16 @@
+## Dev22 tab title portability repair (2026-10-20)
+
+The hosted dev21 Rust workflow failed one lib test: Linux `Path::new("C:/").file_name()` is
+`C:`, so the drive-root title expected `C:\`. The basename is now derived as text (trim
+separators, take the final component, expand a two-character drive component to `C:\`), which
+is host-independent and needs no platform branch. Added cases for both separators, a trailing
+separator and `/`. The dev21 release binary and Development release workflow were otherwise
+successful; its tag remains published and is not moved. This cycle bumps to dev22.
+
+Verified this session: strict all-target Clippy and the standard local suite (234 lib plus all
+integration tests; existing desktop/network/GPU markers ignored). Hosted Linux and Windows
+confirmation follows the dev22 tag.
+
 ## Dev21 tab reordering, directory titles and shell selection (2026-10-20)
 
 Implemented the approved TAB_REORDER_TITLE_SHELL_DESIGN. Left-drag reorders tab records with a

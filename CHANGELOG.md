@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1-dev22 — tab title portability repair
+
+- Parse the tab directory basename as text so a Windows drive root (`C:\`) is named the
+  same on the Windows and Linux CI hosts; dev21's Rust workflow failed only this test.
+- Keep dev21's drag reordering, directory titles and shell selection unchanged.
+
 ## 0.1.1-dev21 — tab reordering, directory titles and shell selection
 
 - Drag a tab left or right to reorder it; the active session and engine stay with the tab.

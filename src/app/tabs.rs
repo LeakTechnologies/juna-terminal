@@ -43,21 +43,22 @@ pub fn shell_name(spec: &crate::session::SessionSpec) -> String {
         _ => name.into_owned(),
     }
 }
-/// Directory component only; no I/O. Drive and share roots keep their path text.
+/// Directory component only; no I/O. Parsed as text so a Windows drive root
+/// reports the same name on every host, including the Linux CI target.
 pub fn directory_name(path: &Path) -> Option<String> {
-    if let Some(name) = path.file_name() {
-        let name = name.to_string_lossy();
-        if !name.is_empty() {
-            return Some(name.into_owned());
-        }
-    }
     let text = path.to_string_lossy();
     if text.is_empty() {
         return None;
     }
-    #[cfg(windows)]
-    let text = text.replace('/', "\\");
-    Some(text.to_string())
+    let trimmed = text.trim_end_matches(['/', '\\']);
+    if trimmed.is_empty() {
+        return Some(text.into_owned());
+    }
+    let name = trimmed.rsplit(['/', '\\']).next().unwrap_or(trimmed);
+    if name.len() == 2 && name.ends_with(':') {
+        return Some(format!("{name}\\"));
+    }
+    Some(name.to_owned())
 }
 /// `Directory (Shell)`. Without a directory the shell name stands alone.
 pub fn title(directory: Option<&Path>, shell: &str) -> String {
@@ -100,6 +101,9 @@ mod tests {
             "VideoTools (PowerShell)"
         );
         assert_eq!(title(Some(Path::new("C:/")), "PowerShell"), "C:\\ (PowerShell)");
+        assert_eq!(title(Some(Path::new("C:\\")), "PowerShell"), "C:\\ (PowerShell)");
+        assert_eq!(title(Some(Path::new("E:/tools/")), "Bash"), "tools (Bash)");
+        assert_eq!(title(Some(Path::new("/")), "Bash"), "/ (Bash)");
         assert_eq!(title(None, "Command Prompt"), "Command Prompt");
         assert_eq!(title(Some(Path::new("")), "Bash"), "Bash");
         assert_eq!(title(Some(Path::new("E:/日本語")), "Bash"), "日本語 (Bash)");
