@@ -138,7 +138,59 @@ pub fn drag_start(point_x: f32, width: f32, scale: f32, strip: &Strip, count: us
         strip.start
     }
 }
-/// `drag` carries the window origin and insertion gap while a drag is active.
+/// Accent used by drag feedback. Fixed rather than themed so the gesture reads
+/// the same in every theme, including low-contrast light ones.
+pub const DRAG_ACCENT: [f32; 4] = [0.42, 0.55, 0.95, 1.];
+/// Translucent fill marking the slot the dragged tab will occupy.
+pub const DRAG_BAND_ALPHA: f32 = 0.18;
+/// Outline thickness of the dragged tab, in logical pixels.
+pub const DRAG_OUTLINE: f32 = 1.5;
+/// Drag feedback state: the strip window origin, the resolved insertion gap and
+/// the pointer position that positions the dragged-tab outline.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DragView {
+    pub start: usize,
+    pub gap: usize,
+    pub pointer_x: f32,
+}
+/// Outline of the tab being dragged, centred on the pointer and kept inside the
+/// strip so it never draws over the new-tab button.
+pub fn ghost_rect(pointer_x: f32, width: f32, scale: f32, strip: &Strip) -> [f32; 4] {
+    let w = (strip.step - 2.).max(1.);
+    let room = (width - strip.plus - w).max(0.);
+    [
+        (pointer_x - w / 2.).clamp(0., room),
+        0.,
+        w,
+        TAB_HEIGHT * scale,
+    ]
+}
+/// Destination band and its insertion marker, both derived from the same gap so
+/// the highlight always matches where the reorder will insert.
+pub fn drop_rects(gap: usize, strip: &Strip, width: f32, scale: f32) -> ([f32; 4], [f32; 4]) {
+    let slot = (strip.step - 2.).max(1.);
+    let area = (width - strip.plus).max(0.);
+    let line = if gap <= strip.start {
+        0.
+    } else if gap >= strip.start + strip.visible {
+        area
+    } else {
+        (gap - strip.start) as f32 * strip.step
+    };
+    // The tab lands in the slot after the insertion line; at the far end that
+    // slot is off-strip, so the band moves to the left of the line.
+    let band_x = if gap >= strip.start + strip.visible {
+        (line - slot).max(0.)
+    } else {
+        line.min((area - slot).max(0.))
+    };
+    (
+        [band_x, 0., slot.min(area), TAB_HEIGHT * scale],
+        [(line - scale).max(0.), 0., 2. * scale, TAB_HEIGHT * scale],
+    )
+}
+/// `drag` carries the window origin, insertion gap and pointer while a drag is
+/// active.
 pub fn tab_scene(
     labels: &[String],
     active: usize,
@@ -146,7 +198,7 @@ pub fn tab_scene(
     flash_on: bool,
     width: f32,
     scale: f32,
-    drag: Option<(usize, usize)>,
+    drag: Option<DragView>,
 ) -> Overlay {
     let mut out = Overlay::default();
     out.rectangles.push(Rectangle {
@@ -158,7 +210,7 @@ pub fn tab_scene(
         scale,
         labels.len(),
         active,
-        drag.map(|(start, _)| start),
+        drag.map(|drag| drag.start),
     );
     let Strip {
         start,
@@ -192,18 +244,33 @@ pub fn tab_scene(
             color,
         });
     }
-    if let Some((_, gap)) = drag {
-        let x = if gap <= start {
-            0.
-        } else if gap >= start + visible {
-            width - plus
-        } else {
-            (gap - start) as f32 * step
-        };
+    if let Some(drag) = drag {
+        let (band, marker) = drop_rects(drag.gap, &strip, width, scale);
+        let mut accent = DRAG_ACCENT;
+        accent[3] = DRAG_BAND_ALPHA;
         out.rectangles.push(Rectangle {
-            rect: [(x - scale).max(0.), 0., 2. * scale, TAB_HEIGHT * scale],
-            color: [0.42, 0.55, 0.95, 1.],
+            rect: band,
+            color: accent,
         });
+        out.rectangles.push(Rectangle {
+            rect: marker,
+            color: DRAG_ACCENT,
+        });
+        // Outline last so it reads above the band and the tab fills beneath it.
+        let ghost = ghost_rect(drag.pointer_x, width, scale, &strip);
+        let [x, y, w, h] = ghost;
+        let edge = (DRAG_OUTLINE * scale).max(1.);
+        for rect in [
+            [x, y, w, edge],
+            [x, y + h - edge, w, edge],
+            [x, y, edge, h],
+            [x + w - edge, y, edge, h],
+        ] {
+            out.rectangles.push(Rectangle {
+                rect,
+                color: DRAG_ACCENT,
+            });
+        }
     }
     out.text.push(Text {
         pos: [width - plus + 10. * scale, 5. * scale],
@@ -1604,10 +1671,64 @@ mod tests {
             false,
             800.,
             1.,
-            Some((0, 2)),
+            Some(DragView {
+                start: 0,
+                gap: 2,
+                pointer_x: 100.,
+            }),
         );
-        // Strip background, active-tab fill, and the insertion marker.
-        assert_eq!(scene.rectangles.len(), 3);
+        // Strip background, active-tab fill, destination band, insertion marker
+        // and the four edges of the dragged-tab outline.
+        assert_eq!(scene.rectangles.len(), 8);
+        assert!(scene
+            .rectangles
+            .iter()
+            .any(|r| r.color[3] == DRAG_BAND_ALPHA));
+    }
+    #[test]
+    fn dragged_tab_outline_follows_the_pointer_within_the_strip() {
+        let geometry = strip(800., 1., 16, 0, Some(0));
+        // Centred on the pointer, clamped to the strip at both edges.
+        assert_eq!(ghost_rect(200., 800., 1., &geometry), [106., 0., 188., 32.]);
+        assert_eq!(ghost_rect(-40., 800., 1., &geometry), [0., 0., 188., 32.]);
+        assert_eq!(ghost_rect(900., 800., 1., &geometry), [572., 0., 188., 32.]);
+        let two = strip(800., 1., 2, 0, Some(0));
+        let scene = tab_scene(
+            &["a".into(), "b".into()],
+            0,
+            &[],
+            false,
+            800.,
+            1.,
+            Some(DragView {
+                start: 0,
+                gap: 2,
+                pointer_x: 900.,
+            }),
+        );
+        let ghost = ghost_rect(900., 800., 1., &two);
+        assert!(scene
+            .rectangles
+            .iter()
+            .any(|r| r.rect == [ghost[0], 0., ghost[2], DRAG_OUTLINE]));
+    }
+    #[test]
+    fn destination_band_sits_where_the_tab_will_land() {
+        let geometry = strip(800., 1., 16, 0, Some(0));
+        let (band, marker) = drop_rects(2, &geometry, 800., 1.);
+        assert_eq!(band, [380., 0., 188., 32.]);
+        assert_eq!(marker, [379., 0., 2., 32.]);
+        // Far end: the slot is off-strip, so the band moves left of the marker.
+        let (band, marker) = drop_rects(16, &geometry, 800., 1.);
+        assert_eq!(band, [572., 0., 188., 32.]);
+        assert_eq!(marker, [759., 0., 2., 32.]);
+        // Near end: the band starts at the strip origin.
+        let (band, marker) = drop_rects(0, &geometry, 800., 1.);
+        assert_eq!(band, [0., 0., 188., 32.]);
+        assert_eq!(marker, [0., 0., 2., 32.]);
+        // No drag leaves the strip exactly as it was.
+        let idle = tab_scene(&["a".into()], 0, &[], false, 800., 1., None);
+        assert_eq!(idle.rectangles.len(), 2);
     }
     #[test]
     fn font_search_and_size_arrow_actions() {

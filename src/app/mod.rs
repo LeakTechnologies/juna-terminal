@@ -1133,10 +1133,11 @@ impl App {
                 self.active_tab,
                 Some(drag.start),
             );
-            (
-                drag.start,
-                ui::drop_gap(self.pointer_px[0], &strip, self.tabs.len()),
-            )
+            ui::DragView {
+                start: drag.start,
+                gap: ui::drop_gap(self.pointer_px[0], &strip, self.tabs.len()),
+                pointer_x: self.pointer_px[0],
+            }
         });
         renderer.overlay(&ui::tab_scene(
             &labels,

@@ -1,3 +1,24 @@
+## Dev24 tab drag feedback (2026-10-21)
+
+Requested drag feedback. While a tab is dragged its slot is outlined as four thin filled
+rectangles (the overlay renderer has no stroke primitive), centred on the pointer and clamped to
+the strip so it cannot cover the new-tab button. The destination is a translucent accent band
+plus the existing insertion marker, both derived from the same resolved drop gap, so the
+highlight cannot disagree with the reorder; at the far end of the strip the slot is off-strip and
+the band moves left of the marker. The accent is fixed rather than themed so the gesture reads
+the same in low-contrast light themes.
+
+`ui.rs` stays pure geometry and the renderer contract is unchanged. Detachment into a new window
+is designed in TAB_DRAG_DETACH_DESIGN.md and is not implemented here: it requires extracting
+window-local state into per-window workspaces, because a ConPTY session cannot move to another
+process without duplicating pipe handles and serialising parser state.
+
+Verified this session: `cargo check`, strict all-target Clippy and the standard lib suite (236
+passed, 2 ignored). New tests cover outline clamping at both strip edges, band/marker alignment
+at both ends of the strip, and unchanged rendering when no drag is active. The gesture itself is
+a pointer interaction, so visual acceptance needs recorded manual evidence; the unit tests
+establish geometry only.
+
 ## Dev23 taskbar class-icon repair (2026-10-21)
 
 Confirmed the running dev20 window exposed the dog through `WM_GETICON` (ICON_SMALL 32x32,

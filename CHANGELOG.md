@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1-dev24 — tab drag feedback
+
+- Show an outline of the tab being dragged, centred on the pointer and clamped to the strip.
+- Highlight the destination slot with a translucent accent band plus the insertion marker, both
+  derived from the same drop gap so the highlight matches where the tab will land.
+- Record drag-out detachment as an approved design; it needs the window-ownership work in
+  TAB_DRAG_DETACH_DESIGN.md and is not implemented in this release.
+
 ## 0.1.1-dev23 — taskbar icon repair
 
 - Register the approved icon with the window class (`GCLP_HICON`/`GCLP_HICONSM`) so Explorer
