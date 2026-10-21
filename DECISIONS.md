@@ -1645,3 +1645,15 @@ reported in the panel rather than failing a tab. An explicit `--shell`/`JUNA_SHE
 for that process, and changes apply to new tabs only. Portable export/import carries the token
 with a back-compatible default. No dependency, VT semantic, byte-transport or engine-ownership
 change was made. Drag feel still requires recorded visual acceptance.
+
+## 2026-10-21 — taskbar class-icon repair
+
+Root cause established by direct measurement on the running dev20 window: WM_GETICON returned
+valid 32x32/48x48 dog icons, SHGetFileInfo returned the same icon for the executable, and both
+a fresh executable path and a fresh AppUserModelID still produced a generic taskbar button.
+Explorer therefore was not reading the per-window icon. Setting GCLP_HICON/GCLP_HICONSM on the
+live window class changed the button to the dog immediately, and was reproduced with a valid
+AppUserModelID. Juna now registers the winit-owned handles with the class before showing the
+window and verifies both words. The AppUserModelID, relaunch properties, embedded resources and
+pinning identity are unchanged; no shortcut or new dependency is added. An older running
+instance keeps its previous class icon until restarted.

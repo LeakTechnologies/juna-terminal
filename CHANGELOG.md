@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1-dev23 — taskbar icon repair
+
+- Register the approved icon with the window class (`GCLP_HICON`/`GCLP_HICONSM`) so Explorer
+  shows the dog logo on the live taskbar button; winit's per-window icons were not enough.
+- Keep the existing AppUserModelID, relaunch properties and embedded executable resources.
+
 ## 0.1.1-dev22 — tab title portability repair
 
 - Parse the tab directory basename as text so a Windows drive root (`C:\`) is named the

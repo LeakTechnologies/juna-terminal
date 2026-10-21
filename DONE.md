@@ -1,3 +1,18 @@
+## Dev23 taskbar class-icon repair (2026-10-21)
+
+Confirmed the running dev20 window exposed the dog through `WM_GETICON` (ICON_SMALL 32x32,
+ICON_BIG 48x48) while its taskbar button showed a generic application icon. The executable's
+shell icon was also the dog, and a fresh executable path plus a fresh AppUserModelID still
+showed generic, ruling out icon-cache poisoning and a missing resource. Setting the window
+class icon on the live process changed the taskbar button to the dog immediately; the same was
+then reproduced with a valid AppUserModelID. Explorer uses the class icon for a live button.
+
+The app now registers the winit-owned small/large HICONs with `GCLP_HICON`/`GCLP_HICONSM`
+before showing the window and verifies both class words. No dependency, shortcut, file write,
+AUMID change or terminal-engine boundary changed. Verified this session: check, strict Clippy,
+full standard test suite, and taskbar captures at 66x72 for the generic and repaired states.
+The user's already-running dev20 instance keeps its old class icon until restarted.
+
 ## Dev22 tab title portability repair (2026-10-20)
 
 The hosted dev21 Rust workflow failed one lib test: Linux `Path::new("C:/").file_name()` is

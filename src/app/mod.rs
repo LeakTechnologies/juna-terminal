@@ -2513,7 +2513,10 @@ impl ApplicationHandler for App {
             {
                 use windows::Win32::{
                     Foundation::{HWND, LPARAM, WPARAM},
-                    UI::WindowsAndMessaging::{SendMessageW, WM_GETICON},
+                    UI::WindowsAndMessaging::{
+                        GetClassLongPtrW, SendMessageW, SetClassLongPtrW, GCLP_HICON, GCLP_HICONSM,
+                        WM_GETICON,
+                    },
                 };
                 use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
                 let RawWindowHandle::Win32(handle) =
@@ -2521,9 +2524,9 @@ impl ApplicationHandler for App {
                 else {
                     return Err("Expected a Windows window handle".into());
                 };
+                let hwnd = HWND(handle.hwnd.get() as *mut _);
                 // SAFETY: winit owns this live HWND on the current UI thread; WM_GETICON has no pointer arguments.
                 let (small, large) = unsafe {
-                    let hwnd = HWND(handle.hwnd.get() as *mut _);
                     (
                         SendMessageW(hwnd, WM_GETICON, Some(WPARAM(0)), Some(LPARAM(0))),
                         SendMessageW(hwnd, WM_GETICON, Some(WPARAM(1)), Some(LPARAM(0))),
@@ -2532,8 +2535,24 @@ impl ApplicationHandler for App {
                 if small.0 == 0 || large.0 == 0 {
                     return Err("Juna native window icon was not installed".into());
                 }
-                log::info!("Window icons verified: small and taskbar");
-                taskbar_properties(HWND(handle.hwnd.get() as *mut _))?;
+                // Explorer draws the live taskbar button from the window class icon,
+                // not the per-window WM_SETICON handles winit installs. The handles
+                // belong to the window and outlive this class registration.
+                // SAFETY: the class and HICONs are owned by winit for this window's
+                // lifetime on this UI thread; Set/GetClassLongPtr only swap a class word.
+                unsafe {
+                    SetClassLongPtrW(hwnd, GCLP_HICON, large.0);
+                    SetClassLongPtrW(hwnd, GCLP_HICONSM, small.0);
+                }
+                // SAFETY: reads back the class words set immediately above on the same live window.
+                if unsafe {
+                    GetClassLongPtrW(hwnd, GCLP_HICON) != large.0 as usize
+                        || GetClassLongPtrW(hwnd, GCLP_HICONSM) != small.0 as usize
+                } {
+                    return Err("Juna window class icon was not installed".into());
+                }
+                log::info!("Window and class icons verified: small and taskbar");
+                taskbar_properties(hwnd)?;
             }
             window.set_visible(true);
             window.set_ime_allowed(true);

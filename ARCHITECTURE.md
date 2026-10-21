@@ -935,7 +935,10 @@ The native application window remains titled Juna Terminal. OSC title sequences 
 to update engine metadata without changing the application window title.
 
 Application artwork is presentation infrastructure: GNU windres embeds assets/juna.ico into
-the Juna executable; winit loads that owned native icon for the window and taskbar.
+the Juna executable; winit loads that owned native icon for the window and taskbar. Explorer
+draws a live taskbar button from the window **class** icon, so the app also registers the same
+owned HICONs with `GCLP_HICON`/`GCLP_HICONSM` before the window is shown. Per-window
+`WM_SETICON` handles alone are not sufficient on Windows 11.
 
 
 Bundled font assets are renderer infrastructure, loaded into fontdb before system discovery.
