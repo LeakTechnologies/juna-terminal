@@ -1,5 +1,36 @@
 # Juna — Decision Register
 
+## 2026-10-21 — window ownership and tab tear-off
+
+Approved as part of TAB_DRAG_DETACH_DESIGN.md. Detaching a tab into a new window is a **value
+move inside one process**, not a new process and not a restarted shell: a ConPTY session cannot
+be moved to another process without duplicating pipe handles and serialising parser state.
+
+- Window-local state lives in `Workspace`; `App` keeps process-wide services. `App` mounts one
+  workspace in `App::ws` and holds the rest in `App::background`, swapping by `WindowId` on
+  `WindowEvent` and pumping each window in `about_to_wait`. The alternative — indexing every
+  field access through a window vector — would have re-derived state at ~700 call sites and made
+  "one owner" a convention rather than a property of the types.
+- A window's only tab is **refused** for detachment. An emptied source window would otherwise
+  have to be destroyed or silently repopulated with an unrequested shell.
+- The destination window is created before the tab record is removed, so a creation failure
+  cannot lose a session.
+- A detached window inherits the source window's physical inner size because its columns and
+  rows were measured in those pixels; interpreting them as logical units inflated the new window
+  at non-100% DPI (observed at 150%).
+- Font and scale changes rebuild every window's renderer. Theme changes after detachment apply
+  to the mounted window only; this is recorded as a gap rather than claimed as complete.
+- `WindowEvent::ScaleFactorChanged` remains unhandled (pre-existing); moving any window between
+  mixed-DPI monitors still needs its own cycle.
+- No new dependency, no async runtime, no second engine thread. `Gpu` remains per window; sharing
+  one `wgpu::Instance` is a deferred optimisation.
+- Protected-field reports resolve their stable tab ID across every workspace. Update
+  installation requires detached windows to close first, since they share the parent process
+  that the replacement helper must wait for. This does not claim to repair the separately
+  reported dev23 update failure.
+- Update startup acknowledgment belongs to the process, so presenting the first frame of a
+  detached window cannot attempt to recreate the original startup receipt.
+
 ## 2026-10-18 — approved input reliability repairs
 
 INPUT_RELIABILITY_DESIGN.md is approved. Use the actual Cargo build version in the native
@@ -1630,7 +1661,7 @@ provide QPC/frequency without another dependency; each call has its native-stora
 Only deltas are exported, with the documented one-tick cross-process ordering uncertainty.
 https://learn.microsoft.com/en-us/windows/win32/sysinfo/acquiring-high-resolution-time-stamps
 
-## 2026-10-20 � tab reordering, directory titles and shell allowlist
+## 2026-10-20 � tab reordering, directory titles and shell allowlist
 
 Implemented the approved TAB_REORDER_TITLE_SHELL_DESIGN. Left-drag reorders tab records with a
 shared insertion-marker geometry; the active record keeps its engine because the index is
@@ -1646,7 +1677,7 @@ for that process, and changes apply to new tabs only. Portable export/import car
 with a back-compatible default. No dependency, VT semantic, byte-transport or engine-ownership
 change was made. Drag feel still requires recorded visual acceptance.
 
-## 2026-10-21 � taskbar class-icon repair
+## 2026-10-21 � taskbar class-icon repair
 
 Root cause established by direct measurement on the running dev20 window: WM_GETICON returned
 valid 32x32/48x48 dog icons, SHGetFileInfo returned the same icon for the executable, and both

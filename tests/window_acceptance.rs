@@ -1,5 +1,57 @@
 #![cfg(windows)]
 #[test]
+#[ignore = "Windows desktop; two real sessions survive automatic detach and drain their tails"]
+fn detached_windows_drain_both_sessions_and_exit() {
+    use std::{
+        process::{Command, Stdio},
+        time::{Duration, Instant},
+    };
+    let root = std::env::temp_dir().join(juna::settings::new_id());
+    let mut child = Command::new(env!("CARGO_BIN_EXE_juna"))
+        .args(["--shell", "powershell.exe", "--", "-NoProfile", "-Command",
+            "Write-Output 'DETACH_START'; Start-Sleep -Seconds 5; Write-Output 'DETACH_TAIL'; exit 0"])
+        .env("LOCALAPPDATA", &root)
+        .env("RUST_LOG", "info")
+        .env("JUNA_STARTUP_TABS", "2")
+        .env("JUNA_ACCEPT_DETACH", "1")
+        .env("JUNA_ACCEPT_MARKER", "DETACH_TAIL")
+        .env_remove("JUNA_UPDATE_TOKEN")
+        .stdout(Stdio::null()).stderr(Stdio::null())
+        .spawn().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(60);
+    loop {
+        if let Some(status) = child.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        if Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("Detached sessions did not exit within the acceptance deadline");
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    let log = read_log(&root);
+    assert!(
+        log.contains("Acceptance detach: windows=2; source tabs=1"),
+        "{log}"
+    );
+    assert_eq!(
+        log.matches("Acceptance marker present=true").count(),
+        2,
+        "{log}"
+    );
+    assert_eq!(
+        log.matches("Window closing: final terminal session completed")
+            .count(),
+        2,
+        "{log}"
+    );
+    assert!(!log.contains("Application panic"), "{log}");
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 #[ignore = "Windows desktop/network; authenticated CLI update handoff preserves the host and saved channel"]
 fn command_line_update_handoff_preserves_the_host_and_preferences() {
     use std::{

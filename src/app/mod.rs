@@ -17,6 +17,7 @@ mod tabs;
 #[cfg(windows)]
 mod tools;
 pub mod ui;
+mod workspace;
 use crate::{
     gpu::{FrameSkip, Gpu},
     session::{Dimensions, SessionSpec},
@@ -34,6 +35,7 @@ use winit::{
     keyboard::{Key, ModifiersState, NamedKey},
     window::{Window, WindowId},
 };
+use workspace::{TabDrag, Workspace};
 const FRAME: Duration = Duration::from_millis(16);
 const PAD: f32 = 8.;
 const CELL_W: f32 = 10.;
@@ -78,58 +80,29 @@ fn taskbar_properties(hwnd: windows::Win32::Foundation::HWND) -> Result<(), Stri
     log::info!("Taskbar relaunch icon configured");
     Ok(())
 }
-/// In-progress tab drag. Index and window origin are captured at press so the
-/// permutation is resolved against a stable order; only the geometry scrolls.
-#[derive(Clone, Copy)]
-struct TabDrag {
-    from: usize,
-    press_x: f32,
-    /// Strip window origin, advanced when the pointer reaches a strip edge.
-    start: usize,
-    moved: bool,
-}
+/// Process-wide services plus every window this process owns. Window-local
+/// state lives in `Workspace`; `ws` is the mounted window, and `windows` holds
+/// the others so a detached tab keeps its engine without a restart.
 pub struct App {
-    window: Option<Arc<Window>>,
-    gpu: Option<Gpu>,
-    renderer: Option<crate::render::Renderer>,
-    terminal: TerminalState,
-    runtime: Option<Runtime>,
+    ws: Workspace,
+    /// Windows this process owns that are not mounted in `ws`. Mounting swaps a
+    /// workspace into `ws`, so every method keeps operating on exactly one window
+    /// while a detached tab keeps its engine alive in the background.
+    background: Vec<Workspace>,
     modifiers: ModifiersState,
-    dirty: bool,
-    focused: bool,
-    minimized: bool,
-    ime: bool,
-    scale: f32,
-    offset: usize,
-    selection: Option<((usize, u16), (usize, u16))>,
-    selecting: bool,
-    mouse_button: Option<u8>,
-    frames: u64,
-    pointer: (u16, u16),
-    cols: u16,
-    rows: u16,
-    last_report: Instant,
-    failure: Option<String>,
-    last_sync: Instant,
-    left_inset: f32,
     settings: crate::settings::Settings,
     themes: Vec<crate::theme::Theme>,
     store: crate::settings::Store,
     ui: Option<ui::Ui>,
-    pointer_px: [f32; 2],
-    ui_mouse_latch: Vec<MouseButton>,
     settings_before: Option<crate::settings::Settings>,
     settings_file_task: Option<settings_files::ResultChannel>,
     pending_import: Option<crate::settings_transfer::ImportPlan>,
-    zoom_wheel: f32,
-    tabs: Vec<tabs::Tab>,
-    active_tab: usize,
     next_tab_id: u64,
-    tab_drag: Option<TabDrag>,
     shell_spec: Option<SessionSpec>,
     shell_explicit: bool,
-    active_closing: bool,
-    closing_all: bool,
+    /// Set by the tab strip when a release means detach; the event loop creates
+    /// the window, so the gesture code never touches it.
+    pending_detach: Option<usize>,
     theme_worker: Option<crate::theme_library::Worker>,
     theme_sources: std::collections::BTreeMap<String, std::path::PathBuf>,
     theme_generation: u64,
@@ -151,6 +124,7 @@ pub struct App {
     command_update_pending: bool,
     command_update_channel: Option<String>,
     last_update_receipt: Instant,
+    startup_acknowledged: bool,
 }
 impl App {
     fn accept_downloaded_update(&mut self, stage: crate::updates::Staged) {
@@ -161,7 +135,7 @@ impl App {
         }
     }
     fn command_update(&mut self, channel: String) {
-        if self.update_worker.is_some() || self.closing_all {
+        if self.update_worker.is_some() || self.ws.closing_all {
             return;
         }
         log::info!("Authenticated command-line update request accepted; channel={channel}");
@@ -189,7 +163,7 @@ impl App {
         task: crate::updates::Task,
         message: &str,
     ) -> Result<(), String> {
-        if self.update_worker.is_some() || self.closing_all {
+        if self.update_worker.is_some() || self.ws.closing_all {
             return Err("Wait for the current operation or cancel it first".into());
         }
         self.update_worker = Some(crate::updates::Worker::start(task)?);
@@ -226,7 +200,7 @@ impl App {
                 ui.summary.push(line);
             }
             ui.message = "Manual checks; verified downloads".into();
-            self.dirty = true;
+            self.ws.dirty = true;
         }
     }
     fn poll_updates(&mut self) {
@@ -327,12 +301,12 @@ impl App {
         }
     }
     fn poll_git_status(&mut self) {
-        if self.tabs.is_empty() {
+        if self.ws.tabs.is_empty() {
             return;
         }
-        let (revision, cwd) = self.terminal.working_directory();
-        let active = self.active_tab;
-        let tab = &mut self.tabs[active];
+        let (revision, cwd) = self.ws.terminal.working_directory();
+        let active = self.ws.active_tab;
+        let tab = &mut self.ws.tabs[active];
         let old = tab.git.generation;
         tab.git.sync(revision, cwd);
         let mut changed = old != tab.git.generation;
@@ -344,13 +318,13 @@ impl App {
             }
         }
         if changed {
-            self.dirty = true;
+            self.ws.dirty = true;
         }
         let Some(worker) = self.git_worker.as_ref() else {
             return;
         };
         while let Ok(result) = worker.results.try_recv() {
-            if let Some(tab) = self.tabs.iter_mut().find(|t| t.id == result.tab) {
+            if let Some(tab) = self.ws.tabs.iter_mut().find(|t| t.id == result.tab) {
                 if let Some(saved) = tab.saved.as_ref() {
                     let (revision, cwd) = saved.terminal.working_directory();
                     tab.git.sync(revision, cwd);
@@ -365,18 +339,18 @@ impl App {
                     }
                     tab.git.report = Some(result.report);
                     tab.git.pending = false;
-                    self.dirty = true;
+                    self.ws.dirty = true;
                 }
             }
         }
         if !self.settings.show_git_status
-            || self.terminal.alternate_active()
-            || !self.focused
-            || self.closing_all
+            || self.ws.terminal.alternate_active()
+            || !self.ws.focused
+            || self.ws.closing_all
         {
             return;
         }
-        let tab = &mut self.tabs[self.active_tab];
+        let tab = &mut self.ws.tabs[self.ws.active_tab];
         if tab.git.pending
             && tab
                 .git
@@ -415,57 +389,21 @@ impl App {
         for error in errors {
             log::warn!("Settings/theme: {error}");
         }
-        Self {
-            window: None,
-            gpu: None,
-            renderer: None,
-            terminal: TerminalState::new(cols, rows),
-            runtime: None,
+        let mut app = Self {
+            ws: Workspace::new(cols, rows),
+            background: Vec::new(),
             modifiers: ModifiersState::empty(),
-            dirty: true,
-            focused: true,
-            minimized: false,
-            ime: false,
-            scale: 1.,
-            offset: 0,
-            selection: None,
-            selecting: false,
-            mouse_button: None,
-            frames: 0,
-            pointer: (0, 0),
-            cols,
-            rows,
-            last_report: Instant::now(),
-            failure: None,
-            last_sync: Instant::now(),
-            left_inset: 0.,
             settings,
             themes,
             store,
             ui: None,
-            pointer_px: [0., 0.],
-            ui_mouse_latch: Vec::new(),
             settings_before: None,
             settings_file_task: None,
             pending_import: None,
-            zoom_wheel: 0.,
-            tabs: vec![tabs::Tab {
-                id: 1,
-                label: "Terminal".into(),
-                pinned: false,
-                shell: String::new(),
-                saved: None,
-                git: git_status::View::new(None),
-                attention: None,
-                privacy: Default::default(),
-            }],
-            active_tab: 0,
             next_tab_id: 2,
-            tab_drag: None,
             shell_spec: None,
             shell_explicit: false,
-            active_closing: false,
-            closing_all: false,
+            pending_detach: None,
             theme_worker: None,
             theme_sources: std::collections::BTreeMap::new(),
             theme_generation: 0,
@@ -487,46 +425,148 @@ impl App {
             command_update_pending: false,
             command_update_channel: None,
             last_update_receipt: Instant::now(),
-        }
+            startup_acknowledged: false,
+        };
+        app.ws.seed_tab(tabs::Tab {
+            id: 1,
+            label: "Terminal".into(),
+            pinned: false,
+            shell: String::new(),
+            saved: None,
+            git: git_status::View::new(None),
+            attention: None,
+            privacy: Default::default(),
+        });
+        app
     }
     fn take_session(&mut self) -> tabs::SavedSession {
         tabs::SavedSession {
-            terminal: std::mem::replace(&mut self.terminal, TerminalState::new(1, 1)),
-            runtime: self.runtime.take(),
-            offset: std::mem::take(&mut self.offset),
-            selection: self.selection.take(),
-            failure: self.failure.take(),
-            closing: self.active_closing,
+            terminal: std::mem::replace(&mut self.ws.terminal, TerminalState::new(1, 1)),
+            runtime: self.ws.runtime.take(),
+            offset: std::mem::take(&mut self.ws.offset),
+            selection: self.ws.selection.take(),
+            failure: self.ws.failure.take(),
+            closing: self.ws.active_closing,
         }
     }
     fn restore_session(&mut self, index: usize) {
         self.privacy_reveal.hide();
         self.privacy_dirty = true;
-        let state = self.tabs[index]
+        let state = self.ws.tabs[index]
             .saved
             .take()
             .expect("inactive tab owns state");
-        self.terminal = state.terminal;
-        self.runtime = state.runtime;
-        self.offset = state.offset;
-        self.selection = state.selection;
-        self.failure = state.failure;
-        self.active_closing = state.closing;
-        self.active_tab = index;
-        self.tabs[index].attention = None;
-        let (revision, cwd) = self.terminal.working_directory();
-        self.tabs[index].git.sync(revision, cwd);
-        self.tabs[index].git.last_check = None;
-        self.selecting = false;
-        self.mouse_button = None;
-        self.dirty = true;
-        if let Some(window) = self.window.as_ref() {
+        self.ws.terminal = state.terminal;
+        self.ws.runtime = state.runtime;
+        self.ws.offset = state.offset;
+        self.ws.selection = state.selection;
+        self.ws.failure = state.failure;
+        self.ws.active_closing = state.closing;
+        self.ws.active_tab = index;
+        self.ws.tabs[index].attention = None;
+        let (revision, cwd) = self.ws.terminal.working_directory();
+        self.ws.tabs[index].git.sync(revision, cwd);
+        self.ws.tabs[index].git.last_check = None;
+        self.ws.selecting = false;
+        self.ws.mouse_button = None;
+        self.ws.dirty = true;
+        if let Some(window) = self.ws.window.as_ref() {
             let size = window.inner_size();
             self.fit(size.width, size.height);
         }
     }
+    /// Swap the workspace that owns `id` into `ws`. Returns false for a window
+    /// this process does not own, so a stray event can never mutate the wrong
+    /// workspace.
+    fn mount(&mut self, id: WindowId) -> bool {
+        if self.ws.window.as_ref().is_some_and(|w| w.id() == id) {
+            return true;
+        }
+        let Some(index) = self
+            .background
+            .iter()
+            .position(|workspace| workspace.window.as_ref().is_some_and(|w| w.id() == id))
+        else {
+            log::warn!("Event for a window this process does not own");
+            return false;
+        };
+        std::mem::swap(&mut self.ws, &mut self.background[index]);
+        true
+    }
+    /// Move a tab record into a window of its own. The session is a value move, so
+    /// the shell, scrollback, working directory and view state survive without a
+    /// restart. The destination window is created first: if that fails the tab is
+    /// never removed, so a failure cannot lose a session.
+    fn detach_tab(&mut self, event_loop: &ActiveEventLoop, index: usize) {
+        if !ui::detach_allowed(self.ws.tabs.len()) || index >= self.ws.tabs.len() {
+            return;
+        }
+        let (cols, rows) = (self.ws.cols, self.ws.rows);
+        let physical = self.ws.window.as_ref().map(|window| window.inner_size());
+        let mut detached = match self.create_window(event_loop, cols, rows, physical) {
+            Ok(workspace) => workspace,
+            Err(error) => {
+                log::error!("Detach window: {error}");
+                clipboard::error_dialog("Could not open a detached window. Your tab remains in its original window and its session is still running.");
+                return;
+            }
+        };
+        let id = self.ws.tabs[index].id;
+        let Some(mut tab) = self.split_tab(index) else {
+            // Nothing moved, so the new window must not survive.
+            detached.window.take();
+            return;
+        };
+        if let Some(state) = tab.saved.take() {
+            detached.terminal = state.terminal;
+            detached.runtime = state.runtime;
+            detached.offset = state.offset;
+            detached.selection = state.selection;
+            detached.failure = state.failure;
+            detached.active_closing = state.closing;
+        }
+        detached.seed_tab(tab);
+        let theme = self.active_theme();
+        if let Some(renderer) = detached.renderer.as_mut() {
+            if let Err(error) = renderer.apply_theme(&theme, self.settings.minimum_contrast) {
+                log::error!("Detached renderer: {error}");
+            }
+        }
+        if let Some(window) = detached.window.as_ref() {
+            let size = window.inner_size();
+            // Fit uses the mounted workspace, so mount the new one for the call.
+            std::mem::swap(&mut self.ws, &mut detached);
+            self.fit(size.width, size.height);
+            std::mem::swap(&mut self.ws, &mut detached);
+        }
+        self.background.push(detached);
+        self.ws.dirty = true;
+        log::info!("Detached tab {id}; windows={}", self.background.len() + 1);
+    }
+    /// Remove one tab record for another window and leave the source window with a
+    /// valid active slot. Returns the record with a completed session attached, so
+    /// the caller can hand it to a new workspace without touching the engine.
+    fn split_tab(&mut self, index: usize) -> Option<tabs::Tab> {
+        if !ui::detach_allowed(self.ws.tabs.len()) || index >= self.ws.tabs.len() {
+            return None;
+        }
+        let mut tab = self.ws.tabs.remove(index);
+        if index == self.ws.active_tab {
+            tab.saved = Some(self.take_session());
+        }
+        if index < self.ws.active_tab {
+            self.ws.active_tab -= 1;
+        } else if index == self.ws.active_tab {
+            let next = self.ws.active_tab.min(self.ws.tabs.len() - 1);
+            self.restore_session(next);
+        }
+        log::info!("Split tab {}; remaining={}", tab.id, self.ws.tabs.len());
+        self.ws.dirty = true;
+        Some(tab)
+    }
     fn window_width(&self) -> f32 {
-        self.window
+        self.ws
+            .window
             .as_ref()
             .map(|window| window.inner_size().width as f32)
             .unwrap_or(1024.)
@@ -534,51 +574,56 @@ impl App {
     /// Reorder tab records only. The active record keeps its engine/session
     /// fields, so the `saved: None` invariant follows the tab, not the index.
     fn move_tab(&mut self, from: usize, gap: usize) {
-        let Some(to) = tabs::reorder_target(from, gap, self.tabs.len()) else {
+        let Some(to) = tabs::reorder_target(from, gap, self.ws.tabs.len()) else {
             return;
         };
-        let active_id = self.tabs[self.active_tab].id;
-        let tab = self.tabs.remove(from);
-        self.tabs.insert(to, tab);
-        self.active_tab = self
+        let active_id = self.ws.tabs[self.ws.active_tab].id;
+        let tab = self.ws.tabs.remove(from);
+        self.ws.tabs.insert(to, tab);
+        self.ws.active_tab = self
+            .ws
             .tabs
             .iter()
             .position(|tab| tab.id == active_id)
             .unwrap_or(to);
-        log::info!("Moved tab {active_id}; index={}; count={}", self.active_tab, self.tabs.len());
-        self.dirty = true;
+        log::info!(
+            "Moved tab {active_id}; index={}; count={}",
+            self.ws.active_tab,
+            self.ws.tabs.len()
+        );
+        self.ws.dirty = true;
     }
     fn switch_tab(&mut self, index: usize) {
-        if index == self.active_tab || index >= self.tabs.len() {
+        if index == self.ws.active_tab || index >= self.ws.tabs.len() {
             return;
         }
         self.close_ui();
-        if let Some(button) = self.mouse_button.take() {
-            let modes = self.terminal.input_modes();
+        if let Some(button) = self.ws.mouse_button.take() {
+            let modes = self.ws.terminal.input_modes();
             self.send(&input::mouse(
                 button,
-                self.pointer.0,
-                self.pointer.1,
+                self.ws.pointer.0,
+                self.ws.pointer.1,
                 true,
                 self.modifiers,
                 modes.mouse_sgr,
             ));
         }
-        if self.focused && self.terminal.input_modes().focus_events {
+        if self.ws.focused && self.ws.terminal.input_modes().focus_events {
             self.send(b"\x1b[O");
         }
         let state = self.take_session();
-        self.tabs[self.active_tab].saved = Some(state);
+        self.ws.tabs[self.ws.active_tab].saved = Some(state);
         self.restore_session(index);
-        if self.focused && self.terminal.input_modes().focus_events {
+        if self.ws.focused && self.ws.terminal.input_modes().focus_events {
             self.send(b"\x1b[I");
         }
     }
     fn add_tab(&mut self, spec: SessionSpec) -> Result<(), String> {
-        if self.closing_all {
+        if self.ws.closing_all {
             return Err("The window is closing".into());
         }
-        if self.tabs.len() >= 16 {
+        if self.ws.tabs.len() >= 16 {
             return Err("Close a tab before opening more (limit 16)".into());
         }
         let spec = self.privacy_environment(spec, self.next_tab_id);
@@ -586,17 +631,17 @@ impl App {
         let runtime = Runtime::spawn(
             &spec,
             Dimensions {
-                cols: self.cols,
-                rows: self.rows,
+                cols: self.ws.cols,
+                rows: self.ws.rows,
             },
         )
         .map_err(|e| e.to_string())?;
         self.close_ui();
         let state = self.take_session();
-        self.tabs[self.active_tab].saved = Some(state);
+        self.ws.tabs[self.ws.active_tab].saved = Some(state);
         let id = self.next_tab_id;
         self.next_tab_id += 1;
-        self.tabs.push(tabs::Tab {
+        self.ws.tabs.push(tabs::Tab {
             id,
             label: tabs::label(&spec),
             pinned: false,
@@ -606,15 +651,15 @@ impl App {
             attention: None,
             privacy: Default::default(),
         });
-        self.active_tab = self.tabs.len() - 1;
-        self.terminal = TerminalState::new(self.cols, self.rows);
-        self.runtime = Some(runtime);
-        self.active_closing = false;
-        self.selecting = false;
-        self.mouse_button = None;
-        self.dirty = true;
-        log::info!("Opened tab {id}; count={}", self.tabs.len());
-        if let Some(window) = self.window.as_ref() {
+        self.ws.active_tab = self.ws.tabs.len() - 1;
+        self.ws.terminal = TerminalState::new(self.ws.cols, self.ws.rows);
+        self.ws.runtime = Some(runtime);
+        self.ws.active_closing = false;
+        self.ws.selecting = false;
+        self.ws.mouse_button = None;
+        self.ws.dirty = true;
+        log::info!("Opened tab {id}; count={}", self.ws.tabs.len());
+        if let Some(window) = self.ws.window.as_ref() {
             let size = window.inner_size();
             self.fit(size.width, size.height);
         }
@@ -624,29 +669,29 @@ impl App {
         self.privacy_reveal.hide();
         self.privacy_dirty = true;
         if let Some(broker) = self.privacy_broker.as_ref() {
-            broker.unregister(self.tabs[self.active_tab].id);
+            broker.unregister(self.ws.tabs[self.ws.active_tab].id);
         }
         self.close_ui();
-        self.active_closing = true;
-        if let Some(runtime) = self.runtime.as_mut() {
+        self.ws.active_closing = true;
+        if let Some(runtime) = self.ws.runtime.as_mut() {
             runtime.request_close();
         }
-        self.dirty = true;
+        self.ws.dirty = true;
     }
     fn close_all_tabs(&mut self) {
         self.privacy_reveal.hide();
         self.privacy_dirty = true;
         if let Some(broker) = self.privacy_broker.as_ref() {
-            for tab in &self.tabs {
+            for tab in &self.ws.tabs {
                 broker.unregister(tab.id);
             }
         }
-        self.closing_all = true;
-        self.active_closing = true;
-        if let Some(runtime) = self.runtime.as_mut() {
+        self.ws.closing_all = true;
+        self.ws.active_closing = true;
+        if let Some(runtime) = self.ws.runtime.as_mut() {
             runtime.request_close();
         }
-        for tab in &mut self.tabs {
+        for tab in &mut self.ws.tabs {
             if let Some(state) = tab.saved.as_mut() {
                 state.closing = true;
                 if let Some(r) = state.runtime.as_mut() {
@@ -657,7 +702,7 @@ impl App {
     }
     fn drain_inactive(&mut self) {
         let mut titles_changed = false;
-        for tab in &mut self.tabs {
+        for tab in &mut self.ws.tabs {
             let Some(state) = tab.saved.as_mut() else {
                 continue;
             };
@@ -699,7 +744,7 @@ impl App {
             }
         }
         if titles_changed {
-            self.dirty = true;
+            self.ws.dirty = true;
         }
     }
     fn tab_controls(&mut self, event: &WindowEvent) -> bool {
@@ -711,20 +756,28 @@ impl App {
             ..
         } = event
         {
-            if let Some(drag) = self.tab_drag.take() {
-                self.ui_mouse_latch.retain(|button| *button != MouseButton::Left);
+            if let Some(drag) = self.ws.tab_drag.take() {
+                self.ws
+                    .ui_mouse_latch
+                    .retain(|button| *button != MouseButton::Left);
                 if drag.moved {
-                    let strip = ui::strip(
-                        self.window_width(),
-                        self.scale,
-                        self.tabs.len(),
-                        self.active_tab,
-                        Some(drag.start),
-                    );
-                    let gap = ui::drop_gap(self.pointer_px[0], &strip, self.tabs.len());
-                    self.move_tab(drag.from, gap);
+                    if ui::detach_allowed(self.ws.tabs.len())
+                        && ui::detach_zone(self.ws.pointer_px[1], self.ws.scale)
+                    {
+                        self.pending_detach = Some(drag.from);
+                    } else {
+                        let strip = ui::strip(
+                            self.window_width(),
+                            self.ws.scale,
+                            self.ws.tabs.len(),
+                            self.ws.active_tab,
+                            Some(drag.start),
+                        );
+                        let gap = ui::drop_gap(self.ws.pointer_px[0], &strip, self.ws.tabs.len());
+                        self.move_tab(drag.from, gap);
+                    }
                 }
-                self.dirty = true;
+                self.ws.dirty = true;
                 return true;
             }
         }
@@ -733,10 +786,10 @@ impl App {
         }
         if let WindowEvent::KeyboardInput { event, .. } = event {
             if event.state == ElementState::Pressed
-                && !self.ime
+                && !self.ws.ime
                 && new_window::shortcut(&event.logical_key, self.modifiers)
             {
-                if !event.repeat && !self.closing_all {
+                if !event.repeat && !self.ws.closing_all {
                     let result = (|| -> Result<(), std::io::Error> {
                         let shell = self
                             .shell_spec
@@ -748,7 +801,7 @@ impl App {
                             .clone()
                             .map(Ok)
                             .unwrap_or_else(std::env::current_dir)?;
-                        let cwd = self.terminal.working_directory().1;
+                        let cwd = self.ws.terminal.working_directory().1;
                         new_window::command(&executable, shell, cwd, &launch)?.spawn()?;
                         Ok(())
                     })();
@@ -762,7 +815,7 @@ impl App {
                 return true;
             }
             if event.state == ElementState::Pressed
-                && !self.ime
+                && !self.ws.ime
                 && self.modifiers.control_key()
                 && !self.modifiers.alt_key()
             {
@@ -777,12 +830,12 @@ impl App {
                     {
                         Some(ui::Action::CloseTab)
                     }
-                    Key::Named(NamedKey::Tab) if !self.tabs.is_empty() => {
-                        let n = self.tabs.len();
+                    Key::Named(NamedKey::Tab) if !self.ws.tabs.is_empty() => {
+                        let n = self.ws.tabs.len();
                         let next = if self.modifiers.shift_key() {
-                            (self.active_tab + n - 1) % n
+                            (self.ws.active_tab + n - 1) % n
                         } else {
-                            (self.active_tab + 1) % n
+                            (self.ws.active_tab + 1) % n
                         };
                         self.switch_tab(next);
                         return true;
@@ -796,33 +849,37 @@ impl App {
             }
         }
         if let WindowEvent::CursorMoved { position, .. } = event {
-            self.pointer_px = [position.x as f32, position.y as f32];
+            self.ws.pointer_px = [position.x as f32, position.y as f32];
         }
         if matches!(event, WindowEvent::CursorMoved { .. }) {
             let width = self.window_width();
-            if let Some(drag) = self.tab_drag.as_mut() {
-                if !drag.moved
-                    && (self.pointer_px[0] - drag.press_x).abs()
-                        > ui::TAB_DRAG_THRESHOLD * self.scale
-                {
+            if let Some(drag) = self.ws.tab_drag.as_mut() {
+                let travel_x = (self.ws.pointer_px[0] - drag.press_x).abs();
+                let travel_y = (self.ws.pointer_px[1] - drag.press_y).abs();
+                if !drag.moved && travel_x.max(travel_y) > ui::TAB_DRAG_THRESHOLD * self.ws.scale {
                     drag.moved = true;
                 }
                 if drag.moved {
                     let strip = ui::strip(
                         width,
-                        self.scale,
-                        self.tabs.len(),
-                        self.active_tab,
+                        self.ws.scale,
+                        self.ws.tabs.len(),
+                        self.ws.active_tab,
                         Some(drag.start),
                     );
-                    drag.start =
-                        ui::drag_start(self.pointer_px[0], width, self.scale, &strip, self.tabs.len());
-                    self.dirty = true;
+                    drag.start = ui::drag_start(
+                        self.ws.pointer_px[0],
+                        width,
+                        self.ws.scale,
+                        &strip,
+                        self.ws.tabs.len(),
+                    );
+                    self.ws.dirty = true;
                 }
                 return true;
             }
         }
-        if self.pointer_px[1] < ui::TAB_HEIGHT * self.scale {
+        if self.ws.pointer_px[1] < ui::TAB_HEIGHT * self.ws.scale {
             if let WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button: MouseButton::Middle,
@@ -830,32 +887,33 @@ impl App {
             } = event
             {
                 let width = self
+                    .ws
                     .window
                     .as_ref()
                     .map(|w| w.inner_size().width as f32)
                     .unwrap_or(1024.);
                 if let Some(ui::TabHit::Select(index)) = ui::tab_hit(
-                    self.pointer_px,
+                    self.ws.pointer_px,
                     width,
-                    self.scale,
-                    self.tabs.len(),
-                    self.active_tab,
+                    self.ws.scale,
+                    self.ws.tabs.len(),
+                    self.ws.active_tab,
                 ) {
-                    let id = self.tabs[index].id;
-                    let label = self.tabs[index].label.clone();
-                    if let Some(button) = self.mouse_button.take() {
-                        let modes = self.terminal.input_modes();
+                    let id = self.ws.tabs[index].id;
+                    let label = self.ws.tabs[index].label.clone();
+                    if let Some(button) = self.ws.mouse_button.take() {
+                        let modes = self.ws.terminal.input_modes();
                         self.send(&input::mouse(
                             button,
-                            self.pointer.0,
-                            self.pointer.1,
+                            self.ws.pointer.0,
+                            self.ws.pointer.1,
                             true,
                             self.modifiers,
                             modes.mouse_sgr,
                         ));
                     }
-                    self.selecting = false;
-                    self.ui_mouse_latch.push(MouseButton::Middle);
+                    self.ws.selecting = false;
+                    self.ws.ui_mouse_latch.push(MouseButton::Middle);
                     self.open_ui(ui::Kind::ConfirmClose);
                     if let Some(panel) = self.ui.as_mut() {
                         panel.target_tab = Some(id);
@@ -881,34 +939,36 @@ impl App {
                 ..
             } = event
             {
-                if !self.ui_mouse_latch.contains(&MouseButton::Left) {
-                    self.ui_mouse_latch.push(MouseButton::Left);
+                if !self.ws.ui_mouse_latch.contains(&MouseButton::Left) {
+                    self.ws.ui_mouse_latch.push(MouseButton::Left);
                 }
                 let width = self
+                    .ws
                     .window
                     .as_ref()
                     .map(|w| w.inner_size().width as f32)
                     .unwrap_or(1024.);
                 match ui::tab_hit(
-                    self.pointer_px,
+                    self.ws.pointer_px,
                     width,
-                    self.scale,
-                    self.tabs.len(),
-                    self.active_tab,
+                    self.ws.scale,
+                    self.ws.tabs.len(),
+                    self.ws.active_tab,
                 ) {
                     Some(ui::TabHit::New) => self.ui_action(ui::Action::NewTab),
                     Some(ui::TabHit::Select(index)) => {
                         self.switch_tab(index);
                         let strip = ui::strip(
                             width,
-                            self.scale,
-                            self.tabs.len(),
-                            self.active_tab,
+                            self.ws.scale,
+                            self.ws.tabs.len(),
+                            self.ws.active_tab,
                             None,
                         );
-                        self.tab_drag = Some(TabDrag {
+                        self.ws.tab_drag = Some(TabDrag {
                             from: index,
-                            press_x: self.pointer_px[0],
+                            press_x: self.ws.pointer_px[0],
+                            press_y: self.ws.pointer_px[1],
                             start: strip.start,
                             moved: false,
                         });
@@ -925,18 +985,18 @@ impl App {
     }
     fn fail(&mut self, message: String) {
         log::error!("{message}");
-        self.failure = Some(message);
-        if let Some(r) = self.runtime.as_mut() {
+        self.ws.failure = Some(message);
+        if let Some(r) = self.ws.runtime.as_mut() {
             r.request_close();
         }
     }
     fn send(&mut self, bytes: &[u8]) {
-        if bytes.is_empty() || self.active_closing {
+        if bytes.is_empty() || self.ws.active_closing {
             return;
         }
-        if let Some(r) = self.runtime.as_mut() {
+        if let Some(r) = self.ws.runtime.as_mut() {
             if r.is_closing() {
-                self.active_closing = true;
+                self.ws.active_closing = true;
                 return;
             }
             if let Err(e) = r.write(bytes) {
@@ -945,14 +1005,14 @@ impl App {
                 log::info!(
                     "Control input queued: key={}; tab={}; alternate={}",
                     if bytes[0] == 3 { "Ctrl+C" } else { "Ctrl+Z" },
-                    self.active_tab,
-                    self.terminal.alternate_active()
+                    self.ws.active_tab,
+                    self.ws.terminal.alternate_active()
                 );
             }
         }
     }
     fn drain(&mut self) {
-        let Some(runtime) = self.runtime.as_ref() else {
+        let Some(runtime) = self.ws.runtime.as_ref() else {
             return;
         };
         let batch = runtime.stream.take_up_to(64 * 1024);
@@ -960,45 +1020,49 @@ impl App {
             return;
         }
         self.git_activity = Instant::now();
-        let history = self.terminal.scrollback_len();
-        let dropped = self.terminal.scrollback_dropped();
-        let alternate = self.terminal.alternate_active();
-        self.terminal.advance(&batch);
-        if alternate != self.terminal.alternate_active() {
-            if let Some(window) = self.window.as_ref() {
+        let history = self.ws.terminal.scrollback_len();
+        let dropped = self.ws.terminal.scrollback_dropped();
+        let alternate = self.ws.terminal.alternate_active();
+        self.ws.terminal.advance(&batch);
+        if alternate != self.ws.terminal.alternate_active() {
+            if let Some(window) = self.ws.window.as_ref() {
                 let size = window.inner_size();
                 self.fit(size.width, size.height);
             }
         }
-        if self.offset > 0 {
-            self.offset = (self.offset
-                + self.terminal.scrollback_len().saturating_sub(history)
-                + self.terminal.scrollback_dropped().saturating_sub(dropped) as usize)
-                .min(self.terminal.scrollback_len());
+        if self.ws.offset > 0 {
+            self.ws.offset = (self.ws.offset
+                + self.ws.terminal.scrollback_len().saturating_sub(history)
+                + self
+                    .ws
+                    .terminal
+                    .scrollback_dropped()
+                    .saturating_sub(dropped) as usize)
+                .min(self.ws.terminal.scrollback_len());
         }
-        if self.terminal.scrollback_dropped() != dropped {
-            self.selection = None;
+        if self.ws.terminal.scrollback_dropped() != dropped {
+            self.ws.selection = None;
         }
-        let replies = self.terminal.take_responses();
+        let replies = self.ws.terminal.take_responses();
         self.send(&replies);
-        self.dirty = true;
+        self.ws.dirty = true;
         // Shell OSC titles remain engine metadata; the application title stays fixed.
     }
     fn fit(&mut self, width: u32, height: u32) {
-        self.minimized = width == 0 || height == 0;
-        if self.minimized {
+        self.ws.minimized = width == 0 || height == 0;
+        if self.ws.minimized {
             return;
         }
         let inset = gutter::width(
             width as f32,
-            self.scale,
-            self.settings.show_line_numbers && !self.terminal.alternate_active(),
+            self.ws.scale,
+            self.settings.show_line_numbers && !self.ws.terminal.alternate_active(),
         );
-        let cols =
-            (((width as f32 - 2. * PAD * self.scale - inset) / (CELL_W * self.scale)).max(1.)
-                as u16)
-                .clamp(1, MAX_COLS);
-        let status_height = if self.settings.show_git_status && !self.terminal.alternate_active() {
+        let cols = (((width as f32 - 2. * PAD * self.ws.scale - inset) / (CELL_W * self.ws.scale))
+            .max(1.) as u16)
+            .clamp(1, MAX_COLS);
+        let status_height = if self.settings.show_git_status && !self.ws.terminal.alternate_active()
+        {
             ui::STATUS_HEIGHT
         } else {
             0.
@@ -1007,18 +1071,18 @@ impl App {
         if std::env::var_os("JUNA_ACCEPT_GIT_STATUS").is_some() {
             log::info!("Git acceptance footer={}", status_height > 0.);
         }
-        let rows = (((height as f32 - (2. * PAD + ui::TAB_HEIGHT + status_height) * self.scale)
-            / (CELL_H * self.scale))
+        let rows = (((height as f32 - (2. * PAD + ui::TAB_HEIGHT + status_height) * self.ws.scale)
+            / (CELL_H * self.ws.scale))
             .max(1.) as u16)
             .clamp(1, MAX_ROWS);
-        if (cols, rows) != (self.cols, self.rows) {
-            if let Some(r) = self.runtime.as_mut() {
+        if (cols, rows) != (self.ws.cols, self.ws.rows) {
+            if let Some(r) = self.ws.runtime.as_mut() {
                 if let Err(e) = r.control.resize(Dimensions { cols, rows }) {
                     self.fail(format!("PTY resize failed: {e}"));
                     return;
                 }
             }
-            for tab in &mut self.tabs {
+            for tab in &mut self.ws.tabs {
                 if let Some(state) = tab.saved.as_mut() {
                     if let Some(r) = state.runtime.as_mut() {
                         if let Err(error) = r.control.resize(Dimensions { cols, rows }) {
@@ -1033,49 +1097,51 @@ impl App {
                     state.offset = state.offset.min(state.terminal.scrollback_len());
                 }
             }
-            self.terminal.resize(cols, rows);
-            self.cols = cols;
-            self.rows = rows;
-            self.selection = None;
-            self.offset = self.offset.min(self.terminal.scrollback_len());
+            self.ws.terminal.resize(cols, rows);
+            self.ws.cols = cols;
+            self.ws.rows = rows;
+            self.ws.selection = None;
+            self.ws.offset = self.ws.offset.min(self.ws.terminal.scrollback_len());
         }
-        self.left_inset = inset;
-        let col = ((self.pointer_px[0] - PAD * self.scale - inset) / (CELL_W * self.scale)).max(0.)
-            as u16;
-        let row = ((self.pointer_px[1] - (PAD + ui::TAB_HEIGHT) * self.scale)
-            / (CELL_H * self.scale))
+        self.ws.left_inset = inset;
+        let col = ((self.ws.pointer_px[0] - PAD * self.ws.scale - inset) / (CELL_W * self.ws.scale))
             .max(0.) as u16;
-        self.pointer = (row.min(self.rows - 1), col.min(self.cols - 1));
-        if let Some(g) = self.gpu.as_mut() {
+        let row = ((self.ws.pointer_px[1] - (PAD + ui::TAB_HEIGHT) * self.ws.scale)
+            / (CELL_H * self.ws.scale))
+            .max(0.) as u16;
+        self.ws.pointer = (row.min(self.ws.rows - 1), col.min(self.ws.cols - 1));
+        if let Some(g) = self.ws.gpu.as_mut() {
             g.resize(width, height);
         }
-        self.dirty = true;
+        self.ws.dirty = true;
     }
     fn draw(&mut self) {
-        if self.minimized {
+        if self.ws.minimized {
             return;
         }
         let selection_theme = self.active_theme();
-        self.tabs[self.active_tab]
+        self.ws.tabs[self.ws.active_tab]
             .privacy
-            .update(&self.terminal, self.offset);
-        let mut snapshot = self.tabs[self.active_tab]
+            .update(&self.ws.terminal, self.ws.offset);
+        let mut snapshot = self.ws.tabs[self.ws.active_tab]
             .privacy
             .snapshot()
             .unwrap()
             .clone();
-        let selection_top = self.tabs[self.active_tab].privacy.top();
-        let show_numbers = !self.terminal.alternate_active();
-        let Some(g) = self.gpu.as_ref() else { return };
-        let (w, h) = (g.config.width, g.config.height);
-        let privacy_scene = self.privacy_overlay(w, h);
-        let Some(renderer) = self.renderer.as_mut() else {
+        let selection_top = self.ws.tabs[self.ws.active_tab].privacy.top();
+        let show_numbers = !self.ws.terminal.alternate_active();
+        let Some(g) = self.ws.gpu.as_ref() else {
             return;
         };
-        if !self.focused {
+        let (w, h) = (g.config.width, g.config.height);
+        let privacy_scene = self.privacy_overlay(w, h);
+        let Some(renderer) = self.ws.renderer.as_mut() else {
+            return;
+        };
+        if !self.ws.focused {
             snapshot.cursor_style = 4;
         }
-        if let Some((a, b)) = self.selection {
+        if let Some((a, b)) = self.ws.selection {
             let (a, b) = if a <= b { (a, b) } else { (b, a) };
             let top = selection_top;
             for row in 0..snapshot.rows {
@@ -1100,21 +1166,22 @@ impl App {
                 }
             }
         }
-        renderer.set_top_inset(ui::TAB_HEIGHT * self.scale);
-        renderer.set_left_inset(self.left_inset);
+        renderer.set_top_inset(ui::TAB_HEIGHT * self.ws.scale);
+        renderer.set_left_inset(self.ws.left_inset);
         renderer.build(&snapshot, w, h);
         let color = crate::theme::rgb(&selection_theme.colors.foreground).unwrap();
         renderer.overlay(&gutter::scene(
-            if show_numbers { self.left_inset } else { 0. },
-            self.scale,
+            if show_numbers { self.ws.left_inset } else { 0. },
+            self.ws.scale,
             selection_top,
             snapshot.rows,
             [color[0], color[1], color[2], 1.],
         ));
-        let labels: Vec<String> = self.tabs.iter().map(|t| t.label.clone()).collect();
-        let attention: Vec<bool> = self.tabs.iter().map(|t| t.attention.is_some()).collect();
+        let labels: Vec<String> = self.ws.tabs.iter().map(|t| t.label.clone()).collect();
+        let attention: Vec<bool> = self.ws.tabs.iter().map(|t| t.attention.is_some()).collect();
         let now = Instant::now();
         let flash_on = self
+            .ws
             .tabs
             .iter()
             .filter_map(|t| t.attention)
@@ -1125,43 +1192,45 @@ impl App {
                     && (elapsed / ui::ATTENTION_FLASH_PERIOD_MS).is_multiple_of(2)
             })
             .unwrap_or(false);
-        let drag = self.tab_drag.filter(|drag| drag.moved).map(|drag| {
+        let drag = self.ws.tab_drag.filter(|drag| drag.moved).map(|drag| {
             let strip = ui::strip(
                 w as f32,
-                self.scale,
-                self.tabs.len(),
-                self.active_tab,
+                self.ws.scale,
+                self.ws.tabs.len(),
+                self.ws.active_tab,
                 Some(drag.start),
             );
             ui::DragView {
                 start: drag.start,
-                gap: ui::drop_gap(self.pointer_px[0], &strip, self.tabs.len()),
-                pointer_x: self.pointer_px[0],
+                gap: ui::drop_gap(self.ws.pointer_px[0], &strip, self.ws.tabs.len()),
+                pointer_x: self.ws.pointer_px[0],
+                detach: ui::detach_allowed(self.ws.tabs.len())
+                    && ui::detach_zone(self.ws.pointer_px[1], self.ws.scale),
             }
         });
         renderer.overlay(&ui::tab_scene(
             &labels,
-            self.active_tab,
+            self.ws.active_tab,
             &attention,
             flash_on,
             w as f32,
-            self.scale,
+            self.ws.scale,
             drag,
         ));
         if self.settings.show_git_status && show_numbers {
             renderer.overlay(&ui::status_scene(
-                &self.tabs[self.active_tab].git.label(),
+                &self.ws.tabs[self.ws.active_tab].git.label(),
                 w as f32,
                 h as f32,
-                self.scale,
+                self.ws.scale,
                 &selection_theme,
             ));
         }
         if let Some(ui) = self.ui.as_mut() {
             let rows = ui.rows(&self.themes, &self.settings);
-            let (_, visible, _) = ui.geometry(w as f32, h as f32, self.scale, rows.len());
+            let (_, visible, _) = ui.geometry(w as f32, h as f32, self.ws.scale, rows.len());
             ui.ensure_visible(visible, rows.len());
-            let scene = ui.scene(&rows, w as f32, h as f32, self.scale);
+            let scene = ui.scene(&rows, w as f32, h as f32, self.ws.scale);
             renderer.overlay(&scene);
         }
         if let Some(scene) = privacy_scene.as_ref() {
@@ -1171,10 +1240,10 @@ impl App {
             renderer.draw(device, queue, w, h, pass)
         }) {
             Ok(true) => {
-                self.dirty = false;
+                self.ws.dirty = false;
                 self.privacy_dirty = false;
-                self.frames += 1;
-                if self.frames == 1
+                self.ws.frames += 1;
+                if !std::mem::replace(&mut self.startup_acknowledged, true)
                     && self.update_receipt_until.is_some()
                     && crate::updates::helper::acknowledge_restart().is_err()
                 {
@@ -1183,28 +1252,28 @@ impl App {
             }
             Ok(false) => {}
             Err(FrameSkip::Lost | FrameSkip::Outdated) => {
-                self.gpu.as_mut().unwrap().resize(w, h);
+                self.ws.gpu.as_mut().unwrap().resize(w, h);
             }
             Err(FrameSkip::Validation) => self.fail("GPU presentation validation failed".into()),
             Err(_) => {}
         }
     }
     fn selection_text(&self) -> String {
-        let Some((a, b)) = self.selection else {
+        let Some((a, b)) = self.ws.selection else {
             return String::new();
         };
         let (a, b) = if a <= b { (a, b) } else { (b, a) };
-        let history = if self.terminal.alternate_active() {
+        let history = if self.ws.terminal.alternate_active() {
             0
         } else {
-            self.terminal.scrollback_len()
+            self.ws.terminal.scrollback_len()
         };
         let mut out = String::new();
         for row in a.0..=b.0 {
             let cells = if row < history {
-                self.terminal.scrollback_line(row)
+                self.ws.terminal.scrollback_line(row)
             } else {
-                self.terminal.grid().row_slice((row - history) as u16)
+                self.ws.terminal.grid().row_slice((row - history) as u16)
             };
             let Some(cells) = cells else { continue };
             let start = if row == a.0 { a.1 as usize } else { 0 };
@@ -1227,9 +1296,9 @@ impl App {
             out.push_str(line.trim_end());
             if row < b.0 {
                 let wrapped = if row < history {
-                    self.terminal.history_wrapped(row)
+                    self.ws.terminal.history_wrapped(row)
                 } else {
-                    self.terminal.grid().row_wrapped((row - history) as u16)
+                    self.ws.terminal.grid().row_wrapped((row - history) as u16)
                 };
                 if !wrapped {
                     out.push('\n');
@@ -1242,11 +1311,11 @@ impl App {
         match clipboard::read() {
             Ok(text) => {
                 if text.contains(['\r', '\n']) {
-                    self.tabs[self.active_tab].git.invalidate_initial();
+                    self.ws.tabs[self.ws.active_tab].git.invalidate_initial();
                 }
-                let bytes = input::paste(&text, self.terminal.input_modes().bracketed_paste);
-                self.offset = 0;
-                self.selection = None;
+                let bytes = input::paste(&text, self.ws.terminal.input_modes().bracketed_paste);
+                self.ws.offset = 0;
+                self.ws.selection = None;
                 self.send(&bytes);
             }
             Err(e) => log::warn!("Paste: {e}"),
@@ -1260,36 +1329,49 @@ impl App {
             .unwrap_or_else(crate::theme::default_theme)
     }
     fn history_start(&self) -> usize {
-        if self.terminal.alternate_active() {
+        if self.ws.terminal.alternate_active() {
             0
         } else {
-            self.terminal.scrollback_len().saturating_sub(self.offset)
+            self.ws
+                .terminal
+                .scrollback_len()
+                .saturating_sub(self.ws.offset)
         }
     }
     fn rebuild_renderer(&mut self) {
-        let Some(window) = self.window.as_ref() else {
+        self.rebuild_workspace_renderer();
+        // Font and scale settings are process-wide, so detached windows must not
+        // keep rendering with the previous metrics.
+        for index in 0..self.background.len() {
+            std::mem::swap(&mut self.ws, &mut self.background[index]);
+            self.rebuild_workspace_renderer();
+            std::mem::swap(&mut self.ws, &mut self.background[index]);
+        }
+    }
+    fn rebuild_workspace_renderer(&mut self) {
+        let Some(window) = self.ws.window.as_ref() else {
             return;
         };
-        self.scale = window.scale_factor() as f32 * self.settings.font_size / FONT_PX;
-        if let Some(gpu) = self.gpu.as_ref() {
-            self.renderer = crate::render::Renderer::new_with_family(
+        self.ws.scale = window.scale_factor() as f32 * self.settings.font_size / FONT_PX;
+        if let Some(gpu) = self.ws.gpu.as_ref() {
+            self.ws.renderer = crate::render::Renderer::new_with_family(
                 &gpu.device,
                 &gpu.queue,
                 gpu.format,
                 2048,
-                (CELL_W * self.scale, CELL_H * self.scale),
-                PAD * self.scale,
-                FONT_PX * self.scale,
+                (CELL_W * self.ws.scale, CELL_H * self.ws.scale),
+                PAD * self.ws.scale,
+                FONT_PX * self.ws.scale,
                 &self.settings.font_family,
             );
         }
         let theme = self.active_theme();
-        if let Some(r) = self.renderer.as_mut() {
+        if let Some(r) = self.ws.renderer.as_mut() {
             let _ = r.apply_theme(&theme, self.settings.minimum_contrast);
         }
         let size = window.inner_size();
         self.fit(size.width, size.height);
-        self.dirty = true;
+        self.ws.dirty = true;
     }
     fn resize_font(&mut self, zoom: input::Zoom) {
         let size = match zoom {
@@ -1322,7 +1404,7 @@ impl App {
     fn handle_zoom(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::KeyboardInput { event, .. }
-                if event.state == ElementState::Pressed && !self.ime =>
+                if event.state == ElementState::Pressed && !self.ws.ime =>
             {
                 if let Some(zoom) =
                     input::zoom(&event.logical_key, event.physical_key, self.modifiers)
@@ -1336,18 +1418,18 @@ impl App {
                     && !self.modifiers.alt_key()
                     && !self.modifiers.super_key() =>
             {
-                self.zoom_wheel += match delta {
+                self.ws.zoom_wheel += match delta {
                     MouseScrollDelta::LineDelta(_, y) => *y,
                     MouseScrollDelta::PixelDelta(p) => p.y as f32 / 40.,
                 };
-                let steps = self.zoom_wheel.trunc().clamp(-32., 32.) as i8;
+                let steps = self.ws.zoom_wheel.trunc().clamp(-32., 32.) as i8;
                 if steps != 0 {
-                    self.zoom_wheel -= f32::from(steps);
+                    self.ws.zoom_wheel -= f32::from(steps);
                     self.resize_font(input::Zoom::Step(steps));
                 }
                 return true;
             }
-            WindowEvent::ModifiersChanged(m) if !m.state().control_key() => self.zoom_wheel = 0.,
+            WindowEvent::ModifiersChanged(m) if !m.state().control_key() => self.ws.zoom_wheel = 0.,
             _ => {}
         }
         false
@@ -1377,9 +1459,9 @@ impl App {
         }
         log::info!("Options panel: {kind:?}");
         let anchor = if matches!(kind, ui::Kind::Context | ui::Kind::TabContext) {
-            self.pointer_px
+            self.ws.pointer_px
         } else {
-            [16. * self.scale, 16. * self.scale]
+            [16. * self.ws.scale, 16. * self.ws.scale]
         };
         let mut ui = ui::Ui::new(kind, anchor);
         if kind == ui::Kind::ConfirmUpdate {
@@ -1419,40 +1501,41 @@ impl App {
         if kind == ui::Kind::Updates {
             self.refresh_update_panel();
         }
-        self.selecting = false;
-        self.dirty = true;
+        self.ws.selecting = false;
+        self.ws.dirty = true;
     }
     fn open_context_menu(&mut self) {
         self.close_ui();
-        if let Some(button) = self.mouse_button.take() {
-            let modes = self.terminal.input_modes();
+        if let Some(button) = self.ws.mouse_button.take() {
+            let modes = self.ws.terminal.input_modes();
             self.send(&input::mouse(
                 button,
-                self.pointer.0,
-                self.pointer.1,
+                self.ws.pointer.0,
+                self.ws.pointer.1,
                 true,
                 self.modifiers,
                 modes.mouse_sgr,
             ));
         }
-        self.selecting = false;
-        if !self.ui_mouse_latch.contains(&MouseButton::Right) {
-            self.ui_mouse_latch.push(MouseButton::Right);
+        self.ws.selecting = false;
+        if !self.ws.ui_mouse_latch.contains(&MouseButton::Right) {
+            self.ws.ui_mouse_latch.push(MouseButton::Right);
         }
-        if self.pointer_px[1] < ui::TAB_HEIGHT * self.scale {
+        if self.ws.pointer_px[1] < ui::TAB_HEIGHT * self.ws.scale {
             let width = self
+                .ws
                 .window
                 .as_ref()
                 .map(|w| w.inner_size().width as f32)
                 .unwrap_or(1024.);
             let target = match ui::tab_hit(
-                self.pointer_px,
+                self.ws.pointer_px,
                 width,
-                self.scale,
-                self.tabs.len(),
-                self.active_tab,
+                self.ws.scale,
+                self.ws.tabs.len(),
+                self.ws.active_tab,
             ) {
-                Some(ui::TabHit::Select(index)) => Some(self.tabs[index].id),
+                Some(ui::TabHit::Select(index)) => Some(self.ws.tabs[index].id),
                 _ => None,
             };
             self.open_ui(ui::Kind::TabContext);
@@ -1522,11 +1605,11 @@ impl App {
                 }
             }
             let theme = self.active_theme();
-            if let Some(renderer) = self.renderer.as_mut() {
+            if let Some(renderer) = self.ws.renderer.as_mut() {
                 let _ = renderer.apply_theme(&theme, self.settings.minimum_contrast);
             }
             self.preview_ui();
-            self.dirty = true;
+            self.ws.dirty = true;
         }
     }
     fn preview_ui(&mut self) {
@@ -1602,10 +1685,10 @@ impl App {
                 self.rebuild_renderer();
             }
         }
-        if let (Some(theme), Some(renderer)) = (preview, self.renderer.as_mut()) {
+        if let (Some(theme), Some(renderer)) = (preview, self.ws.renderer.as_mut()) {
             let _ = renderer.apply_theme(&theme, self.settings.minimum_contrast);
         }
-        self.dirty = true;
+        self.ws.dirty = true;
     }
     fn close_ui(&mut self) {
         self.pending_import = None;
@@ -1615,10 +1698,10 @@ impl App {
             self.rebuild_renderer();
         }
         let theme = self.active_theme();
-        if let Some(r) = self.renderer.as_mut() {
+        if let Some(r) = self.ws.renderer.as_mut() {
             let _ = r.apply_theme(&theme, self.settings.minimum_contrast);
         }
-        self.dirty = true;
+        self.ws.dirty = true;
     }
     fn committed_preferences(&self) -> crate::settings::Settings {
         self.settings_before
@@ -1686,7 +1769,7 @@ impl App {
                 panel.message = error;
             }
         }
-        self.dirty = true;
+        self.ws.dirty = true;
     }
     fn commit_preferences(&mut self, settings: crate::settings::Settings) -> Result<(), String> {
         self.store.save_settings(&settings)?;
@@ -1713,6 +1796,7 @@ impl App {
                         None
                     };
                     let window = self
+                        .ws
                         .window
                         .as_ref()
                         .ok_or("File selection requires a window")?
@@ -1760,7 +1844,7 @@ impl App {
                         );
                         panel.expanded.insert("\0favourites".into());
                     }
-                    self.dirty = true;
+                    self.ws.dirty = true;
                 }
                 Action::CollapseAll => {
                     if let Some(panel) = self.ui.as_mut() {
@@ -1774,7 +1858,7 @@ impl App {
                         panel.focus_row(index, &rows);
                         panel.scroll = 0;
                     }
-                    self.dirty = true;
+                    self.ws.dirty = true;
                 }
                 Action::ToggleFavourite(id) => {
                     let previous = self.ui.as_ref().and_then(|panel| {
@@ -1815,18 +1899,18 @@ impl App {
                         panel.star_focused =
                             star && rows.get(panel.focus).and_then(ui::theme_id).is_some();
                     }
-                    self.dirty = true;
+                    self.ws.dirty = true;
                 }
                 Action::ToggleLineNumbers => {
                     let mut settings = self.committed_preferences();
                     settings.show_line_numbers = !settings.show_line_numbers;
                     self.commit_preferences(settings)?;
                     self.rebuild_renderer();
-                    if let Some(window) = self.window.as_ref() {
+                    if let Some(window) = self.ws.window.as_ref() {
                         let size = window.inner_size();
                         self.fit(size.width, size.height);
                     }
-                    self.dirty = true;
+                    self.ws.dirty = true;
                 }
                 Action::ToggleGitStatus | Action::ToggleDirectoryReporting => {
                     let mut settings = self.committed_preferences();
@@ -1836,40 +1920,40 @@ impl App {
                         settings.report_shell_directory = !settings.report_shell_directory;
                     }
                     self.commit_preferences(settings)?;
-                    self.tabs[self.active_tab].git.last_check = None;
-                    if let Some(window) = self.window.as_ref() {
+                    self.ws.tabs[self.ws.active_tab].git.last_check = None;
+                    if let Some(window) = self.ws.window.as_ref() {
                         let size = window.inner_size();
                         self.fit(size.width, size.height);
                     }
-                    self.dirty = true;
+                    self.ws.dirty = true;
                 }
                 Action::RefreshGitStatus => {
-                    self.tabs[self.active_tab].git.last_check = None;
-                    self.dirty = true;
+                    self.ws.tabs[self.ws.active_tab].git.last_check = None;
+                    self.ws.dirty = true;
                 }
                 Action::CloseTargetTab => {
                     let target = self.ui.as_ref().and_then(|u| u.target_tab);
                     self.close_ui();
                     if let Some(index) =
-                        target.and_then(|id| self.tabs.iter().position(|t| t.id == id))
+                        target.and_then(|id| self.ws.tabs.iter().position(|t| t.id == id))
                     {
-                        if index == self.active_tab {
+                        if index == self.ws.active_tab {
                             self.close_tab();
-                        } else if let Some(state) = self.tabs[index].saved.as_mut() {
+                        } else if let Some(state) = self.ws.tabs[index].saved.as_mut() {
                             state.closing = true;
                             if let Some(runtime) = state.runtime.as_mut() {
                                 runtime.request_close();
                             }
-                            self.dirty = true;
+                            self.ws.dirty = true;
                         }
                     }
                 }
                 Action::RenameTab => {
                     let target = self.ui.as_ref().and_then(|u| u.target_tab);
                     if let Some(index) =
-                        target.and_then(|id| self.tabs.iter().position(|t| t.id == id))
+                        target.and_then(|id| self.ws.tabs.iter().position(|t| t.id == id))
                     {
-                        let label = self.tabs[index].label.clone();
+                        let label = self.ws.tabs[index].label.clone();
                         self.open_ui(Kind::Rename);
                         if let Some(panel) = self.ui.as_mut() {
                             panel.target_tab = target;
@@ -1892,7 +1976,7 @@ impl App {
                         return Err("Use 1–64 printable characters for the tab name".into());
                     }
                     if let Some(tab) =
-                        target.and_then(|id| self.tabs.iter_mut().find(|t| t.id == id))
+                        target.and_then(|id| self.ws.tabs.iter_mut().find(|t| t.id == id))
                     {
                         tab.label = label;
                         tab.pinned = true;
@@ -1910,7 +1994,7 @@ impl App {
                 Action::Copy => {
                     let text = self.selection_text();
                     if !text.is_empty() {
-                        if let Some(window) = self.window.as_ref() {
+                        if let Some(window) = self.ws.window.as_ref() {
                             clipboard::write(window, &text)?;
                         }
                     }
@@ -1921,19 +2005,22 @@ impl App {
                     self.paste();
                 }
                 Action::SelectAll => {
-                    let history = if self.terminal.alternate_active() {
+                    let history = if self.ws.terminal.alternate_active() {
                         0
                     } else {
-                        self.terminal.scrollback_len()
+                        self.ws.terminal.scrollback_len()
                     };
-                    self.selection =
-                        Some(((0, 0), (history + self.rows as usize - 1, self.cols - 1)));
+                    self.ws.selection = Some((
+                        (0, 0),
+                        (history + self.ws.rows as usize - 1, self.ws.cols - 1),
+                    ));
                     self.close_ui();
                 }
                 Action::Themes => self.open_ui(Kind::Themes),
                 Action::Custom => self.open_ui(Kind::Custom),
                 Action::ManageTheme(id) => {
-                    let mut ui = ui::Ui::new(Kind::Manage, [16. * self.scale, 16. * self.scale]);
+                    let mut ui =
+                        ui::Ui::new(Kind::Manage, [16. * self.ws.scale, 16. * self.ws.scale]);
                     ui.preview_id = Some(id);
                     self.ui = Some(ui);
                 }
@@ -2079,6 +2166,11 @@ impl App {
                     self.open_ui(Kind::ConfirmUpdate);
                 }
                 Action::ConfirmUpdate => {
+                    if !self.background.is_empty() {
+                        return Err(
+                            "Close detached Juna windows before installing this update".into()
+                        );
+                    }
                     let executable =
                         std::env::current_exe().map_err(|_| "Installed executable unavailable")?;
                     if crate::updates::cli::installation_in_use(&executable)? {
@@ -2090,6 +2182,7 @@ impl App {
                         .ok_or("Download and verify an update first")?;
                     let shell = self.shell_spec.clone().ok_or("Shell is not initialised")?;
                     let cwd = self
+                        .ws
                         .terminal
                         .working_directory()
                         .1
@@ -2132,10 +2225,7 @@ impl App {
                         return Err("Unknown shell".into());
                     }
                     if !shells::available(&name) {
-                        return Err(format!(
-                            "{} was not found on PATH",
-                            shells::display(&name)
-                        ));
+                        return Err(format!("{} was not found on PATH", shells::display(&name)));
                     }
                     let mut settings = self.committed_preferences();
                     settings.shell = name;
@@ -2216,7 +2306,8 @@ impl App {
                         theme.name = format!("My {}", theme.name);
                         theme.source = None;
                     }
-                    let mut ui = ui::Ui::new(Kind::Editor, [16. * self.scale, 16. * self.scale]);
+                    let mut ui =
+                        ui::Ui::new(Kind::Editor, [16. * self.ws.scale, 16. * self.ws.scale]);
                     ui.draft = Some(theme);
                     let rows = ui.rows(&self.themes, &self.settings);
                     ui.focus_row(0, &rows);
@@ -2260,7 +2351,7 @@ impl App {
                     self.ui = Some(ui::Ui::number(
                         index,
                         &self.settings,
-                        [16. * self.scale, 16. * self.scale],
+                        [16. * self.ws.scale, 16. * self.ws.scale],
                     ));
                 }
                 Action::ApplySetting => {
@@ -2302,11 +2393,11 @@ impl App {
                 ui.message = error;
             }
         }
-        self.dirty = true;
+        self.ws.dirty = true;
     }
     fn handle_ui(&mut self, event: &WindowEvent) -> bool {
         if let WindowEvent::CursorMoved { position, .. } = event {
-            self.pointer_px = [position.x as f32, position.y as f32];
+            self.ws.pointer_px = [position.x as f32, position.y as f32];
         }
         if let WindowEvent::MouseInput {
             state: ElementState::Released,
@@ -2314,8 +2405,8 @@ impl App {
             ..
         } = event
         {
-            if self.ui_mouse_latch.contains(button) {
-                self.ui_mouse_latch.retain(|b| b != button);
+            if self.ws.ui_mouse_latch.contains(button) {
+                self.ws.ui_mouse_latch.retain(|b| b != button);
                 return true;
             }
         }
@@ -2337,13 +2428,14 @@ impl App {
                 .is_some_and(|panel| matches!(panel.kind, ui::Kind::Context | ui::Kind::TabContext))
             {
                 self.open_context_menu();
-            } else if !self.ui_mouse_latch.contains(&MouseButton::Right) {
-                self.ui_mouse_latch.push(MouseButton::Right);
+            } else if !self.ws.ui_mouse_latch.contains(&MouseButton::Right) {
+                self.ws.ui_mouse_latch.push(MouseButton::Right);
             }
             return true;
         }
         let rows = ui.rows(&self.themes, &self.settings);
         let size = self
+            .ws
             .window
             .as_ref()
             .map(|w| w.inner_size())
@@ -2354,13 +2446,14 @@ impl App {
         let consumed = match event {
             WindowEvent::CursorMoved { .. } => {
                 if ui
-                    .star_hit(self.pointer_px, width, height, self.scale, &rows)
+                    .star_hit(self.ws.pointer_px, width, height, self.ws.scale, &rows)
                     .is_some()
                 {
                     self.ui = Some(ui);
                     return true;
                 }
-                if let Some(index) = ui.hit(self.pointer_px, width, height, self.scale, rows.len())
+                if let Some(index) =
+                    ui.hit(self.ws.pointer_px, width, height, self.ws.scale, rows.len())
                 {
                     if index != ui.focus {
                         ui.focus_row(index, &rows);
@@ -2370,27 +2463,27 @@ impl App {
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 if *state == ElementState::Pressed {
-                    if !self.ui_mouse_latch.contains(button) {
-                        self.ui_mouse_latch.push(*button);
+                    if !self.ws.ui_mouse_latch.contains(button) {
+                        self.ws.ui_mouse_latch.push(*button);
                     }
                     if *button == MouseButton::Left {
                         if let Some(id) =
-                            ui.star_hit(self.pointer_px, width, height, self.scale, &rows)
+                            ui.star_hit(self.ws.pointer_px, width, height, self.ws.scale, &rows)
                         {
                             action = Some(ui::Action::ToggleFavourite(id));
                         } else if let Some(index) =
-                            ui.hit(self.pointer_px, width, height, self.scale, rows.len())
+                            ui.hit(self.ws.pointer_px, width, height, self.ws.scale, rows.len())
                         {
                             ui.focus_row(index, &rows);
                             if rows[index].value.is_none() {
                                 action = Some(rows[index].action.clone());
                             }
                         } else {
-                            let (r, _, _) = ui.geometry(width, height, self.scale, rows.len());
-                            if self.pointer_px[0] < r[0]
-                                || self.pointer_px[0] > r[0] + r[2]
-                                || self.pointer_px[1] < r[1]
-                                || self.pointer_px[1] > r[1] + r[3]
+                            let (r, _, _) = ui.geometry(width, height, self.ws.scale, rows.len());
+                            if self.ws.pointer_px[0] < r[0]
+                                || self.ws.pointer_px[0] > r[0] + r[2]
+                                || self.ws.pointer_px[1] < r[1]
+                                || self.ws.pointer_px[1] > r[1] + r[3]
                             {
                                 action = Some(if ui.kind == ui::Kind::Number {
                                     ui::Action::CancelSetting
@@ -2410,7 +2503,7 @@ impl App {
                 true
             }
             WindowEvent::KeyboardInput { event, .. } => {
-                if event.state == ElementState::Pressed && !self.ime {
+                if event.state == ElementState::Pressed && !self.ws.ime {
                     if self.modifiers.control_key()
                         && matches!(&event.logical_key,Key::Character(s)if s.eq_ignore_ascii_case("v"))
                     {
@@ -2434,7 +2527,7 @@ impl App {
                 true
             }
             WindowEvent::Ime(Ime::Commit(text)) => {
-                self.ime = false;
+                self.ws.ime = false;
                 ui.key(
                     &Key::Character(text.clone().into()),
                     Some(text),
@@ -2444,23 +2537,23 @@ impl App {
                 true
             }
             WindowEvent::Ime(Ime::Preedit(text, _)) => {
-                self.ime = !text.is_empty();
+                self.ws.ime = !text.is_empty();
                 true
             }
             WindowEvent::Ime(Ime::Disabled) => {
-                self.ime = false;
+                self.ws.ime = false;
                 true
             }
             WindowEvent::Ime(_) => true,
             WindowEvent::MouseWheel { delta, .. } => {
-                let (_, visible, step) = ui.geometry(width, height, self.scale, rows.len());
+                let (_, visible, step) = ui.geometry(width, height, self.ws.scale, rows.len());
                 let amount = match delta {
                     MouseScrollDelta::LineDelta(_, y) => -*y * 3.,
                     MouseScrollDelta::PixelDelta(p) => -p.y as f32 / step,
                 };
                 ui.scroll_rows(amount, visible, &rows);
                 self.ui = Some(ui);
-                self.dirty = true;
+                self.ws.dirty = true;
                 return true;
             }
             _ => false,
@@ -2474,121 +2567,152 @@ impl App {
         }
         consumed
     }
+    /// Build a native window with its own surface and renderer. Shared by the
+    /// first window and by a detached tab, so icons, GPU selection and font setup
+    /// cannot diverge between them; only the session differs.
+    fn create_window(
+        &self,
+        event_loop: &ActiveEventLoop,
+        cols: u16,
+        rows: u16,
+        physical: Option<winit::dpi::PhysicalSize<u32>>,
+    ) -> Result<Workspace, String> {
+        let base = Window::default_attributes()
+            .with_title(crate::window_identity::title())
+            .with_visible(false);
+        // A detached window reuses the source window's physical size, because its
+        // columns and rows were measured against those pixels. Converting them to
+        // logical units instead would inflate the window at non-100% DPI.
+        let base = match physical {
+            Some(size) => base.with_inner_size(size),
+            None => base.with_inner_size(winit::dpi::LogicalSize::new(
+                cols as f32 * CELL_W + PAD * 2.,
+                rows as f32 * CELL_H + PAD * 2. + ui::TAB_HEIGHT,
+            )),
+        };
+        let attributes = base;
+        #[cfg(windows)]
+        let attributes = {
+            use winit::platform::windows::{IconExtWindows, WindowAttributesExtWindows};
+            let small =
+                winit::window::Icon::from_resource(1, Some(winit::dpi::PhysicalSize::new(32, 32)))
+                    .map_err(|e| format!("Juna window icon: {e}"))?;
+            let large =
+                winit::window::Icon::from_resource(1, Some(winit::dpi::PhysicalSize::new(48, 48)))
+                    .map_err(|e| format!("Juna taskbar icon: {e}"))?;
+            attributes
+                .with_window_icon(Some(small))
+                .with_taskbar_icon(Some(large))
+        };
+        let window = Arc::new(
+            event_loop
+                .create_window(attributes)
+                .map_err(|e| e.to_string())?,
+        );
+        #[cfg(windows)]
+        {
+            use windows::Win32::{
+                Foundation::{HWND, LPARAM, WPARAM},
+                UI::WindowsAndMessaging::{
+                    GetClassLongPtrW, SendMessageW, SetClassLongPtrW, GCLP_HICON, GCLP_HICONSM,
+                    WM_GETICON,
+                },
+            };
+            use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+            let RawWindowHandle::Win32(handle) =
+                window.window_handle().map_err(|e| e.to_string())?.as_raw()
+            else {
+                return Err("Expected a Windows window handle".into());
+            };
+            let hwnd = HWND(handle.hwnd.get() as *mut _);
+            // SAFETY: winit owns this live HWND on the current UI thread; WM_GETICON has no pointer arguments.
+            let (small, large) = unsafe {
+                (
+                    SendMessageW(hwnd, WM_GETICON, Some(WPARAM(0)), Some(LPARAM(0))),
+                    SendMessageW(hwnd, WM_GETICON, Some(WPARAM(1)), Some(LPARAM(0))),
+                )
+            };
+            if small.0 == 0 || large.0 == 0 {
+                return Err("Juna native window icon was not installed".into());
+            }
+            // Explorer draws the live taskbar button from the window class icon,
+            // not the per-window WM_SETICON handles winit installs. The handles
+            // belong to the window and outlive this class registration.
+            // SAFETY: the class and HICONs are owned by winit for this window's
+            // lifetime on this UI thread; Set/GetClassLongPtr only swap a class word.
+            unsafe {
+                SetClassLongPtrW(hwnd, GCLP_HICON, large.0);
+                SetClassLongPtrW(hwnd, GCLP_HICONSM, small.0);
+            }
+            // SAFETY: reads back the class words set immediately above on the same live window.
+            if unsafe {
+                GetClassLongPtrW(hwnd, GCLP_HICON) != large.0 as usize
+                    || GetClassLongPtrW(hwnd, GCLP_HICONSM) != small.0 as usize
+            } {
+                return Err("Juna window class icon was not installed".into());
+            }
+            log::info!("Window and class icons verified: small and taskbar");
+            taskbar_properties(hwnd)?;
+        }
+        window.set_visible(true);
+        window.set_ime_allowed(true);
+        let mut workspace = Workspace::new(cols, rows);
+        workspace.scale = window.scale_factor() as f32 * self.settings.font_size / FONT_PX;
+        let size = window.inner_size();
+        let display = event_loop.owned_display_handle();
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle(
+            Box::new(display),
+        ));
+        let target = window.clone();
+        let gpu = Gpu::new(
+            &instance,
+            |instance| instance.create_surface(target).map_err(|e| e.to_string()),
+            size.width,
+            size.height,
+        )
+        .map_err(|e| e.to_string())?;
+        log::info!("GPU: {:?}", gpu.choice);
+        workspace.renderer = Some(
+            crate::render::Renderer::new_with_family(
+                &gpu.device,
+                &gpu.queue,
+                gpu.format,
+                2048,
+                (CELL_W * workspace.scale, CELL_H * workspace.scale),
+                PAD * workspace.scale,
+                FONT_PX * workspace.scale,
+                &self.settings.font_family,
+            )
+            .ok_or("No usable font")?,
+        );
+        workspace.gpu = Some(gpu);
+        workspace.window = Some(window);
+        log::info!(
+            "Window created: scale={} cols={cols} rows={rows} size={:?}",
+            workspace.scale,
+            size
+        );
+        Ok(workspace)
+    }
 }
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if self.window.is_some() {
+        if self.ws.window.is_some() {
             return;
         }
         let result = (|| -> Result<(), String> {
-            let attributes = Window::default_attributes()
-                .with_title(crate::window_identity::title())
-                .with_visible(false)
-                .with_inner_size(winit::dpi::LogicalSize::new(
-                    self.cols as f32 * CELL_W + PAD * 2.,
-                    self.rows as f32 * CELL_H + PAD * 2. + ui::TAB_HEIGHT,
-                ));
-            #[cfg(windows)]
-            let attributes = {
-                use winit::platform::windows::{IconExtWindows, WindowAttributesExtWindows};
-                let small = winit::window::Icon::from_resource(
-                    1,
-                    Some(winit::dpi::PhysicalSize::new(32, 32)),
-                )
-                .map_err(|e| format!("Juna window icon: {e}"))?;
-                let large = winit::window::Icon::from_resource(
-                    1,
-                    Some(winit::dpi::PhysicalSize::new(48, 48)),
-                )
-                .map_err(|e| format!("Juna taskbar icon: {e}"))?;
-                attributes
-                    .with_window_icon(Some(small))
-                    .with_taskbar_icon(Some(large))
-            };
-            let window = Arc::new(
-                event_loop
-                    .create_window(attributes)
-                    .map_err(|e| e.to_string())?,
-            );
-            #[cfg(windows)]
-            {
-                use windows::Win32::{
-                    Foundation::{HWND, LPARAM, WPARAM},
-                    UI::WindowsAndMessaging::{
-                        GetClassLongPtrW, SendMessageW, SetClassLongPtrW, GCLP_HICON, GCLP_HICONSM,
-                        WM_GETICON,
-                    },
-                };
-                use winit::raw_window_handle::{HasWindowHandle, RawWindowHandle};
-                let RawWindowHandle::Win32(handle) =
-                    window.window_handle().map_err(|e| e.to_string())?.as_raw()
-                else {
-                    return Err("Expected a Windows window handle".into());
-                };
-                let hwnd = HWND(handle.hwnd.get() as *mut _);
-                // SAFETY: winit owns this live HWND on the current UI thread; WM_GETICON has no pointer arguments.
-                let (small, large) = unsafe {
-                    (
-                        SendMessageW(hwnd, WM_GETICON, Some(WPARAM(0)), Some(LPARAM(0))),
-                        SendMessageW(hwnd, WM_GETICON, Some(WPARAM(1)), Some(LPARAM(0))),
-                    )
-                };
-                if small.0 == 0 || large.0 == 0 {
-                    return Err("Juna native window icon was not installed".into());
-                }
-                // Explorer draws the live taskbar button from the window class icon,
-                // not the per-window WM_SETICON handles winit installs. The handles
-                // belong to the window and outlive this class registration.
-                // SAFETY: the class and HICONs are owned by winit for this window's
-                // lifetime on this UI thread; Set/GetClassLongPtr only swap a class word.
-                unsafe {
-                    SetClassLongPtrW(hwnd, GCLP_HICON, large.0);
-                    SetClassLongPtrW(hwnd, GCLP_HICONSM, small.0);
-                }
-                // SAFETY: reads back the class words set immediately above on the same live window.
-                if unsafe {
-                    GetClassLongPtrW(hwnd, GCLP_HICON) != large.0 as usize
-                        || GetClassLongPtrW(hwnd, GCLP_HICONSM) != small.0 as usize
-                } {
-                    return Err("Juna window class icon was not installed".into());
-                }
-                log::info!("Window and class icons verified: small and taskbar");
-                taskbar_properties(hwnd)?;
-            }
-            window.set_visible(true);
-            window.set_ime_allowed(true);
-            self.scale = window.scale_factor() as f32 * self.settings.font_size / FONT_PX;
-            let size = window.inner_size();
-            let display = event_loop.owned_display_handle();
-            let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_with_display_handle(
-                Box::new(display),
-            ));
-            let target = window.clone();
-            let gpu = Gpu::new(
-                &instance,
-                |instance| instance.create_surface(target).map_err(|e| e.to_string()),
-                size.width,
-                size.height,
-            )
-            .map_err(|e| e.to_string())?;
-            log::info!("GPU: {:?}", gpu.choice);
-            self.renderer = Some(
-                crate::render::Renderer::new_with_family(
-                    &gpu.device,
-                    &gpu.queue,
-                    gpu.format,
-                    2048,
-                    (CELL_W * self.scale, CELL_H * self.scale),
-                    PAD * self.scale,
-                    FONT_PX * self.scale,
-                    &self.settings.font_family,
-                )
-                .ok_or("No usable font")?,
-            );
-            self.gpu = Some(gpu);
-            self.window = Some(window);
+            let created = self.create_window(event_loop, self.ws.cols, self.ws.rows, None)?;
+            let size = created
+                .window
+                .as_ref()
+                .ok_or("Created window missing")?
+                .inner_size();
+            self.ws.window = created.window;
+            self.ws.gpu = created.gpu;
+            self.ws.renderer = created.renderer;
+            self.ws.scale = created.scale;
             let theme = self.active_theme();
-            if let Some(r) = self.renderer.as_mut() {
+            if let Some(r) = self.ws.renderer.as_mut() {
                 r.apply_theme(&theme, self.settings.minimum_contrast)?;
             }
             self.fit(size.width, size.height);
@@ -2617,16 +2741,16 @@ impl ApplicationHandler for App {
                 }
                 spec
             };
-            self.tabs[self.active_tab].label = tabs::label(&spec);
-            self.tabs[self.active_tab].shell = tabs::shell_name(&spec);
+            self.ws.tabs[self.ws.active_tab].label = tabs::label(&spec);
+            self.ws.tabs[self.ws.active_tab].shell = tabs::shell_name(&spec);
             self.shell_spec = Some(spec.clone());
-            self.tabs[self.active_tab].git =
+            self.ws.tabs[self.ws.active_tab].git =
                 git_status::View::new(spec.cwd.clone().or_else(|| std::env::current_dir().ok()));
             self.git_worker = match git_status::Worker::new() {
                 Ok(worker) => Some(worker),
                 Err(_) => {
                     log::warn!("Local Git worker unavailable");
-                    self.tabs[self.active_tab].git.report =
+                    self.ws.tabs[self.ws.active_tab].git.report =
                         Some(git_status::Report::Unavailable("worker unavailable"));
                     None
                 }
@@ -2635,14 +2759,14 @@ impl ApplicationHandler for App {
             if self.privacy_broker.is_none() {
                 log::warn!("Protected fetch transport unavailable; values remain masked");
             }
-            let spec = self.privacy_environment(spec, self.tabs[self.active_tab].id);
+            let spec = self.privacy_environment(spec, self.ws.tabs[self.ws.active_tab].id);
             let spec = shell_reporting::prepare(spec, self.settings.report_shell_directory);
-            self.runtime = Some(
+            self.ws.runtime = Some(
                 Runtime::spawn(
                     &spec,
                     Dimensions {
-                        cols: self.cols,
-                        rows: self.rows,
+                        cols: self.ws.cols,
+                        rows: self.ws.rows,
                     },
                 )
                 .map_err(|e| e.to_string())?,
@@ -2682,22 +2806,39 @@ impl ApplicationHandler for App {
                     _ => {}
                 }
             }
+            #[cfg(debug_assertions)]
+            if std::env::var_os("JUNA_ACCEPT_DETACH").is_some() && self.ws.tabs.len() > 1 {
+                self.detach_tab(event_loop, 1);
+                log::info!(
+                    "Acceptance detach: windows={}; source tabs={}",
+                    self.background.len() + 1,
+                    self.ws.tabs.len()
+                );
+            }
             Ok(())
         })();
         if let Err(e) = result {
             log::error!("Startup: {e}");
-            self.failure = Some(e);
+            self.ws.failure = Some(e);
             event_loop.exit();
         }
         event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + FRAME));
     }
-    fn window_event(&mut self, _event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+        // Events for an unmounted window are handled by mounting it first, so the
+        // rest of the pipeline keeps operating on exactly one workspace.
+        if !self.mount(id) {
+            return;
+        }
         if let WindowEvent::DroppedFile(path) = &event {
             self.dropped_file(path);
             return;
         }
         self.privacy_event(&event);
         if self.tab_controls(&event) {
+            if let Some(index) = self.pending_detach.take() {
+                self.detach_tab(event_loop, index);
+            }
             return;
         }
         if self.handle_zoom(&event) {
@@ -2707,24 +2848,25 @@ impl ApplicationHandler for App {
             return;
         }
         if self.settings.show_git_status
-            && !self.terminal.alternate_active()
-            && self.window.as_ref().is_some_and(|w| {
-                self.pointer_px[1] >= w.inner_size().height as f32 - ui::STATUS_HEIGHT * self.scale
+            && !self.ws.terminal.alternate_active()
+            && self.ws.window.as_ref().is_some_and(|w| {
+                self.ws.pointer_px[1]
+                    >= w.inner_size().height as f32 - ui::STATUS_HEIGHT * self.ws.scale
             })
         {
             if matches!(event, WindowEvent::CursorMoved { .. }) {
-                if let Some(button) = self.mouse_button.take() {
-                    let modes = self.terminal.input_modes();
+                if let Some(button) = self.ws.mouse_button.take() {
+                    let modes = self.ws.terminal.input_modes();
                     self.send(&input::mouse(
                         button,
-                        self.pointer.0,
-                        self.pointer.1,
+                        self.ws.pointer.0,
+                        self.ws.pointer.1,
                         true,
                         self.modifiers,
                         modes.mouse_sgr,
                     ));
                 }
-                self.selecting = false;
+                self.ws.selecting = false;
                 return;
             }
             if matches!(
@@ -2737,23 +2879,23 @@ impl ApplicationHandler for App {
                 return;
             }
         }
-        if self.left_inset > 0.
-            && self.pointer_px[0] < PAD * self.scale + self.left_inset
-            && self.pointer_px[1] >= ui::TAB_HEIGHT * self.scale
+        if self.ws.left_inset > 0.
+            && self.ws.pointer_px[0] < PAD * self.ws.scale + self.ws.left_inset
+            && self.ws.pointer_px[1] >= ui::TAB_HEIGHT * self.ws.scale
         {
             if matches!(event, WindowEvent::CursorMoved { .. }) {
-                if let Some(button) = self.mouse_button.take() {
-                    let modes = self.terminal.input_modes();
+                if let Some(button) = self.ws.mouse_button.take() {
+                    let modes = self.ws.terminal.input_modes();
                     self.send(&input::mouse(
                         button,
-                        self.pointer.0,
-                        self.pointer.1,
+                        self.ws.pointer.0,
+                        self.ws.pointer.1,
                         true,
                         self.modifiers,
                         modes.mouse_sgr,
                     ));
                 }
-                self.selecting = false;
+                self.ws.selecting = false;
                 return;
             }
             if matches!(
@@ -2771,30 +2913,30 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => self.close_all_tabs(),
             WindowEvent::Resized(size) => self.fit(size.width, size.height),
             WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                self.scale = scale_factor as f32 * self.settings.font_size / FONT_PX;
+                self.ws.scale = scale_factor as f32 * self.settings.font_size / FONT_PX;
                 self.rebuild_renderer();
             }
             WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
             WindowEvent::Focused(f) => {
-                self.focused = f;
-                self.dirty = true;
-                if self.terminal.input_modes().focus_events {
+                self.ws.focused = f;
+                self.ws.dirty = true;
+                if self.ws.terminal.input_modes().focus_events {
                     self.send(if f { b"\x1b[I" } else { b"\x1b[O" });
                 }
             }
             WindowEvent::Ime(Ime::Enabled) => {}
-            WindowEvent::Ime(Ime::Disabled) => self.ime = false,
-            WindowEvent::Ime(Ime::Preedit(text, _)) => self.ime = !text.is_empty(),
+            WindowEvent::Ime(Ime::Disabled) => self.ws.ime = false,
+            WindowEvent::Ime(Ime::Preedit(text, _)) => self.ws.ime = !text.is_empty(),
             WindowEvent::Ime(Ime::Commit(text)) => {
-                self.ime = false;
+                self.ws.ime = false;
                 self.send(text.as_bytes());
-                self.offset = 0;
-                self.dirty = true;
+                self.ws.offset = 0;
+                self.ws.dirty = true;
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 self.git_activity = Instant::now();
                 if matches!(event.logical_key, Key::Named(NamedKey::Enter)) {
-                    self.tabs[self.active_tab].git.invalidate_initial();
+                    self.ws.tabs[self.ws.active_tab].git.invalidate_initial();
                 }
                 let shortcut = self.modifiers.control_key() && self.modifiers.shift_key();
                 if shortcut
@@ -2806,7 +2948,7 @@ impl ApplicationHandler for App {
                 {
                     let text = self.selection_text();
                     if !text.is_empty() {
-                        if let Some(w) = self.window.as_ref() {
+                        if let Some(w) = self.ws.window.as_ref() {
                             if let Err(e) = clipboard::write(w, &text) {
                                 log::warn!("Copy: {e}");
                             }
@@ -2823,64 +2965,64 @@ impl ApplicationHandler for App {
                     )
                 {
                     if matches!(event.logical_key, Key::Named(NamedKey::PageUp)) {
-                        self.offset =
-                            (self.offset + self.rows as usize).min(self.terminal.scrollback_len());
+                        self.ws.offset = (self.ws.offset + self.ws.rows as usize)
+                            .min(self.ws.terminal.scrollback_len());
                     } else {
-                        self.offset = self.offset.saturating_sub(self.rows as usize);
+                        self.ws.offset = self.ws.offset.saturating_sub(self.ws.rows as usize);
                     }
-                    self.dirty = true;
-                } else if !self.ime {
+                    self.ws.dirty = true;
+                } else if !self.ws.ime {
                     if let Some(bytes) =
-                        input::keypad(event.physical_key, self.terminal.input_modes()).or_else(
+                        input::keypad(event.physical_key, self.ws.terminal.input_modes()).or_else(
                             || {
                                 input::encode(
                                     &event.logical_key,
                                     event.text.as_deref(),
                                     self.modifiers,
-                                    self.terminal.input_modes(),
+                                    self.ws.terminal.input_modes(),
                                 )
                             },
                         )
                     {
-                        self.offset = 0;
-                        self.selection = None;
+                        self.ws.offset = 0;
+                        self.ws.selection = None;
                         self.send(&bytes);
-                        self.dirty = true;
+                        self.ws.dirty = true;
                     }
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                let col = ((position.x as f32 - PAD * self.scale - self.left_inset)
-                    / (CELL_W * self.scale))
+                let col = ((position.x as f32 - PAD * self.ws.scale - self.ws.left_inset)
+                    / (CELL_W * self.ws.scale))
                     .max(0.) as u16;
-                let row = ((position.y as f32 - (PAD + ui::TAB_HEIGHT) * self.scale)
-                    / (CELL_H * self.scale))
+                let row = ((position.y as f32 - (PAD + ui::TAB_HEIGHT) * self.ws.scale)
+                    / (CELL_H * self.ws.scale))
                     .max(0.) as u16;
-                self.pointer = (row.min(self.rows - 1), col.min(self.cols - 1));
-                let modes = self.terminal.input_modes();
+                self.ws.pointer = (row.min(self.ws.rows - 1), col.min(self.ws.cols - 1));
+                let modes = self.ws.terminal.input_modes();
                 if !self.modifiers.shift_key()
                     && (modes.mouse_tracking == 1003
-                        || (modes.mouse_tracking == 1002 && self.mouse_button.is_some()))
+                        || (modes.mouse_tracking == 1002 && self.ws.mouse_button.is_some()))
                 {
                     self.send(&input::mouse(
-                        32 + self.mouse_button.unwrap_or(3),
-                        self.pointer.0,
-                        self.pointer.1,
+                        32 + self.ws.mouse_button.unwrap_or(3),
+                        self.ws.pointer.0,
+                        self.ws.pointer.1,
                         false,
                         self.modifiers,
                         modes.mouse_sgr,
                     ));
                 }
-                if self.selecting {
+                if self.ws.selecting {
                     let top = self.history_start();
-                    if let Some((_, b)) = self.selection.as_mut() {
-                        *b = (top + self.pointer.0 as usize, self.pointer.1);
+                    if let Some((_, b)) = self.ws.selection.as_mut() {
+                        *b = (top + self.ws.pointer.0 as usize, self.ws.pointer.1);
                     }
-                    self.dirty = true;
+                    self.ws.dirty = true;
                 }
             }
             WindowEvent::MouseInput { state, button, .. }
-                if self.terminal.input_modes().mouse_tracking > 0
+                if self.ws.terminal.input_modes().mouse_tracking > 0
                     && !self.modifiers.shift_key() =>
             {
                 let code = match button {
@@ -2890,14 +3032,14 @@ impl ApplicationHandler for App {
                     _ => return,
                 };
                 let released = state == ElementState::Released;
-                self.mouse_button = if released { None } else { Some(code) };
+                self.ws.mouse_button = if released { None } else { Some(code) };
                 self.send(&input::mouse(
                     code,
-                    self.pointer.0,
-                    self.pointer.1,
+                    self.ws.pointer.0,
+                    self.ws.pointer.1,
                     released,
                     self.modifiers,
-                    self.terminal.input_modes().mouse_sgr,
+                    self.ws.terminal.input_modes().mouse_sgr,
                 ));
             }
             WindowEvent::MouseInput {
@@ -2905,51 +3047,52 @@ impl ApplicationHandler for App {
                 button: MouseButton::Left,
                 ..
             } => {
-                self.selecting = state == ElementState::Pressed;
-                if self.selecting {
+                self.ws.selecting = state == ElementState::Pressed;
+                if self.ws.selecting {
                     let p = (
-                        self.history_start() + self.pointer.0 as usize,
-                        self.pointer.1,
+                        self.history_start() + self.ws.pointer.0 as usize,
+                        self.ws.pointer.1,
                     );
-                    self.selection = Some((p, p));
+                    self.ws.selection = Some((p, p));
                 }
-                self.dirty = true;
+                self.ws.dirty = true;
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
                 button: MouseButton::Right,
                 ..
             } => {
-                if !self.ui_mouse_latch.contains(&MouseButton::Right) {
-                    self.ui_mouse_latch.push(MouseButton::Right);
+                if !self.ws.ui_mouse_latch.contains(&MouseButton::Right) {
+                    self.ws.ui_mouse_latch.push(MouseButton::Right);
                 }
                 self.open_context_menu();
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 let lines = match delta {
                     MouseScrollDelta::LineDelta(_, y) => y * 3.,
-                    MouseScrollDelta::PixelDelta(p) => p.y as f32 / (CELL_H * self.scale),
+                    MouseScrollDelta::PixelDelta(p) => p.y as f32 / (CELL_H * self.ws.scale),
                 };
-                if self.terminal.input_modes().mouse_tracking > 0 && !self.modifiers.shift_key() {
+                if self.ws.terminal.input_modes().mouse_tracking > 0 && !self.modifiers.shift_key()
+                {
                     for _ in 0..lines.abs().ceil().min(64.) as u8 {
                         self.send(&input::mouse(
                             if lines > 0. { 64 } else { 65 },
-                            self.pointer.0,
-                            self.pointer.1,
+                            self.ws.pointer.0,
+                            self.ws.pointer.1,
                             false,
                             self.modifiers,
-                            self.terminal.input_modes().mouse_sgr,
+                            self.ws.terminal.input_modes().mouse_sgr,
                         ));
                     }
                     return;
                 }
                 if lines > 0. {
-                    self.offset =
-                        (self.offset + lines.ceil() as usize).min(self.terminal.scrollback_len());
+                    self.ws.offset = (self.ws.offset + lines.ceil() as usize)
+                        .min(self.ws.terminal.scrollback_len());
                 } else {
-                    self.offset = self.offset.saturating_sub((-lines).ceil() as usize);
+                    self.ws.offset = self.ws.offset.saturating_sub((-lines).ceil() as usize);
                 }
-                self.dirty = true;
+                self.ws.dirty = true;
             }
             WindowEvent::RedrawRequested => self.draw(),
             _ => {}
@@ -2960,11 +3103,58 @@ impl ApplicationHandler for App {
         self.poll_updates();
         self.poll_settings_files();
         self.refresh_themes();
+        self.poll_git_status();
+        match self.pump() {
+            Pump::Keep => {}
+            Pump::Close => {
+                if self.background.is_empty() {
+                    event_loop.exit();
+                    return;
+                }
+                self.retire_mounted();
+            }
+            Pump::Exit => {
+                event_loop.exit();
+                return;
+            }
+        }
+        // Every unmounted window keeps draining and closing on its own schedule.
+        let mut index = 0;
+        while index < self.background.len() {
+            std::mem::swap(&mut self.ws, &mut self.background[index]);
+            let outcome = self.pump();
+            std::mem::swap(&mut self.ws, &mut self.background[index]);
+            match outcome {
+                Pump::Keep => index += 1,
+                Pump::Close => {
+                    let mut closed = self.background.remove(index);
+                    closed.window.take();
+                }
+                Pump::Exit => {
+                    event_loop.exit();
+                    return;
+                }
+            }
+        }
+        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + FRAME));
+    }
+}
+/// What pumping one window produced.
+enum Pump {
+    Keep,
+    /// The window has no sessions left and should be destroyed.
+    Close,
+    /// The process cannot continue.
+    Exit,
+}
+impl App {
+    /// Drain, tick and request a redraw for the mounted workspace only. Callers
+    /// mount each window in turn, so no window can silently stop updating.
+    fn pump(&mut self) -> Pump {
         self.drain();
         self.drain_inactive();
-        self.poll_git_status();
         let mut inactive_done = Vec::new();
-        for (i, tab) in self.tabs.iter_mut().enumerate() {
+        for (i, tab) in self.ws.tabs.iter_mut().enumerate() {
             let Some(state) = tab.saved.as_mut() else {
                 continue;
             };
@@ -3008,34 +3198,34 @@ impl ApplicationHandler for App {
                     state.closing = true;
                     runtime.request_close();
                     if error.to_string().contains("exceeded") {
-                        self.failure = Some(error.to_string());
-                        event_loop.exit();
-                        return;
+                        self.ws.failure = Some(error.to_string());
+                        return Pump::Exit;
                     }
                 }
             }
         }
         for index in inactive_done.into_iter().rev() {
             if let Some(broker) = self.privacy_broker.as_ref() {
-                broker.unregister(self.tabs[index].id);
+                broker.unregister(self.ws.tabs[index].id);
             }
-            self.tabs.remove(index);
-            if index < self.active_tab {
-                self.active_tab -= 1;
+            self.ws.tabs.remove(index);
+            if index < self.ws.active_tab {
+                self.ws.active_tab -= 1;
             }
-            self.dirty = true;
+            self.ws.dirty = true;
         }
-        let mut active_done = self.runtime.is_none() && self.active_closing;
-        if let Some(runtime) = self.runtime.as_mut() {
+        let mut active_done = self.ws.runtime.is_none() && self.ws.active_closing;
+        if let Some(runtime) = self.ws.runtime.as_mut() {
             match runtime.tick() {
                 Ok(true) => {
-                    self.terminal.finish();
-                    if let Some(window) = self.window.as_ref() {
+                    self.ws.terminal.finish();
+                    if let Some(window) = self.ws.window.as_ref() {
                         log::info!("Window title: {:?}", window.title());
                     }
                     #[cfg(debug_assertions)]
                     if let Ok(marker) = std::env::var("JUNA_ACCEPT_MARKER") {
                         let content: String = self
+                            .ws
                             .terminal
                             .snapshot(0)
                             .cells
@@ -3054,7 +3244,7 @@ impl ApplicationHandler for App {
                         "Shell exited: {:?}; stream: {:?}; frames={}",
                         runtime.exit,
                         runtime.stream.stats(),
-                        self.frames
+                        self.ws.frames
                     );
                     active_done = true;
                 }
@@ -3062,72 +3252,85 @@ impl ApplicationHandler for App {
                 Err(error) => {
                     let timed_out = error.to_string().contains("exceeded");
                     self.fail(error.to_string());
-                    self.active_closing = true;
+                    self.ws.active_closing = true;
                     if timed_out {
-                        event_loop.exit();
-                        return;
+                        return Pump::Exit;
                     }
                 }
             }
         }
-        if active_done && !self.tabs.is_empty() {
+        if active_done && !self.ws.tabs.is_empty() {
             if let Some(broker) = self.privacy_broker.as_ref() {
-                broker.unregister(self.tabs[self.active_tab].id);
+                broker.unregister(self.ws.tabs[self.ws.active_tab].id);
             }
-            self.tabs.remove(self.active_tab);
-            if self.tabs.is_empty() {
+            self.ws.tabs.remove(self.ws.active_tab);
+            if self.ws.tabs.is_empty() {
                 log::info!("Window closing: final terminal session completed");
-                self.runtime.take();
-                event_loop.exit();
-                return;
+                self.ws.runtime.take();
+                return Pump::Close;
             }
-            let next = self.active_tab.min(self.tabs.len() - 1);
+            let next = self.ws.active_tab.min(self.ws.tabs.len() - 1);
             self.restore_session(next);
         }
-        let sync = self.terminal.input_modes().synchronized_output;
+        let sync = self.ws.terminal.input_modes().synchronized_output;
         if self
             .ui
             .as_ref()
             .and_then(|u| u.target_tab)
-            .is_some_and(|id| !self.tabs.iter().any(|t| t.id == id))
+            .is_some_and(|id| {
+                !std::iter::once(&self.ws)
+                    .chain(self.background.iter())
+                    .any(|workspace| workspace.tabs.iter().any(|tab| tab.id == id))
+            })
         {
             self.close_ui();
         }
         if !sync {
-            self.last_sync = Instant::now();
+            self.ws.last_sync = Instant::now();
         }
-        if sync && self.last_sync.elapsed() > Duration::from_secs(1) {
-            self.tabs[self.active_tab]
+        if sync && self.ws.last_sync.elapsed() > Duration::from_secs(1) {
+            self.ws.tabs[self.ws.active_tab]
                 .privacy
-                .commit_timeout(&self.terminal, self.offset);
+                .commit_timeout(&self.ws.terminal, self.ws.offset);
         }
         let now = Instant::now();
-        if self.tabs.iter().any(|t| {
+        if self.ws.tabs.iter().any(|t| {
             t.attention.is_some_and(|at| {
                 (now.duration_since(at).as_millis() as u64) < ui::ATTENTION_FLASH_MS
             })
         }) {
-            self.dirty = true;
+            self.ws.dirty = true;
         }
-        if self.dirty
-            && !self.minimized
-            && (!sync || self.privacy_dirty || self.last_sync.elapsed() > Duration::from_secs(1))
+        if self.ws.dirty
+            && !self.ws.minimized
+            && (!sync || self.privacy_dirty || self.ws.last_sync.elapsed() > Duration::from_secs(1))
         {
-            if let Some(w) = self.window.as_ref() {
+            if let Some(w) = self.ws.window.as_ref() {
                 w.request_redraw();
             }
         }
-        if self.last_report.elapsed() > Duration::from_secs(10) {
-            self.last_report = Instant::now();
-            if let Some(r) = self.runtime.as_ref() {
+        if self.ws.last_report.elapsed() > Duration::from_secs(10) {
+            self.ws.last_report = Instant::now();
+            if let Some(r) = self.ws.runtime.as_ref() {
                 log::info!(
                     "stream={:?}, history={}",
                     r.stream.stats(),
-                    self.terminal.scrollback_len()
+                    self.ws.terminal.scrollback_len()
                 );
             }
         }
-        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + FRAME));
+        Pump::Keep
+    }
+    /// Promote a background window after the mounted one closed, or exit when it
+    /// was the last one.
+    fn retire_mounted(&mut self) {
+        if let Some(mut next) = self.background.pop() {
+            std::mem::swap(&mut self.ws, &mut next);
+            next.window.take();
+            log::info!("Window closed; {} remaining", self.background.len() + 1);
+        } else {
+            log::info!("Last window closed");
+        }
     }
 }
 pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
@@ -3184,7 +3387,7 @@ pub fn run(cols: u16, rows: u16) -> Result<(), Box<dyn std::error::Error>> {
     let event_loop = EventLoop::new()?;
     let mut app = App::new(cols, rows);
     event_loop.run_app(&mut app)?;
-    if let Some(failure) = app.failure.take() {
+    if let Some(failure) = app.ws.failure.take() {
         return Err(failure.into());
     }
     Ok(())
@@ -3209,19 +3412,19 @@ mod option_tests {
         app.store = crate::settings::Store::new(root.clone());
         app.settings = crate::settings::Settings::default();
         let token = "0123456789abcdef0123456789abcdef";
-        app.terminal.advance(
+        app.ws.terminal.advance(
             format!("\x1b]777;JunaPrivate;{token}\x1b\\░░░░░\x1b]777;JunaPrivate;0\x1b\\")
                 .as_bytes(),
         );
-        app.tabs[0]
+        app.ws.tabs[0]
             .privacy
             .accept(vec![(token.into(), "192.0.2.55".into())]);
-        app.pointer_px = [PAD + 5., PAD + ui::TAB_HEIGHT + 5.];
+        app.ws.pointer_px = [PAD + 5., PAD + ui::TAB_HEIGHT + 5.];
         let moved = WindowEvent::CursorMoved {
             device_id: winit::event::DeviceId::dummy(),
             position: winit::dpi::PhysicalPosition::new(
-                app.pointer_px[0] as f64,
-                app.pointer_px[1] as f64,
+                app.ws.pointer_px[0] as f64,
+                app.ws.pointer_px[1] as f64,
             ),
         };
         app.privacy_event(&moved);
@@ -3235,9 +3438,9 @@ mod option_tests {
             .text
             .iter()
             .any(|text| text.value == "192.0.2.55"));
-        app.selection = Some(((0, 1), (0, 3)));
+        app.ws.selection = Some(((0, 1), (0, 3)));
         assert_eq!(app.selection_text(), "░░░");
-        app.terminal.advance(b"\x1b[?2026h\rchanged");
+        app.ws.terminal.advance(b"\x1b[?2026h\rchanged");
         app.privacy_event(&WindowEvent::ModifiersChanged(
             ModifiersState::empty().into(),
         ));
@@ -3259,12 +3462,18 @@ mod option_tests {
         let mut app = App::new(20, 3);
         app.store = crate::settings::Store::new(root.clone());
         app.settings = crate::settings::Settings::default();
-        let cells = app.terminal.snapshot(0).cells;
+        let cells = app.ws.terminal.snapshot(0).cells;
         app.open_ui(ui::Kind::Updates);
         app.ui_action(ui::Action::InstallUpdate);
         assert_eq!(app.ui.as_ref().unwrap().kind, ui::Kind::Updates);
-        assert!(!app.closing_all);
+        assert!(!app.ws.closing_all);
         assert!(app.update_worker.is_none());
+        app.background.push(Workspace::new(20, 3));
+        app.ui_action(ui::Action::ConfirmUpdate);
+        assert!(app.update_worker.is_none());
+        assert!(!app.ws.closing_all);
+        assert!(app.ui.as_ref().unwrap().message.contains("detached"));
+        app.background.clear();
         app.ui_action(ui::Action::UpdateChannel("stable".into()));
         assert_eq!(app.store.load().0.update_channel, "stable");
         app.command_update_pending = true;
@@ -3277,12 +3486,12 @@ mod option_tests {
         });
         assert_eq!(app.ui.as_ref().unwrap().kind, ui::Kind::ConfirmUpdate);
         assert_eq!(app.ui.as_ref().unwrap().focus, 1);
-        assert!(!app.closing_all);
+        assert!(!app.ws.closing_all);
         assert!(app.update_worker.is_none());
         assert_eq!(app.settings.update_channel, "stable");
-        assert_eq!(app.terminal.snapshot(0).cells, cells);
+        assert_eq!(app.ws.terminal.snapshot(0).cells, cells);
         assert_eq!(app.store.load().0.update_channel, "stable");
-        assert_eq!(app.terminal.snapshot(0).cells, cells);
+        assert_eq!(app.ws.terminal.snapshot(0).cells, cells);
         app.open_ui(ui::Kind::ConfirmUpdate);
         let ui = app.ui.as_ref().unwrap();
         let rows = ui.rows(&app.themes, &app.settings);
@@ -3348,21 +3557,21 @@ mod option_tests {
         assert!(saved.show_line_numbers);
         app.settings.show_line_numbers = true;
         app.fit(1024, 700);
-        let primary = app.cols;
-        assert!(app.left_inset > 0.);
-        app.terminal.advance(b"\x1b[?1049h");
+        let primary = app.ws.cols;
+        assert!(app.ws.left_inset > 0.);
+        app.ws.terminal.advance(b"\x1b[?1049h");
         app.fit(1024, 700);
-        assert_eq!(app.left_inset, 0.);
-        assert!(app.cols > primary);
-        app.terminal.advance(b"\x1b[?1049l");
+        assert_eq!(app.ws.left_inset, 0.);
+        assert!(app.ws.cols > primary);
+        app.ws.terminal.advance(b"\x1b[?1049l");
         app.fit(1024, 700);
-        assert_eq!(app.cols, primary);
+        assert_eq!(app.ws.cols, primary);
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn family_bulk_controls_clear_search_without_touching_terminal() {
         let mut app = App::new(20, 3);
-        let before = app.terminal.snapshot(0).cells;
+        let before = app.ws.terminal.snapshot(0).cells;
         app.open_ui(ui::Kind::Themes);
         app.ui_action(ui::Action::ExpandAll);
         let panel = app.ui.as_ref().unwrap();
@@ -3388,12 +3597,12 @@ mod option_tests {
             .rows(&app.themes, &app.settings)
             .iter()
             .any(|row| matches!(row.action, ui::Action::Pick(_))));
-        assert_eq!(app.terminal.snapshot(0).cells, before);
+        assert_eq!(app.ws.terminal.snapshot(0).cells, before);
     }
     #[test]
     fn middle_click_confirmation_defaults_to_cancel() {
         let mut app = App::new(20, 3);
-        app.pointer_px = [100., 12.];
+        app.ws.pointer_px = [100., 12.];
         let middle = WindowEvent::MouseInput {
             device_id: winit::event::DeviceId::dummy(),
             state: ElementState::Pressed,
@@ -3405,8 +3614,8 @@ mod option_tests {
         assert_eq!(panel.target_tab, Some(1));
         assert_eq!(panel.focus, 1);
         app.ui_action(ui::Action::Cancel);
-        assert!(!app.active_closing);
-        app.pointer_px = [100., 100.];
+        assert!(!app.ws.active_closing);
+        app.ws.pointer_px = [100., 100.];
         assert!(!app.tab_controls(&middle));
     }
     #[test]
@@ -3432,7 +3641,7 @@ mod option_tests {
     #[test]
     fn right_click_reanchors_and_switches_between_body_and_tab_menu() {
         let mut app = App::new(20, 3);
-        app.pointer_px = [100., 100.];
+        app.ws.pointer_px = [100., 100.];
         app.open_context_menu();
         assert_eq!(app.ui.as_ref().unwrap().kind, ui::Kind::Context);
         let right = WindowEvent::MouseInput {
@@ -3440,10 +3649,10 @@ mod option_tests {
             state: ElementState::Pressed,
             button: MouseButton::Right,
         };
-        app.pointer_px = [300., 200.];
+        app.ws.pointer_px = [300., 200.];
         assert!(app.handle_ui(&right));
         assert_eq!(app.ui.as_ref().unwrap().anchor, [300., 200.]);
-        app.pointer_px = [100., 12.];
+        app.ws.pointer_px = [100., 12.];
         assert!(app.handle_ui(&right));
         assert_eq!(app.ui.as_ref().unwrap().kind, ui::Kind::TabContext);
         assert_eq!(app.ui.as_ref().unwrap().target_tab, Some(1));
@@ -3451,7 +3660,7 @@ mod option_tests {
     #[test]
     fn tab_menu_targets_stable_identity_and_rename_is_transactional() {
         let mut app = App::new(20, 3);
-        app.tabs.push(tabs::Tab {
+        app.ws.tabs.push(tabs::Tab {
             id: 42,
             label: "Second".into(),
             pinned: false,
@@ -3473,32 +3682,32 @@ mod option_tests {
         app.ui_action(ui::Action::RenameTab);
         app.ui.as_mut().unwrap().paste_text("Work 日本語");
         app.ui_action(ui::Action::Cancel);
-        assert_eq!(app.tabs[1].label, "Second");
+        assert_eq!(app.ws.tabs[1].label, "Second");
         app.open_ui(ui::Kind::TabContext);
         app.ui.as_mut().unwrap().target_tab = Some(42);
         app.ui_action(ui::Action::RenameTab);
         app.ui.as_mut().unwrap().paste_text("Work 日本語");
         app.ui_action(ui::Action::SaveTabName);
-        assert_eq!(app.tabs[1].label, "Work 日本語");
-        assert!(app.tabs[1].pinned);
-        assert_eq!(app.active_tab, 0);
+        assert_eq!(app.ws.tabs[1].label, "Work 日本語");
+        assert!(app.ws.tabs[1].pinned);
+        assert_eq!(app.ws.active_tab, 0);
         app.open_ui(ui::Kind::TabContext);
         app.ui.as_mut().unwrap().target_tab = Some(42);
         app.ui_action(ui::Action::CloseTargetTab);
-        assert!(app.tabs[1].saved.as_ref().unwrap().closing);
-        assert!(!app.active_closing);
+        assert!(app.ws.tabs[1].saved.as_ref().unwrap().closing);
+        assert!(!app.ws.active_closing);
         app.open_ui(ui::Kind::TabContext);
         app.ui.as_mut().unwrap().target_tab = Some(999);
         app.ui_action(ui::Action::CloseTargetTab);
-        assert!(!app.active_closing);
+        assert!(!app.ws.active_closing);
     }
     #[test]
     fn reordering_keeps_the_active_engine_with_its_tab_record() {
         let mut app = App::new(20, 3);
-        app.terminal.advance(b"active");
-        let active = app.terminal.snapshot(0).cells;
+        app.ws.terminal.advance(b"active");
+        let active = app.ws.terminal.snapshot(0).cells;
         for id in [2, 3] {
-            app.tabs.push(tabs::Tab {
+            app.ws.tabs.push(tabs::Tab {
                 id,
                 label: format!("Tab {id}"),
                 pinned: false,
@@ -3518,30 +3727,111 @@ mod option_tests {
         }
         app.move_tab(0, 3);
         assert_eq!(
-            app.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
+            app.ws.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
             [2, 3, 1]
         );
-        assert_eq!(app.active_tab, 2);
-        assert_eq!(app.tabs[app.active_tab].id, 1);
-        assert!(app.tabs[app.active_tab].saved.is_none());
-        assert!(app.tabs[0].saved.is_some() && app.tabs[1].saved.is_some());
-        assert_eq!(app.terminal.snapshot(0).cells, active);
+        assert_eq!(app.ws.active_tab, 2);
+        assert_eq!(app.ws.tabs[app.ws.active_tab].id, 1);
+        assert!(app.ws.tabs[app.ws.active_tab].saved.is_none());
+        assert!(app.ws.tabs[0].saved.is_some() && app.ws.tabs[1].saved.is_some());
+        assert_eq!(app.ws.terminal.snapshot(0).cells, active);
         // Dropping into either adjacent gap leaves the order unchanged.
         app.move_tab(2, 2);
         assert_eq!(
-            app.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
+            app.ws.tabs.iter().map(|tab| tab.id).collect::<Vec<_>>(),
             [2, 3, 1]
         );
     }
     #[test]
+    fn detaching_moves_the_session_and_leaves_the_source_valid() {
+        let mut app = App::new(20, 3);
+        app.ws.terminal.advance(b"detached");
+        let moved = app.ws.terminal.snapshot(0).cells;
+        let mut second = TerminalState::new(20, 3);
+        second.advance(b"stays");
+        let stays = second.snapshot(0).cells;
+        app.ws.tabs.push(tabs::Tab {
+            id: 2,
+            label: "Second".into(),
+            pinned: false,
+            shell: "PowerShell".into(),
+            git: git_status::View::new(None),
+            attention: None,
+            privacy: Default::default(),
+            saved: Some(tabs::SavedSession {
+                terminal: second,
+                runtime: None,
+                offset: 0,
+                selection: None,
+                failure: None,
+                closing: false,
+            }),
+        });
+        // The window's only tab is never detached.
+        let mut single = App::new(20, 3);
+        assert!(single.split_tab(0).is_none());
+        assert_eq!(single.ws.tabs.len(), 1);
+        // The active tab leaves with its running screen attached to the record.
+        let tab = app.split_tab(0).expect("detach the active tab");
+        assert_eq!(tab.id, 1);
+        assert_eq!(
+            tab.saved.as_ref().unwrap().terminal.snapshot(0).cells,
+            moved
+        );
+        assert_eq!(app.ws.tabs.len(), 1);
+        assert_eq!(app.ws.tabs[0].id, 2);
+        assert_eq!(app.ws.active_tab, 0);
+        assert!(app.ws.tabs[0].saved.is_none());
+        assert_eq!(app.ws.terminal.snapshot(0).cells, stays);
+        let mut detached = Workspace::new(20, 3);
+        detached.seed_tab(tab);
+        detached.dirty = false;
+        app.background.push(detached);
+        let token = "1234567890abcdef1234567890abcdef";
+        app.accept_privacy_fields(1, vec![(token.into(), "192.0.2.55".into())]);
+        assert_eq!(
+            app.background[0].tabs[0].privacy.value(token),
+            Some("192.0.2.55")
+        );
+        assert!(app.background[0].dirty);
+        assert_eq!(app.ws.tabs[0].privacy.value(token), None);
+        // Detaching an inactive record does not disturb the active engine.
+        let mut app = App::new(20, 3);
+        app.ws.terminal.advance(b"active");
+        let active = app.ws.terminal.snapshot(0).cells;
+        app.ws.tabs.push(tabs::Tab {
+            id: 2,
+            label: "Second".into(),
+            pinned: false,
+            shell: "PowerShell".into(),
+            git: git_status::View::new(None),
+            attention: None,
+            privacy: Default::default(),
+            saved: Some(tabs::SavedSession {
+                terminal: TerminalState::new(20, 3),
+                runtime: None,
+                offset: 0,
+                selection: None,
+                failure: None,
+                closing: false,
+            }),
+        });
+        let tab = app.split_tab(1).expect("detach an inactive tab");
+        assert!(tab.saved.is_some());
+        assert_eq!(app.ws.tabs.len(), 1);
+        assert_eq!(app.ws.active_tab, 0);
+        assert!(app.ws.tabs[0].saved.is_none());
+        assert_eq!(app.ws.terminal.snapshot(0).cells, active);
+    }
+    #[test]
     fn switching_tabs_moves_complete_screen_and_view_state() {
         let mut app = App::new(20, 3);
-        app.terminal.advance(b"first\x1b[?1h");
-        app.selection = Some(((0, 0), (0, 2)));
-        let first = app.terminal.snapshot(0).cells;
+        app.ws.terminal.advance(b"first\x1b[?1h");
+        app.ws.selection = Some(((0, 0), (0, 2)));
+        let first = app.ws.terminal.snapshot(0).cells;
         let mut second = TerminalState::new(20, 3);
         second.advance(b"second\x1b[31m");
-        app.tabs.push(tabs::Tab {
+        app.ws.tabs.push(tabs::Tab {
             id: 2,
             git: git_status::View::new(None),
             label: "Second".into(),
@@ -3559,16 +3849,16 @@ mod option_tests {
             }),
         });
         app.switch_tab(1);
-        assert!(app.selection.is_none());
-        assert!(!app.terminal.input_modes().application_cursor);
-        let second = app.terminal.snapshot(0).cells;
+        assert!(app.ws.selection.is_none());
+        assert!(!app.ws.terminal.input_modes().application_cursor);
+        let second = app.ws.terminal.snapshot(0).cells;
         app.switch_tab(0);
-        assert_eq!(app.terminal.snapshot(0).cells, first);
-        assert!(app.terminal.input_modes().application_cursor);
-        assert_eq!(app.selection, Some(((0, 0), (0, 2))));
+        assert_eq!(app.ws.terminal.snapshot(0).cells, first);
+        assert!(app.ws.terminal.input_modes().application_cursor);
+        assert_eq!(app.ws.selection, Some(((0, 0), (0, 2))));
         app.switch_tab(1);
-        assert_eq!(app.terminal.snapshot(0).cells, second);
-        assert_eq!(app.tabs.iter().filter(|t| t.saved.is_none()).count(), 1);
+        assert_eq!(app.ws.terminal.snapshot(0).cells, second);
+        assert_eq!(app.ws.tabs.iter().filter(|t| t.saved.is_none()).count(), 1);
     }
     #[test]
     fn font_previews_cancel_save_and_zoom_persist_without_touching_cells() {
@@ -3576,8 +3866,8 @@ mod option_tests {
         let mut app = App::new(20, 3);
         app.store = crate::settings::Store::new(dir.clone());
         app.settings = crate::settings::Settings::default();
-        app.terminal.advance(b"font preview preserves bytes");
-        let cells = app.terminal.snapshot(0).cells;
+        app.ws.terminal.advance(b"font preview preserves bytes");
+        let cells = app.ws.terminal.snapshot(0).cells;
         app.open_ui(ui::Kind::Settings);
         app.ui_action(ui::Action::Fonts);
         app.ui_action(ui::Action::PickFont("Fira Code".into()));
@@ -3609,7 +3899,7 @@ mod option_tests {
         assert_eq!(app.store.load().0.font_size, 17.);
         app.modifiers = ModifiersState::empty();
         assert!(!app.handle_zoom(&wheel(40.)));
-        assert_eq!(app.terminal.snapshot(0).cells, cells);
+        assert_eq!(app.ws.terminal.snapshot(0).cells, cells);
         std::fs::remove_dir_all(dir).unwrap();
     }
     #[test]
@@ -3619,8 +3909,8 @@ mod option_tests {
         app.store = crate::settings::Store::new(dir.clone());
         app.settings = crate::settings::Settings::default();
         app.themes = crate::theme::builtins();
-        app.terminal.advance(b"terminal stays here");
-        let before = app.terminal.snapshot(0).cells;
+        app.ws.terminal.advance(b"terminal stays here");
+        let before = app.ws.terminal.snapshot(0).cells;
         app.ui_action(ui::Action::Themes);
         app.ui_action(ui::Action::Pick("nord".into()));
         assert_eq!(app.settings.active_theme_id, "nord");
@@ -3641,7 +3931,7 @@ mod option_tests {
         assert!(errors.is_empty());
         assert_eq!(settings.active_theme_id, app.settings.active_theme_id);
         assert!(themes.iter().any(|t| t.name == "Stored custom"));
-        assert_eq!(app.terminal.snapshot(0).cells, before);
+        assert_eq!(app.ws.terminal.snapshot(0).cells, before);
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

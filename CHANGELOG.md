@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.1-dev25 — tab tear-off into a new window
+
+- Drag a tab below the strip and release to move it into a new native window; the shell,
+  scrollback, working directory and view state move with it because the session is a value
+  move inside one process, not a restart.
+- Refuse to detach a window's only tab: the gesture is ignored and no detach affordance is
+  shown, so a window is never left empty or silently repopulated with a new shell.
+- Show a strip-edge accent and a "Release to open in a new window" hint while the pointer is in
+  the detach zone, and suppress the reorder band so the two outcomes cannot be confused.
+- Extract window-local state into `Workspace`; `App` mounts one workspace at a time and pumps
+  every window, so a detached window keeps draining output and closes on its own session end.
+- Create the destination window before removing the tab, so a window-creation failure leaves
+  the tab where it was without requesting that its session close.
+- Size a detached window from the source window's physical pixels; using its measured columns
+  and rows as a logical size inflated the new window at non-100% DPI.
+- Apply font and scale changes to every window, not only the mounted one.
+- Route protected Junafetch fields to detached tabs and refuse update installation until
+  detached windows are closed, so the installer cannot wait on their surviving process.
+- Acknowledge update startup once per process, rather than again when a detached window
+  presents its first frame.
+
 ## 0.1.1-dev24 — tab drag feedback
 
 - Show an outline of the tab being dragged, centred on the pointer and clamped to the strip.

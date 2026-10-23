@@ -70,7 +70,7 @@ fn position(_: &Window) -> Option<[f32; 2]> {
 
 impl App {
     pub(super) fn dropped_file(&mut self, path: &Path) {
-        let point = self.window.as_ref().and_then(|window| position(window));
+        let point = self.ws.window.as_ref().and_then(|window| position(window));
         if let Some(point) = point {
             if let Err(message) = self.drop_at(path, point) {
                 log::warn!("File drop: {message}");
@@ -78,21 +78,21 @@ impl App {
         }
     }
     pub(super) fn drop_at(&mut self, path: &Path, point: [f32; 2]) -> Result<bool, &'static str> {
-        let x = point[0] - PAD * self.scale - self.left_inset;
-        let y = point[1] - (PAD + ui::TAB_HEIGHT) * self.scale;
+        let x = point[0] - PAD * self.ws.scale - self.ws.left_inset;
+        let y = point[1] - (PAD + ui::TAB_HEIGHT) * self.ws.scale;
         if self.ui.is_some()
-            || self.active_closing
-            || self.minimized
+            || self.ws.active_closing
+            || self.ws.minimized
             || !x.is_finite()
             || !y.is_finite()
             || x < 0.
             || y < 0.
-            || x >= self.cols as f32 * CELL_W * self.scale
-            || y >= self.rows as f32 * CELL_H * self.scale
+            || x >= self.ws.cols as f32 * CELL_W * self.ws.scale
+            || y >= self.ws.rows as f32 * CELL_H * self.ws.scale
         {
             return Ok(false);
         }
-        let Some(runtime) = self.runtime.as_mut().filter(|r| !r.is_closing()) else {
+        let Some(runtime) = self.ws.runtime.as_mut().filter(|r| !r.is_closing()) else {
             return Ok(false);
         };
         if !path.is_absolute() {
@@ -102,22 +102,22 @@ impl App {
             .shell_spec
             .as_ref()
             .ok_or("Shell context unavailable")?;
-        let shell_path = if self.terminal.alternate_active() {
+        let shell_path = if self.ws.terminal.alternate_active() {
             Path::new("")
         } else {
             Path::new(&shell.program)
         };
         let text = text(path, shell_path)?;
-        let bytes = input::paste(&text, self.terminal.input_modes().bracketed_paste);
+        let bytes = input::paste(&text, self.ws.terminal.input_modes().bracketed_paste);
         runtime
             .write(&bytes)
             .map_err(|_| "File path could not be queued")?;
-        self.offset = 0;
-        self.selection = None;
+        self.ws.offset = 0;
+        self.ws.selection = None;
         self.privacy_reveal.hide();
         self.privacy_dirty = true;
         self.git_activity = Instant::now();
-        self.dirty = true;
+        self.ws.dirty = true;
         Ok(true)
     }
 }
@@ -173,11 +173,11 @@ mod tests {
         app.store = crate::settings::Store::new(root.clone());
         app.settings = crate::settings::Settings::default();
         app.shell_spec = Some(spec.clone());
-        app.runtime = Some(Runtime::spawn(&spec, Dimensions { cols: 80, rows: 5 }).unwrap());
+        app.ws.runtime = Some(Runtime::spawn(&spec, Dimensions { cols: 80, rows: 5 }).unwrap());
         let ready_deadline = Instant::now() + Duration::from_secs(15);
         let mut ready = Vec::new();
         loop {
-            let runtime = app.runtime.as_mut().unwrap();
+            let runtime = app.ws.runtime.as_mut().unwrap();
             ready.extend(runtime.stream.take());
             if String::from_utf8_lossy(&ready).contains("DROP_READY") {
                 break;
@@ -189,8 +189,8 @@ mod tests {
             );
             std::thread::sleep(Duration::from_millis(5));
         }
-        app.left_inset = 20.;
-        let point = [PAD + app.left_inset + 5., PAD + ui::TAB_HEIGHT + 5.];
+        app.ws.left_inset = 20.;
+        let point = [PAD + app.ws.left_inset + 5., PAD + ui::TAB_HEIGHT + 5.];
         assert!(!app.drop_at(&path, [PAD, point[1]]).unwrap());
         assert!(!app.drop_at(&path, [point[0], 0.]).unwrap());
         assert!(!app.drop_at(&path, [f32::NAN, point[1]]).unwrap());
@@ -202,12 +202,12 @@ mod tests {
         assert!(app.drop_at(&path, point).unwrap());
         assert!(app.privacy_dirty && app.privacy_reveal.token.is_none());
         std::thread::sleep(Duration::from_millis(200));
-        assert!(!app.runtime.as_mut().unwrap().tick().unwrap());
-        app.runtime.as_mut().unwrap().write(b"\r").unwrap();
+        assert!(!app.ws.runtime.as_mut().unwrap().tick().unwrap());
+        app.ws.runtime.as_mut().unwrap().write(b"\r").unwrap();
         let mut output = Vec::new();
         let deadline = Instant::now() + Duration::from_secs(15);
         loop {
-            let runtime = app.runtime.as_mut().unwrap();
+            let runtime = app.ws.runtime.as_mut().unwrap();
             output.extend(runtime.stream.take());
             if runtime.tick().unwrap() {
                 break;
@@ -223,7 +223,7 @@ mod tests {
             .take_while(|c| c.is_ascii_digit() || matches!(c, '_' | '-'))
             .collect::<String>();
         assert_eq!(
-            app.runtime.as_ref().unwrap().exit.unwrap().code(),
+            app.ws.runtime.as_ref().unwrap().exit.unwrap().code(),
             0,
             "length/first-difference/codepage: {diagnostic}"
         );

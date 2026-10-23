@@ -130,13 +130,22 @@ pub fn drag_start(point_x: f32, width: f32, scale: f32, strip: &Strip, count: us
     let edge = 24. * scale;
     if point_x < edge && strip.start > 0 {
         strip.start - 1
-    } else if point_x > width - strip.plus - edge
-        && strip.start + strip.visible < count
-    {
+    } else if point_x > width - strip.plus - edge && strip.start + strip.visible < count {
         strip.start + 1
     } else {
         strip.start
     }
+}
+/// Pointer travel below the strip before a drag becomes a detach gesture.
+pub const TAB_DETACH_SLOP: f32 = 24.;
+/// True when the pointer has left the tab strip far enough to detach the tab.
+/// The slop keeps a slightly sloppy horizontal drag from tearing a tab off.
+pub fn detach_zone(pointer_y: f32, scale: f32) -> bool {
+    pointer_y > (TAB_HEIGHT + TAB_DETACH_SLOP) * scale
+}
+/// A window always keeps one tab, so its only tab cannot be detached.
+pub fn detach_allowed(count: usize) -> bool {
+    count > 1
 }
 /// Accent used by drag feedback. Fixed rather than themed so the gesture reads
 /// the same in every theme, including low-contrast light ones.
@@ -152,6 +161,8 @@ pub struct DragView {
     pub start: usize,
     pub gap: usize,
     pub pointer_x: f32,
+    /// The pointer has left the strip: release detaches instead of reordering.
+    pub detach: bool,
 }
 /// Outline of the tab being dragged, centred on the pointer and kept inside the
 /// strip so it never draws over the new-tab button.
@@ -245,31 +256,51 @@ pub fn tab_scene(
         });
     }
     if let Some(drag) = drag {
-        let (band, marker) = drop_rects(drag.gap, &strip, width, scale);
-        let mut accent = DRAG_ACCENT;
-        accent[3] = DRAG_BAND_ALPHA;
-        out.rectangles.push(Rectangle {
-            rect: band,
-            color: accent,
-        });
-        out.rectangles.push(Rectangle {
-            rect: marker,
-            color: DRAG_ACCENT,
-        });
-        // Outline last so it reads above the band and the tab fills beneath it.
-        let ghost = ghost_rect(drag.pointer_x, width, scale, &strip);
-        let [x, y, w, h] = ghost;
-        let edge = (DRAG_OUTLINE * scale).max(1.);
-        for rect in [
-            [x, y, w, edge],
-            [x, y + h - edge, w, edge],
-            [x, y, edge, h],
-            [x + w - edge, y, edge, h],
-        ] {
+        if drag.detach {
+            // The tab is leaving this window: no destination band, and the hint
+            // sits below the strip where the pointer already is.
             out.rectangles.push(Rectangle {
-                rect,
+                rect: [
+                    0.,
+                    TAB_HEIGHT * scale - 2. * scale,
+                    width - plus,
+                    2. * scale,
+                ],
                 color: DRAG_ACCENT,
             });
+            out.text.push(Text {
+                pos: [12. * scale, (TAB_HEIGHT + 6.) * scale],
+                width: (width - 24. * scale).max(0.),
+                value: "Release to open in a new window".into(),
+                color: DRAG_ACCENT,
+            });
+        } else {
+            let (band, marker) = drop_rects(drag.gap, &strip, width, scale);
+            let mut accent = DRAG_ACCENT;
+            accent[3] = DRAG_BAND_ALPHA;
+            out.rectangles.push(Rectangle {
+                rect: band,
+                color: accent,
+            });
+            out.rectangles.push(Rectangle {
+                rect: marker,
+                color: DRAG_ACCENT,
+            });
+            // Outline last so it reads above the band and the tab fills beneath it.
+            let ghost = ghost_rect(drag.pointer_x, width, scale, &strip);
+            let [x, y, w, h] = ghost;
+            let edge = (DRAG_OUTLINE * scale).max(1.);
+            for rect in [
+                [x, y, w, edge],
+                [x, y + h - edge, w, edge],
+                [x, y, edge, h],
+                [x + w - edge, y, edge, h],
+            ] {
+                out.rectangles.push(Rectangle {
+                    rect,
+                    color: DRAG_ACCENT,
+                });
+            }
         }
     }
     out.text.push(Text {
@@ -857,7 +888,10 @@ impl Ui {
                     None,
                 ),
                 row(
-                    format!("Shell (new tabs): {}", super::shells::display(&settings.shell)),
+                    format!(
+                        "Shell (new tabs): {}",
+                        super::shells::display(&settings.shell)
+                    ),
                     Action::Shells,
                     None,
                 ),
@@ -1675,6 +1709,7 @@ mod tests {
                 start: 0,
                 gap: 2,
                 pointer_x: 100.,
+                detach: false,
             }),
         );
         // Strip background, active-tab fill, destination band, insertion marker
@@ -1704,6 +1739,7 @@ mod tests {
                 start: 0,
                 gap: 2,
                 pointer_x: 900.,
+                detach: false,
             }),
         );
         let ghost = ghost_rect(900., 800., 1., &two);
@@ -1729,6 +1765,46 @@ mod tests {
         // No drag leaves the strip exactly as it was.
         let idle = tab_scene(&["a".into()], 0, &[], false, 800., 1., None);
         assert_eq!(idle.rectangles.len(), 2);
+    }
+    #[test]
+    fn detach_zone_needs_clear_travel_and_the_only_tab_stays_put() {
+        // The slop keeps a slightly sloppy horizontal drag from tearing off.
+        assert!(!detach_zone(ui_tab_height(), 1.));
+        assert!(!detach_zone(ui_tab_height() + 20., 1.));
+        assert!(detach_zone(ui_tab_height() + 40., 1.));
+        // The threshold scales with the UI, not the physical pixel count.
+        assert!(!detach_zone(ui_tab_height() + 40., 2.));
+        assert!(detach_zone((ui_tab_height() + 40.) * 2., 2.));
+        assert!(!detach_allowed(1));
+        assert!(detach_allowed(2));
+    }
+    #[test]
+    fn detaching_hides_the_destination_and_shows_the_release_hint() {
+        let scene = tab_scene(
+            &["a".into(), "b".into()],
+            0,
+            &[],
+            false,
+            800.,
+            1.,
+            Some(DragView {
+                start: 0,
+                gap: 1,
+                pointer_x: 200.,
+                detach: true,
+            }),
+        );
+        // Strip background, active fill and the strip-edge accent; no band, no
+        // outline, because the tab is leaving rather than landing here.
+        assert_eq!(scene.rectangles.len(), 3);
+        assert!(scene.text.iter().any(|t| t.value.contains("new window")));
+        assert!(!scene
+            .rectangles
+            .iter()
+            .any(|r| r.color[3] == DRAG_BAND_ALPHA));
+    }
+    fn ui_tab_height() -> f32 {
+        TAB_HEIGHT
     }
     #[test]
     fn font_search_and_size_arrow_actions() {

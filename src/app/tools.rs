@@ -227,18 +227,18 @@ mod tests {
         let mut app = super::super::App::new(100, 20);
         app.store = crate::settings::Store::new(root.clone());
         app.settings = crate::settings::Settings::default();
-        app.terminal = terminal;
-        app.scale = 1.5;
-        app.left_inset = 24.;
-        app.tabs[0].privacy.accept(report.fields.clone());
+        app.ws.terminal = terminal;
+        app.ws.scale = 1.5;
+        app.ws.left_inset = 24.;
+        app.ws.tabs[0].privacy.accept(report.fields.clone());
         for (token, value) in &report.fields {
             let mut found = None;
-            for offset in 0..=app.terminal.scrollback_len() {
-                app.offset = offset;
-                app.tabs[0].privacy.update(&app.terminal, offset);
+            for offset in 0..=app.ws.terminal.scrollback_len() {
+                app.ws.offset = offset;
+                app.ws.tabs[0].privacy.update(&app.ws.terminal, offset);
                 for row in 0..20 {
                     for col in 0..100 {
-                        if app.tabs[0].privacy.field_at(row, col) == Some(token.as_str()) {
+                        if app.ws.tabs[0].privacy.field_at(row, col) == Some(token.as_str()) {
                             found = Some((row, col));
                             break;
                         }
@@ -252,18 +252,18 @@ mod tests {
                 }
             }
             let (row, col) = found.expect("actual ConPTY cells must map to their protected field");
-            app.pointer_px = [
-                super::super::PAD * app.scale
-                    + app.left_inset
-                    + (col as f32 + 0.5) * super::super::CELL_W * app.scale,
-                (super::super::PAD + super::super::ui::TAB_HEIGHT) * app.scale
-                    + (row as f32 + 0.5) * super::super::CELL_H * app.scale,
+            app.ws.pointer_px = [
+                super::super::PAD * app.ws.scale
+                    + app.ws.left_inset
+                    + (col as f32 + 0.5) * super::super::CELL_W * app.ws.scale,
+                (super::super::PAD + super::super::ui::TAB_HEIGHT) * app.ws.scale
+                    + (row as f32 + 0.5) * super::super::CELL_H * app.ws.scale,
             ];
             let moved = winit::event::WindowEvent::CursorMoved {
                 device_id: winit::event::DeviceId::dummy(),
                 position: winit::dpi::PhysicalPosition::new(
-                    app.pointer_px[0] as f64,
-                    app.pointer_px[1] as f64,
+                    app.ws.pointer_px[0] as f64,
+                    app.ws.pointer_px[1] as f64,
                 ),
             };
             app.privacy_event(&winit::event::WindowEvent::ModifiersChanged(
@@ -275,9 +275,9 @@ mod tests {
                 "real shaded cell did not reveal through app input"
             );
             assert!(app.privacy_overlay(2000, 1500).is_some());
-            app.selection = Some((
-                (app.tabs[0].privacy.top() + row as usize, col),
-                (app.tabs[0].privacy.top() + row as usize, col),
+            app.ws.selection = Some((
+                (app.ws.tabs[0].privacy.top() + row as usize, col),
+                (app.ws.tabs[0].privacy.top() + row as usize, col),
             ));
             assert!(!app.selection_text().contains(value));
             app.privacy_event(&winit::event::WindowEvent::ModifiersChanged(

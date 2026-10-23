@@ -387,6 +387,21 @@ rather than corrupting state at runtime.
 - No interior mutability, no `Arc<Mutex<Terminal>>`. If a second consumer of engine state
   ever appears, the answer is a `Snapshot` value type handed over, not shared access.
 
+### 3.1 Windows own their engines, the process owns the services
+
+Juna can own more than one native window. The rule stays literal: `Workspace`
+(`src/app/workspace.rs`) owns a window's `Renderer`, `TerminalState`, `Runtime` and tab records,
+and `App` mounts **exactly one** workspace at a time in `App::ws` while the others wait in
+`App::background`. Mounting is a value swap by `WindowId`, so no engine is reachable from two
+places, no engine is shared, and no state is duplicated between the mounted and unmounted forms.
+
+- Background windows are pumped explicitly (`about_to_wait` mounts each in turn), never by a
+  second thread.
+- A detached tab is a move of its record, including the `Runtime` and `TerminalState`: no pipe
+  duplication, no parser replay, no second writer.
+- `App` keeps settings, themes, workers, the privacy broker and the tab-ID counter. Those are
+  process-wide by construction, not per window.
+
 ### 3.0 Output stream integrity — normative
 
 Terminal output is an **ordered byte stream**. Losing bytes corrupts parser state

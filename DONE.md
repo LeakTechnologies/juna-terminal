@@ -1,3 +1,63 @@
+## Dev25 release validation (2026-10-23)
+
+Verified on the settled source in this session: locked/offline `cargo check`, strict all-target
+Clippy, and the full `cargo test` suite passed: 239 library tests and 24 other standard tests.
+Pinned Junafetch payload/source verification also passed. Full local evidence is retained in
+`target/acceptance/dev25/validation-final.log`.
+
+Explicit desktop acceptance passed: two real PowerShell sessions were automatically separated
+into two native windows, both consumed their final marker, and both closed normally. The first
+probe exited successfully but could not establish acceptance because the inherited warning-only
+log filter omitted its INFO evidence; the fixture now explicitly requests INFO and the rerun
+passed. Physical pointer dragging and typing in the detached window remain human checks.
+
+The isolated locked-installation rehearsal passed with the current helper and a stripped debug
+build: dev11 was replaced in place by dev25, the new process acknowledged startup, and settings,
+a custom theme and a user file retained their exact bytes. This is not a reproduction of the
+reported failure in the user's shipped dev23 helper and does not close that investigation.
+
+Completion review also repaired privacy-field routing to background workspaces, made update
+startup acknowledgment process-wide, and blocked installation while detached windows share the
+process. Failed destination-window creation now reports an error without closing the original
+session. Tab-specific panels remain valid while other workspaces are pumped. Hosted checks and
+published assets are verified after pushing the fresh tag; local results alone do not establish
+publication or stable acceptance.
+
+## Dev25 tab tear-off into a new window (2026-10-21)
+
+Implemented the detachment half of TAB_DRAG_DETACH_DESIGN.md. Window-local state moved into
+`Workspace` (`src/app/workspace.rs`); `App` keeps process-wide services and mounts one workspace
+at a time (`ws` plus `background`), swapping by `WindowId` in `window_event` and pumping each
+window in `about_to_wait` (`Pump::{Keep, Close, Exit}`). Because every existing engine path
+already operated on "the current window", this kept the one-thread/one-owner rule literal and
+avoided re-deriving state: the swap moves pointers, not engines.
+
+Detachment creates the destination window first, then moves the tab record, so a failed window
+creation leaves the tab in place. Detaching a window's only tab is refused, per the approved
+last-tab rule. A tab is never in two windows. Font and scale changes now rebuild every
+window's renderer.
+
+Two defects found and fixed during the cycle: a detached window was created from measured
+columns/rows as a *logical* size, which inflated it at 150% DPI (2019 px instead of 1524 px) —
+it now inherits the source window's physical size; and `about_to_wait` no longer drained or
+ticked anything after the pump extraction until `drain`/`drain_inactive` were moved into
+`pump`, which the "never used" warning surfaced.
+
+Verified this session: `cargo check --all-targets` exit 0, `cargo clippy --all-targets` exit 0,
+lib suite 239 passed / 2 ignored. New tests cover the detach zone threshold, the last-tab
+refusal, the detach scene (no destination band, release hint present), and `split_tab` moving
+either the active or an inactive record with its engine attached while leaving the source
+window with a valid active slot.
+
+Live run (debug build, `JUNA_STARTUP_TABS=2 JUNA_ACCEPT_DETACH=1`): two native windows, both
+1524×1062 and responsive; log `Detached tab 2; windows=2` with `source tabs=1`. One runtime test
+(`app::runtime::tests::exits_and_close_join_threads_without_losing_tail`) failed once in a full
+run and passed when re-run alone; it spawns a real shell and is timing-sensitive, and this change
+does not touch the runtime module.
+
+Not verified: the pointer gesture and typing into the detached window. Both need recorded human
+review; the tests prove geometry and state movement, not the interaction.
+
 ## Dev24 tab drag feedback (2026-10-21)
 
 Requested drag feedback. While a tab is dragged its slot is outlined as four thin filled

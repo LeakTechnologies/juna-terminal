@@ -28,36 +28,42 @@ impl App {
                 break;
             };
             if let Some(channel) = report.update_channel {
-                if self.tabs.iter().any(|tab| {
+                if self.ws.tabs.iter().any(|tab| {
                     tab.id == report.tab && !tab.saved.as_ref().is_some_and(|saved| saved.closing)
-                }) && !self.active_closing
-                    && !self.closing_all
+                }) && !self.ws.active_closing
+                    && !self.ws.closing_all
                 {
                     self.command_update(channel);
                 }
                 continue;
             }
-            if let Some(tab) = self.tabs.iter_mut().find(|tab| tab.id == report.tab) {
+            self.accept_privacy_fields(report.tab, report.fields);
+        }
+    }
+    pub(super) fn accept_privacy_fields(&mut self, id: u64, fields: Vec<(String, String)>) {
+        for workspace in std::iter::once(&mut self.ws).chain(self.background.iter_mut()) {
+            if let Some(tab) = workspace.tabs.iter_mut().find(|tab| tab.id == id) {
                 if !tab.saved.as_ref().is_some_and(|saved| saved.closing) {
-                    tab.privacy.accept(report.fields);
-                    self.dirty = true;
+                    tab.privacy.accept(fields);
+                    workspace.dirty = true;
                     self.privacy_dirty = true;
                 }
+                break;
             }
         }
     }
     fn protected_at(&self, point: [f32; 2]) -> Option<&str> {
-        if self.ui.is_some() || self.active_closing {
+        if self.ui.is_some() || self.ws.active_closing {
             return None;
         }
-        let x = point[0] - PAD * self.scale - self.left_inset;
-        let y = point[1] - (PAD + ui::TAB_HEIGHT) * self.scale;
+        let x = point[0] - PAD * self.ws.scale - self.ws.left_inset;
+        let y = point[1] - (PAD + ui::TAB_HEIGHT) * self.ws.scale;
         if x < 0. || y < 0. {
             return None;
         }
-        self.tabs[self.active_tab].privacy.field_at(
-            (y / (CELL_H * self.scale)) as u16,
-            (x / (CELL_W * self.scale)) as u16,
+        self.ws.tabs[self.ws.active_tab].privacy.field_at(
+            (y / (CELL_H * self.ws.scale)) as u16,
+            (x / (CELL_W * self.ws.scale)) as u16,
         )
     }
     pub(super) fn privacy_event(&mut self, event: &WindowEvent) {
@@ -88,9 +94,9 @@ impl App {
                     .button(button, *state == ElementState::Pressed);
             }
             WindowEvent::CursorMoved { position, .. } => {
-                self.tabs[self.active_tab]
+                self.ws.tabs[self.ws.active_tab]
                     .privacy
-                    .update(&self.terminal, self.offset);
+                    .update(&self.ws.terminal, self.ws.offset);
                 let token = self
                     .protected_at([position.x as f32, position.y as f32])
                     .map(str::to_owned);
@@ -100,9 +106,9 @@ impl App {
             _ => changed = false,
         }
         if changed && (had_reveal || self.privacy_reveal.token.is_some()) {
-            self.dirty = true;
+            self.ws.dirty = true;
             self.privacy_dirty = true;
-            if had_reveal && matches!(event, WindowEvent::Focused(false)) && self.gpu.is_some() {
+            if had_reveal && matches!(event, WindowEvent::Focused(false)) && self.ws.gpu.is_some() {
                 // Present a masked frame before yielding focus whenever the surface is available.
                 self.draw();
             }
@@ -114,16 +120,16 @@ impl App {
         height: u32,
     ) -> Option<crate::render::overlay::Overlay> {
         let token = self.privacy_reveal.token.as_deref()?;
-        if self.protected_at(self.pointer_px) != Some(token) {
+        if self.protected_at(self.ws.pointer_px) != Some(token) {
             return None;
         }
-        let value = self.tabs[self.active_tab].privacy.value(token)?;
+        let value = self.ws.tabs[self.ws.active_tab].privacy.value(token)?;
         Some(crate::privacy::view::popup(
             value,
-            self.pointer_px,
+            self.ws.pointer_px,
             width as f32,
             height as f32,
-            self.scale,
+            self.ws.scale,
             &self.active_theme(),
         ))
     }

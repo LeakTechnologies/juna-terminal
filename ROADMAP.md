@@ -45,6 +45,16 @@ No translations or Language tab are claimed as implemented at this stage.
 
 ## Further terminal work
 
+- Diagnostics: Tools → Diagnostics with Juna/current-tab resource views, local report
+  review/export and verified Quick/Full benchmark access. The design is approved; see
+  DIAGNOSTICS_DESIGN.md for staged implementation and privacy boundaries.
+- Later network diagnostics/benchmarking: consider latency/jitter/loss, DNS and TCP/TLS
+  timing, plus optional throughput against a chosen LAN/self-hosted or other explicit
+  endpoint. Tests must be user-started, bounded and cancellable, with destination/traffic
+  limits visible and private network identifiers omitted from default exports. No Juna
+  measurement servers or background probing. Define a separate implementation design
+  after local diagnostics mature; this is roadmap work only.
+
 - Performance measurement: the separate native benchmark starts with owned Juna windows,
   parent memory/CPU, varied output and observed input response under continuous output.
   Next add equivalent Windows Terminal/Alacritty adapters, scroll interaction, multiple
